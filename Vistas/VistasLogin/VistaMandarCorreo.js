@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  TextInput, 
-  Alert, 
-  Text, 
-  View, 
-  TouchableOpacity, 
-  Platform, 
+import {
+  TextInput,
+  Alert,
+  Text,
+  View,
+  TouchableOpacity,
+  Platform,
   ActivityIndicator,
   KeyboardAvoidingView,
   ScrollView,
@@ -41,14 +41,14 @@ const { width } = Dimensions.get('window');
 export default function VistaMandarCorreo({ navigation, route }) {
   const { modo, correo: correoParam, tipo } = route.params || {};
   const regexCorreo = /^[A-Za-z0-9._%+-]{5,}@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
-  
+
   const [cargando, setCargando] = useState(false);
   const [correo, setCorreo] = useState(correoParam || "");
   const [error, setError] = useState('');
-  
+
   // Determinar el contexto basado en el tipo
   const contexto = tipo || modo || 'verificacion';
-  
+
   useEffect(() => {
     if (correoParam) {
       setCorreo(correoParam);
@@ -58,103 +58,56 @@ export default function VistaMandarCorreo({ navigation, route }) {
   const validarCorreo = (email) => {
     setError('');
     if (!email) return false;
-    
+
     if (!regexCorreo.test(email)) {
       setError('Por favor ingresa un correo electrónico válido');
       return false;
     }
-    
+
     return true;
   };
 
   const enviarCorreo = async () => {
-    if (!validarCorreo(correo)) {
-      return;
-    }
+    if (!validarCorreo(correo)) return;
 
-    const codigo = Math.floor(1000 + Math.random() * 9000).toString();
     setCargando(true);
 
     try {
-      // Determinar el tipo de envío basado en el contexto
-      let tipoEnvio = 'verificacion';
-      
+      let resultado;
+
+      // Según el contexto, llamar al endpoint adecuado
       if (contexto === 'recuperar') {
-        tipoEnvio = 'recuperacion';
-      } else if (contexto === 'invitacion_familiar') {
-        tipoEnvio = 'invitacion_familiar';
-      } else if (contexto === 'crear_cuenta') {
-        tipoEnvio = 'registro';
+        resultado = await servicioAPI.solicitarRecuperacion(correo);
+        if (resultado.exito) {
+          Alert.alert(
+            '✅ Código enviado',
+            `Se ha enviado un código de recuperación a:\n${correo}`,
+            [
+              {
+                text: 'Continuar',
+                onPress: () => {
+                  // Navegar a verificación con el usuario_id y el código (el backend devuelve usuario_id y código en desarrollo)
+                  navigation.navigate('VerificarCorreo', {
+                    correo,
+                    codigo: resultado.codigo_demo || '1234', // En producción no deberías pasar código
+                    contexto: 'recuperar',
+                    usuarioId: resultado.usuario_id
+                  });
+                }
+              }
+            ]
+          );
+        } else {
+          Alert.alert('Error', resultado.error || 'No se pudo enviar el código');
+        }
+      } else {
+        // Para otros contextos (verificación, invitación), no hay endpoint en el backend.
+        // Podrías implementar un endpoint genérico o usar el de recuperación con un flag.
+        Alert.alert('Información', 'Esta funcionalidad no está disponible aún. Usa la recuperación de contraseña.');
       }
 
-      const resultado = await servicioAPI.enviarCorreoVerificacion({
-        email: correo,
-        codigo: codigo,
-        tipo: tipoEnvio,
-        contexto: contexto
-      });
-      
-      if (resultado.exito) {
-        Alert.alert(
-          '✅ Código Enviado',
-          `Se ha enviado un código de verificación a:\n\n📧 ${correo}`,
-          [{ 
-            text: 'Continuar', 
-            onPress: () => {
-              // Navegar según el contexto
-              if (contexto === 'recuperar') {
-                navigation.navigate('VerificarRecuperacion', { 
-                  correo, 
-                  codigo 
-                });
-              } else if (contexto === 'invitacion_familiar') {
-                navigation.navigate('UnirseFamilia', { 
-                  correo, 
-                  codigo 
-                });
-              } else {
-                navigation.navigate('VerificarCodigo', { 
-                  correo, 
-                  codigo,
-                  contexto 
-                });
-              }
-            }
-          }],
-          { cancelable: false }
-        );
-      } else {
-        Alert.alert(
-          '❌ Error',
-          resultado.error || 'No se pudo enviar el código. Verifica tu conexión.'
-        );
-      }
     } catch (error) {
-      console.error("Error al enviar correo:", error);
-      
-      // Fallback: mostrar código si falla el envío
-      Alert.alert(
-        '⚠️ Correo no enviado',
-        `No se pudo enviar el correo, pero puedes usar este código:\n\n🔑 ${codigo}`,
-        [{ 
-          text: 'Usar este código', 
-          onPress: () => {
-            if (contexto === 'recuperar') {
-              navigation.navigate('VerificarRecuperacion', { 
-                correo, 
-                codigo 
-              });
-            } else {
-              navigation.navigate('VerificarCodigo', { 
-                correo, 
-                codigo,
-                contexto 
-              });
-            }
-          }
-        }],
-        { cancelable: false }
-      );
+      Alert.alert('Error', 'No se pudo conectar con el servidor');
     } finally {
       setCargando(false);
     }
@@ -167,8 +120,8 @@ export default function VistaMandarCorreo({ navigation, route }) {
         'Si regresas, perderás el correo ingresado.',
         [
           { text: 'Cancelar', style: 'cancel' },
-          { 
-            text: 'Regresar', 
+          {
+            text: 'Regresar',
             style: 'destructive',
             onPress: () => {
               if (contexto === 'recuperar') {
@@ -195,7 +148,7 @@ export default function VistaMandarCorreo({ navigation, route }) {
 
   // Obtener información según el contexto
   const obtenerInfoContexto = () => {
-    switch(contexto) {
+    switch (contexto) {
       case 'recuperar':
         return {
           titulo: 'Recuperar Contraseña',
@@ -234,43 +187,43 @@ export default function VistaMandarCorreo({ navigation, route }) {
   const infoContexto = obtenerInfoContexto();
 
   return (
-    <LinearGradient 
+    <LinearGradient
       colors={[COLORES.AZUL_CIELO, COLORES.BLANCO]}
       style={styles.fondo}
     >
       <SafeAreaView style={styles.contenedor}>
-        <KeyboardAvoidingView 
+        <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.keyboardAvoidingView}
         >
-          <ScrollView 
+          <ScrollView
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
             {/* Encabezado con icono */}
             <View style={styles.encabezado}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.botonAtras}
                 onPress={regresar}
                 disabled={cargando}
               >
-                <Icon 
-                  name="arrow-back-outline" 
-                  size={28} 
-                  color={COLORES.TEXTO_OSCURO} 
+                <Icon
+                  name="arrow-back-outline"
+                  size={28}
+                  color={COLORES.TEXTO_OSCURO}
                 />
               </TouchableOpacity>
-              
+
               <View style={styles.tituloContainer}>
                 <View style={[styles.iconoTitulo, { backgroundColor: infoContexto.color + '20' }]}>
-                  <Icon 
-                    name={infoContexto.icono} 
-                    size={32} 
-                    color={infoContexto.color} 
+                  <Icon
+                    name={infoContexto.icono}
+                    size={32}
+                    color={infoContexto.color}
                   />
                 </View>
-                
+
                 <Text style={styles.titulo}>{infoContexto.titulo}</Text>
                 <Text style={styles.subtitulo}>{infoContexto.subtitulo}</Text>
               </View>
@@ -292,7 +245,7 @@ export default function VistaMandarCorreo({ navigation, route }) {
                     <Icon name="mail-outline" size={18} color={COLORES.GRIS_OSCURO} />
                     <Text style={styles.campoLabel}>CORREO ELECTRÓNICO</Text>
                   </View>
-                  
+
                   <TextInput
                     style={[
                       styles.input,
@@ -312,7 +265,7 @@ export default function VistaMandarCorreo({ navigation, route }) {
                     returnKeyType="send"
                     onSubmitEditing={enviarCorreo}
                   />
-                  
+
                   {error ? (
                     <View style={styles.errorContainer}>
                       <Icon name="alert-circle-outline" size={16} color={COLORES.ERROR} />
@@ -335,18 +288,18 @@ export default function VistaMandarCorreo({ navigation, route }) {
                   <Icon name="shield-checkmark-outline" size={20} color={COLORES.EXITO} />
                   <Text style={styles.infoTitulo}>Información Importante</Text>
                 </View>
-                
+
                 <View style={styles.infoItems}>
                   <View style={styles.infoItem}>
                     <Icon name="time-outline" size={14} color={COLORES.AMARILLO_PLATANO} />
                     <Text style={styles.infoTexto}>El código es válido por 15 minutos</Text>
                   </View>
-                  
+
                   <View style={styles.infoItem}>
                     <Icon name="warning-outline" size={14} color={COLORES.ROJO_CLARO} />
                     <Text style={styles.infoTexto}>Verifica tu bandeja de spam si no lo encuentras</Text>
                   </View>
-                  
+
                   <View style={styles.infoItem}>
                     <Icon name="lock-closed-outline" size={14} color={COLORES.AZUL_CIELO_OSCURO} />
                     <Text style={styles.infoTexto}>Nunca compartas tu código con otras personas</Text>
@@ -365,8 +318,8 @@ export default function VistaMandarCorreo({ navigation, route }) {
                   <Text style={styles.textoBotonSecundario}>Regresar</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity 
-                  onPress={enviarCorreo} 
+                <TouchableOpacity
+                  onPress={enviarCorreo}
                   style={[
                     styles.botonPrincipal,
                     (cargando || !correo.trim()) && styles.botonDeshabilitado
@@ -438,7 +391,7 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 40,
   },
-  
+
   // Encabezado
   encabezado: {
     marginBottom: 30,
@@ -474,7 +427,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
   },
-  
+
   // Tarjeta principal
   contenedorTarjeta: {
     backgroundColor: COLORES.BLANCO,
@@ -495,7 +448,7 @@ const styles = StyleSheet.create({
   infoSeccion: {
     borderBottomWidth: 0,
   },
-  
+
   // Instrucción principal
   instruccionPrincipal: {
     fontSize: 15,
@@ -507,7 +460,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 10,
   },
-  
+
   // Campo de entrada
   campoContainer: {
     marginBottom: 10,
@@ -568,7 +521,7 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     flex: 1,
   },
-  
+
   // Información adicional
   infoHeader: {
     flexDirection: 'row',
@@ -595,7 +548,7 @@ const styles = StyleSheet.create({
     flex: 1,
     lineHeight: 20,
   },
-  
+
   // Botones
   contenedorBotones: {
     flexDirection: 'row',
@@ -637,7 +590,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  
+
   // Estado
   estadoContainer: {
     flexDirection: 'row',
@@ -658,7 +611,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontStyle: 'italic',
   },
-  
+
   // Debug
   debugContainer: {
     backgroundColor: COLORES.AMARILLO_PLATANO + '20',

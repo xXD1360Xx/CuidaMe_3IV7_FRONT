@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { 
-  TextInput, 
-  Alert, 
-  Text, 
-  View, 
-  TouchableOpacity, 
+import {
+  TextInput,
+  Alert,
+  Text,
+  View,
+  TouchableOpacity,
   ActivityIndicator,
   Dimensions,
   KeyboardAvoidingView,
@@ -12,7 +12,7 @@ import {
   StyleSheet,
   Platform
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient'; 
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { servicioAPI } from '../servicios/api';
@@ -47,9 +47,10 @@ export default function VistaCambiarContrasena({ navigation, route }) {
   const [mostrarConfirmarContrasena, setMostrarConfirmarContrasena] = useState(false);
 
   // Determinar si es recuperación o cambio desde perfil
-  const esRecuperacion = tipoRecuperacion === 'recuperar' || !contrasenaActual;
-  
-  const limpiarContrasenas = () => { 
+  const esRecuperacion = route.params?.tipoRecuperacion === 'recuperar' || false;
+
+
+  const limpiarContrasenas = () => {
     setContrasenaActual('');
     setNuevaContrasena('');
     setConfirmarContrasena('');
@@ -57,37 +58,37 @@ export default function VistaCambiarContrasena({ navigation, route }) {
 
   const validarFortalezaContrasena = (contrasena) => {
     const validaciones = [
-      { 
-        test: contrasena.length >= 6, 
-        texto: 'Mínimo 6 caracteres', 
+      {
+        test: contrasena.length >= 6,
+        texto: 'Mínimo 6 caracteres',
         color: COLORES.EXITO,
         esencial: true,
         icono: 'checkmark-circle'
       },
-      { 
-        test: /\d/.test(contrasena), 
-        texto: 'Al menos un número', 
+      {
+        test: /\d/.test(contrasena),
+        texto: 'Al menos un número',
         color: COLORES.EXITO,
         esencial: true,
         icono: 'checkmark-circle'
       },
-      { 
-        test: /[A-Z]/.test(contrasena), 
-        texto: 'Al menos una mayúscula', 
+      {
+        test: /[A-Z]/.test(contrasena),
+        texto: 'Al menos una mayúscula',
         color: COLORES.EXITO,
         esencial: false,
         icono: 'checkmark-circle'
       },
-      { 
-        test: /[a-z]/.test(contrasena), 
-        texto: 'Al menos una minúscula', 
+      {
+        test: /[a-z]/.test(contrasena),
+        texto: 'Al menos una minúscula',
         color: COLORES.EXITO,
         esencial: false,
         icono: 'checkmark-circle'
       },
-      { 
-        test: /[!@#$%^&*(),.?":{}|<>]/.test(contrasena), 
-        texto: 'Al menos un carácter especial', 
+      {
+        test: /[!@#$%^&*(),.?":{}|<>]/.test(contrasena),
+        texto: 'Al menos un carácter especial',
         color: COLORES.EXITO,
         esencial: false,
         icono: 'checkmark-circle'
@@ -130,7 +131,7 @@ export default function VistaCambiarContrasena({ navigation, route }) {
     const validaciones = validarFortalezaContrasena(nuevaContrasena);
     const esenciales = validaciones.filter(v => v.esencial);
     const esencialesCumplidas = esenciales.filter(v => v.test).length;
-    
+
     if (esencialesCumplidas < esenciales.length) {
       Alert.alert(
         'Contraseña no válida',
@@ -163,60 +164,53 @@ export default function VistaCambiarContrasena({ navigation, route }) {
     setCargando(true);
 
     try {
-      let datos;
-      
-      if (esRecuperacion) {
-        // Recuperación de contraseña (sin contraseña actual)
-        datos = await servicioAPI.recuperarContrasena({
-          email: correo,
-          nuevaContrasena: nuevaContrasena
-        });
-      } else {
-        // Cambio de contraseña normal
-        datos = await servicioAPI.cambiarContrasena({
-          contrasenaActual,
-          nuevaContrasena
-        });
-      }
+      const { usuarioId, codigoId, tipoRecuperacion } = route.params || {};
 
-      if (datos.exito) {
-        Alert.alert(
-          '✅ Contraseña actualizada',
-          'Tu contraseña ha sido cambiada exitosamente.',
-          [
-            { 
-              text: 'Continuar', 
-              onPress: () => {
-                limpiarContrasenas();
-                
-                if (esRecuperacion) {
-                  navigation.replace('VistaLogin');
-                } else {
-                  navigation.goBack();
-                }
-              }
-            }
-          ]
+      let respuesta;
+
+      if (tipoRecuperacion === 'recuperar' && usuarioId && codigoId) {
+        // Restablecer contraseña con código de recuperación
+        respuesta = await servicioAPI.restablecerContrasena(
+          usuarioId,
+          codigoId,
+          nuevaContrasena
         );
       } else {
-        let mensaje = datos.error || 'No se pudo cambiar la contraseña';
-        
-        if (datos.codigo === 'CONTRASENA_ACTUAL_INCORRECTA') {
-          mensaje = 'La contraseña actual es incorrecta';
-          setContrasenaActual('');
-        } else if (datos.codigo === 'TOKEN_EXPIRADO') {
-          mensaje = 'El enlace de recuperación ha expirado. Solicita uno nuevo.';
-          navigation.replace('VistaLogin');
+        // Cambio desde perfil (requiere contraseña actual)
+        const usuarioActual = await AsyncStorage.getItem('usuarioInfo');
+        const usuario = usuarioActual ? JSON.parse(usuarioActual) : null;
+        if (!usuario || !usuario.id) {
+          Alert.alert('Error', 'No se pudo identificar al usuario');
+          setCargando(false);
+          return;
         }
-        
-        Alert.alert('❌ Error', mensaje);
+        respuesta = await servicioAPI.cambiarContrasena(
+          usuario.id,
+          contrasenaActual,
+          nuevaContrasena
+        );
       }
+
+      if (respuesta.exito) {
+        Alert.alert('✅ Contraseña actualizada', 'Tu contraseña ha sido cambiada exitosamente.', [
+          {
+            text: 'Continuar',
+            onPress: () => {
+              limpiarContrasenas();
+              if (tipoRecuperacion === 'recuperar') {
+                navigation.replace('Login');
+              } else {
+                navigation.goBack();
+              }
+            }
+          }
+        ]);
+      } else {
+        Alert.alert('Error', respuesta.error || 'No se pudo cambiar la contraseña');
+      }
+
     } catch (error) {
-      console.error('Error al cambiar contraseña:', error);
-      Alert.alert(
-        '❌ Error de conexión',
-        'No se pudo conectar con el servidor. Verifica tu conexión a internet.'
-      );
+      Alert.alert('Error', 'No se pudo conectar con el servidor');
     } finally {
       setCargando(false);
     }
@@ -229,8 +223,8 @@ export default function VistaCambiarContrasena({ navigation, route }) {
         'Tienes cambios sin guardar. ¿Seguro que quieres regresar?',
         [
           { text: 'Cancelar', style: 'cancel' },
-          { 
-            text: 'Regresar', 
+          {
+            text: 'Regresar',
             style: 'destructive',
             onPress: () => navigation.goBack()
           }
@@ -259,57 +253,57 @@ export default function VistaCambiarContrasena({ navigation, route }) {
   };
 
   return (
-    <LinearGradient 
+    <LinearGradient
       colors={[COLORES.AZUL_CIELO, COLORES.BLANCO]}
       style={styles.fondo}
     >
       <SafeAreaView style={styles.contenedorPrincipal}>
-        <KeyboardAvoidingView 
+        <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.keyboardAvoidingView}
         >
-          <ScrollView 
+          <ScrollView
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
             {/* Encabezado */}
             <View style={styles.encabezado}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.botonAtras}
                 onPress={regresar}
                 disabled={cargando}
               >
-                <Icon 
-                  name="arrow-back-outline" 
-                  size={28} 
-                  color={COLORES.TEXTO_OSCURO} 
+                <Icon
+                  name="arrow-back-outline"
+                  size={28}
+                  color={COLORES.TEXTO_OSCURO}
                 />
               </TouchableOpacity>
-              
+
               <View style={styles.tituloContainer}>
                 <View style={[styles.iconoTitulo, { backgroundColor: COLORES.ROJO_CLARO + '20' }]}>
-                  <Icon 
-                    name="key-outline" 
-                    size={32} 
-                    color={COLORES.ROJO_CLARO} 
+                  <Icon
+                    name="key-outline"
+                    size={32}
+                    color={COLORES.ROJO_CLARO}
                   />
                 </View>
-                
+
                 <Text style={styles.titulo}>
                   {esRecuperacion ? 'Restablecer contraseña' : 'Cambiar contraseña'}
                 </Text>
-                
+
                 {correo && (
                   <View style={styles.correoContainer}>
                     <Icon name="mail-outline" size={16} color={COLORES.AZUL_CIELO_OSCURO} />
                     <Text style={styles.correoTexto}>{correo}</Text>
                   </View>
                 )}
-                
+
                 <Text style={styles.subtitulo}>
-                  {esRecuperacion 
-                    ? 'Crea una nueva contraseña segura para tu cuenta' 
+                  {esRecuperacion
+                    ? 'Crea una nueva contraseña segura para tu cuenta'
                     : 'Por seguridad, actualiza tu contraseña regularmente'}
                 </Text>
               </View>
@@ -317,7 +311,7 @@ export default function VistaCambiarContrasena({ navigation, route }) {
 
             {/* Contenedor de formulario */}
             <View style={styles.formularioContainer}>
-              
+
               {/* Campo: Contraseña actual (solo si no es recuperación) */}
               {!esRecuperacion && (
                 <View style={styles.campoContainer}>
@@ -325,7 +319,7 @@ export default function VistaCambiarContrasena({ navigation, route }) {
                     <Icon name="lock-closed-outline" size={18} color={COLORES.GRIS_OSCURO} />
                     <Text style={styles.campoLabel}>CONTRASEÑA ACTUAL</Text>
                   </View>
-                  
+
                   <View style={styles.inputContainer}>
                     <TextInput
                       style={styles.input}
@@ -342,10 +336,10 @@ export default function VistaCambiarContrasena({ navigation, route }) {
                       onPress={() => setMostrarContrasenaActual(!mostrarContrasenaActual)}
                       disabled={cargando}
                     >
-                      <Icon 
-                        name={mostrarContrasenaActual ? "eye-off-outline" : "eye-outline"} 
-                        size={20} 
-                        color={COLORES.GRIS_OSCURO} 
+                      <Icon
+                        name={mostrarContrasenaActual ? "eye-off-outline" : "eye-outline"}
+                        size={20}
+                        color={COLORES.GRIS_OSCURO}
                       />
                     </TouchableOpacity>
                   </View>
@@ -358,7 +352,7 @@ export default function VistaCambiarContrasena({ navigation, route }) {
                   <Icon name="lock-closed-outline" size={18} color={COLORES.GRIS_OSCURO} />
                   <Text style={styles.campoLabel}>NUEVA CONTRASEÑA</Text>
                 </View>
-                
+
                 <View style={styles.inputContainer}>
                   <TextInput
                     style={styles.input}
@@ -375,33 +369,33 @@ export default function VistaCambiarContrasena({ navigation, route }) {
                     onPress={() => setMostrarNuevaContrasena(!mostrarNuevaContrasena)}
                     disabled={cargando}
                   >
-                    <Icon 
-                      name={mostrarNuevaContrasena ? "eye-off-outline" : "eye-outline"} 
-                      size={20} 
-                      color={COLORES.GRIS_OSCURO} 
+                    <Icon
+                      name={mostrarNuevaContrasena ? "eye-off-outline" : "eye-outline"}
+                      size={20}
+                      color={COLORES.GRIS_OSCURO}
                     />
                   </TouchableOpacity>
                 </View>
-                
+
                 {/* Medidor de fortaleza */}
                 {nuevaContrasena.length > 0 && (
                   <View style={styles.fortalezaContainer}>
                     <View style={styles.barraFortaleza}>
-                      <View 
+                      <View
                         style={[
                           styles.barraFortalezaFill,
-                          { 
+                          {
                             width: `${porcentajeFortaleza}%`,
                             backgroundColor: obtenerColorFortaleza()
                           }
-                        ]} 
+                        ]}
                       />
                     </View>
                     <View style={styles.textoFortalezaContainer}>
-                      <Icon 
-                        name="shield-outline" 
-                        size={14} 
-                        color={obtenerColorFortaleza()} 
+                      <Icon
+                        name="shield-outline"
+                        size={14}
+                        color={obtenerColorFortaleza()}
                       />
                       <Text style={[styles.textoFortaleza, { color: obtenerColorFortaleza() }]}>
                         {obtenerTextoFortaleza()}
@@ -417,7 +411,7 @@ export default function VistaCambiarContrasena({ navigation, route }) {
                   <Icon name="lock-closed-outline" size={18} color={COLORES.GRIS_OSCURO} />
                   <Text style={styles.campoLabel}>CONFIRMAR CONTRASEÑA</Text>
                 </View>
-                
+
                 <View style={styles.inputContainer}>
                   <TextInput
                     style={[
@@ -437,14 +431,14 @@ export default function VistaCambiarContrasena({ navigation, route }) {
                     onPress={() => setMostrarConfirmarContrasena(!mostrarConfirmarContrasena)}
                     disabled={cargando}
                   >
-                    <Icon 
-                      name={mostrarConfirmarContrasena ? "eye-off-outline" : "eye-outline"} 
-                      size={20} 
-                      color={COLORES.GRIS_OSCURO} 
+                    <Icon
+                      name={mostrarConfirmarContrasena ? "eye-off-outline" : "eye-outline"}
+                      size={20}
+                      color={COLORES.GRIS_OSCURO}
                     />
                   </TouchableOpacity>
                 </View>
-                
+
                 {confirmarContrasena && nuevaContrasena !== confirmarContrasena && (
                   <View style={styles.errorContainer}>
                     <Icon name="alert-circle-outline" size={16} color={COLORES.ERROR} />
@@ -459,7 +453,7 @@ export default function VistaCambiarContrasena({ navigation, route }) {
                   <Icon name="shield-checkmark-outline" size={18} color={COLORES.AZUL_CIELO_OSCURO} />
                   <Text style={styles.criteriosTitulo}>CRITERIOS DE SEGURIDAD</Text>
                 </View>
-                
+
                 <View style={styles.criteriosEsencialesContainer}>
                   <Text style={styles.criteriosSubtitulo}>Criterios esenciales:</Text>
                   {fortalezaContrasena
@@ -474,7 +468,7 @@ export default function VistaCambiarContrasena({ navigation, route }) {
                     ))
                   }
                 </View>
-                
+
                 <View style={styles.criteriosOpcionalesContainer}>
                   <Text style={styles.criteriosSubtitulo}>Criterios opcionales (recomendados):</Text>
                   {fortalezaContrasena
@@ -507,13 +501,13 @@ export default function VistaCambiarContrasena({ navigation, route }) {
                   style={[
                     styles.botonPrincipal,
                     cargando && styles.botonDeshabilitado,
-                    (!nuevaContrasena || !confirmarContrasena || (!esRecuperacion && !contrasenaActual)) && 
-                      styles.botonDeshabilitado
+                    (!nuevaContrasena || !confirmarContrasena || (!esRecuperacion && !contrasenaActual)) &&
+                    styles.botonDeshabilitado
                   ]}
                   disabled={
-                    cargando || 
-                    !nuevaContrasena || 
-                    !confirmarContrasena || 
+                    cargando ||
+                    !nuevaContrasena ||
+                    !confirmarContrasena ||
                     (!esRecuperacion && !contrasenaActual)
                   }
                 >
@@ -586,7 +580,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 20,
   },
-  
+
   // Encabezado
   encabezado: {
     marginBottom: 30,
@@ -642,7 +636,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-  
+
   // Formulario
   formularioContainer: {
     backgroundColor: COLORES.BLANCO,
@@ -654,7 +648,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 5,
   },
-  
+
   // Campos
   campoContainer: {
     marginBottom: 25,
@@ -705,7 +699,7 @@ const styles = StyleSheet.create({
     color: COLORES.ERROR,
     fontSize: 12,
   },
-  
+
   // Fortaleza
   fortalezaContainer: {
     flexDirection: 'row',
@@ -734,7 +728,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  
+
   // Criterios
   criteriosContainer: {
     backgroundColor: COLORES.GRIS_CLARO,
@@ -780,7 +774,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
   },
-  
+
   // Botones
   contenedorBotones: {
     flexDirection: 'row',
@@ -832,7 +826,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  
+
   // Consejos
   consejosContainer: {
     backgroundColor: COLORES.GRIS_CLARO,

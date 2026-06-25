@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  TextInput, 
-  Alert, 
-  Text, 
-  View, 
-  TouchableOpacity, 
+import {
+  TextInput,
+  Alert,
+  Text,
+  View,
+  TouchableOpacity,
   Platform,
   ActivityIndicator,
   Dimensions,
@@ -47,10 +47,10 @@ export default function VistaVerificarCorreo({ navigation, route }) {
   const [caracteres, setCaracteres] = useState(['', '', '', '']);
   const [tiempoRestante, setTiempoRestante] = useState(180); // 3 minutos
   const [puedeReenviar, setPuedeReenviar] = useState(false);
-  
+
   // Animación para el círculo del timer
   const animacionProgresso = useRef(new Animated.Value(1)).current;
-  
+
   // Ref para los inputs
   const inputRefs = useRef([
     React.createRef(),
@@ -70,7 +70,7 @@ export default function VistaVerificarCorreo({ navigation, route }) {
   // Timer para reenviar código con animación
   useEffect(() => {
     let intervalo;
-    
+
     if (tiempoRestante > 0 && !puedeReenviar) {
       // Animación del círculo
       Animated.timing(animacionProgresso, {
@@ -78,7 +78,7 @@ export default function VistaVerificarCorreo({ navigation, route }) {
         duration: 1000,
         useNativeDriver: false,
       }).start();
-      
+
       intervalo = setInterval(() => {
         setTiempoRestante(prev => {
           if (prev <= 1) {
@@ -108,7 +108,7 @@ export default function VistaVerificarCorreo({ navigation, route }) {
 
   // Determinar información según el contexto
   const obtenerInfoContexto = () => {
-    switch(contexto) {
+    switch (contexto) {
       case 'recuperar':
         return {
           titulo: 'Recuperar Contraseña',
@@ -160,15 +160,15 @@ export default function VistaVerificarCorreo({ navigation, route }) {
   const handleCodigoChange = (text, index) => {
     // Limitar a números
     const textoLimpio = text.replace(/[^0-9]/g, '');
-    
+
     const newCaracteres = [...caracteres];
     newCaracteres[index] = textoLimpio;
     setCaracteres(newCaracteres);
-    
+
     // Crear string del código ingresado
     const codigoCompleto = newCaracteres.join('');
     setCodigoIngresado(codigoCompleto);
-    
+
     // Auto-avanzar al siguiente campo
     if (textoLimpio && index < 3) {
       setTimeout(() => {
@@ -187,7 +187,7 @@ export default function VistaVerificarCorreo({ navigation, route }) {
       newCaracteres[index - 1] = '';
       setCaracteres(newCaracteres);
       setCodigoIngresado(newCaracteres.join(''));
-      
+
       setTimeout(() => {
         if (inputRefs.current[index - 1]?.current) {
           inputRefs.current[index - 1].current.focus();
@@ -202,8 +202,8 @@ export default function VistaVerificarCorreo({ navigation, route }) {
       'Si regresas, deberás solicitar un nuevo código de verificación.',
       [
         { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Regresar', 
+        {
+          text: 'Regresar',
           style: 'destructive',
           onPress: () => navigation.goBack()
         }
@@ -213,65 +213,47 @@ export default function VistaVerificarCorreo({ navigation, route }) {
 
   const verificarCodigo = async () => {
     const codigoUsuario = codigoIngresado.trim();
-    const codigoCorrecto = codigo.toString().trim();
 
     if (codigoUsuario.length !== 4) {
-      Alert.alert('Código incompleto', 'Por favor ingresa los 4 dígitos del código');
+      Alert.alert('Código incompleto', 'Ingresa los 4 dígitos');
       return;
     }
 
     setVerificando(true);
 
-    // Permitir el código 8888 para pruebas rápidas
-    const codigoEspecialPruebas = '8888';
-    const esCodigoValido = codigoUsuario === codigoCorrecto || 
-                          (__DEV__ && codigoUsuario === codigoEspecialPruebas);
+    try {
+      // Obtener el usuarioId de los parámetros de ruta
+      const usuarioId = route.params?.usuarioId;
 
-    if (esCodigoValido) {
-      // Simular delay para mejor UX
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Navegar según el contexto
-      switch(contexto) {
-        case 'recuperar':
-          navigation.navigate('ResetContrasena', { correo });
-          break;
-        case 'invitacion_familiar':
-          navigation.navigate('CompletarPerfilFamiliar', { 
-            correo, 
-            tipoPerfil: tipoPerfil || 'familiar' 
-          });
-          break;
-        default:
-          navigation.navigate('Registro', { 
-            correo, 
-            tipoPerfil: tipoPerfil || 'familiar' 
-          });
-          break;
+      if (!usuarioId) {
+        Alert.alert('Error', 'Falta información del usuario');
+        setVerificando(false);
+        return;
       }
-    } else {
-      Alert.alert(
-        'Código incorrecto',
-        'El código ingresado no coincide. Por favor verifica e intenta nuevamente.',
-        [{ 
-          text: 'Reintentar', 
-          onPress: () => {
-            setCaracteres(['', '', '', '']);
-            setCodigoIngresado('');
-            if (inputRefs.current[0]?.current) {
-              inputRefs.current[0].current.focus();
-            }
-          }
-        }]
-      );
-    }
 
-    setVerificando(false);
+      const resultado = await servicioAPI.verificarCodigoRecuperacion(usuarioId, codigoUsuario);
+
+      if (resultado.exito) {
+        // Navegar a cambio de contraseña con el codigo_id
+        navigation.navigate('CambiarContrasena', {
+          usuarioId: usuarioId,
+          codigoId: resultado.codigo_id,
+          tipoRecuperacion: 'recuperar'
+        });
+      } else {
+        Alert.alert('Código incorrecto', resultado.error || 'El código no es válido o ha expirado');
+      }
+
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo verificar el código');
+    } finally {
+      setVerificando(false);
+    }
   };
 
   const reenviarCodigo = async () => {
     if (!puedeReenviar) return;
-    
+
     setReenviando(true);
 
     try {
@@ -289,14 +271,14 @@ export default function VistaVerificarCorreo({ navigation, route }) {
         tipo: tipoEnvio,
         contexto: contexto
       });
-      
+
       if (resultado.exito) {
         Alert.alert(
           '✅ Código reenviado',
           'Se ha enviado un nuevo código de verificación a tu correo electrónico.',
           [{ text: 'Aceptar' }]
         );
-        
+
         // Reiniciar timer y limpiar campos
         reiniciarTimer();
         setCaracteres(['', '', '', '']);
@@ -331,52 +313,52 @@ export default function VistaVerificarCorreo({ navigation, route }) {
   };
 
   return (
-    <LinearGradient 
+    <LinearGradient
       colors={[COLORES.AZUL_CIELO, COLORES.BLANCO]}
       style={styles.fondo}
     >
       <SafeAreaView style={styles.contenedorPrincipal}>
-        <KeyboardAvoidingView 
+        <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.keyboardAvoidingView}
         >
-          <ScrollView 
+          <ScrollView
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
             {/* Encabezado */}
             <View style={styles.encabezado}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.botonAtras}
                 onPress={regresar}
                 disabled={verificando || reenviando}
               >
-                <Icon 
-                  name="arrow-back-outline" 
-                  size={28} 
-                  color={COLORES.TEXTO_OSCURO} 
+                <Icon
+                  name="arrow-back-outline"
+                  size={28}
+                  color={COLORES.TEXTO_OSCURO}
                 />
               </TouchableOpacity>
-              
+
               <View style={styles.tituloContainer}>
                 <View style={[styles.iconoTitulo, { backgroundColor: infoContexto.color + '20' }]}>
-                  <Icon 
-                    name={infoContexto.icono} 
-                    size={32} 
-                    color={infoContexto.color} 
+                  <Icon
+                    name={infoContexto.icono}
+                    size={32}
+                    color={infoContexto.color}
                   />
                 </View>
-                
+
                 <Text style={styles.titulo}>{infoContexto.titulo}</Text>
                 <Text style={styles.subtitulo}>{infoContexto.subtitulo}</Text>
               </View>
-              
+
               <View style={styles.correoContainer}>
                 <Icon name="mail-outline" size={16} color={COLORES.AZUL_CIELO_OSCURO} />
                 <Text style={styles.correoTexto}>{correo}</Text>
               </View>
-              
+
               <Text style={styles.instruccion}>
                 Ingresa el código de 4 dígitos que recibiste
               </Text>
@@ -388,7 +370,7 @@ export default function VistaVerificarCorreo({ navigation, route }) {
                 <Icon name="keypad-outline" size={18} color={COLORES.GRIS_OSCURO} />
                 <Text style={styles.codigoLabel}>CÓDIGO DE VERIFICACIÓN</Text>
               </View>
-              
+
               <View style={styles.inputsContainer}>
                 {[0, 1, 2, 3].map((index) => (
                   <TextInput
@@ -413,7 +395,7 @@ export default function VistaVerificarCorreo({ navigation, route }) {
                   />
                 ))}
               </View>
-              
+
               <View style={styles.codigoAyudaContainer}>
                 <Icon name="information-circle-outline" size={14} color={COLORES.AZUL_CIELO_OSCURO} />
                 <Text style={styles.codigoAyuda}>
@@ -425,7 +407,7 @@ export default function VistaVerificarCorreo({ navigation, route }) {
             {/* Contenedor de reenviar con timer animado */}
             <View style={styles.reenviarContainer}>
               <View style={styles.timerCircularContainer}>
-                <Animated.View 
+                <Animated.View
                   style={[
                     styles.timerCircularProgress,
                     {
@@ -448,9 +430,9 @@ export default function VistaVerificarCorreo({ navigation, route }) {
                   </Text>
                 </View>
               </View>
-              
-              <TouchableOpacity 
-                onPress={reenviarCodigo} 
+
+              <TouchableOpacity
+                onPress={reenviarCodigo}
                 disabled={reenviando || !puedeReenviar}
                 style={[
                   styles.botonReenviar,
@@ -461,10 +443,10 @@ export default function VistaVerificarCorreo({ navigation, route }) {
                   <ActivityIndicator size="small" color={COLORES.AZUL_CIELO_OSCURO} />
                 ) : (
                   <View style={styles.reenviarContenido}>
-                    <Icon 
-                      name="refresh-outline" 
-                      size={18} 
-                      color={puedeReenviar ? COLORES.AZUL_CIELO_OSCURO : COLORES.GRIS_MEDIO} 
+                    <Icon
+                      name="refresh-outline"
+                      size={18}
+                      color={puedeReenviar ? COLORES.AZUL_CIELO_OSCURO : COLORES.GRIS_MEDIO}
                     />
                     <Text style={[
                       styles.textoReenviar,
@@ -479,8 +461,8 @@ export default function VistaVerificarCorreo({ navigation, route }) {
 
             {/* Botones de acción */}
             <View style={styles.contenedorBotones}>
-              <TouchableOpacity 
-                onPress={regresar} 
+              <TouchableOpacity
+                onPress={regresar}
                 style={styles.botonSecundario}
                 disabled={verificando || reenviando}
               >
@@ -490,8 +472,8 @@ export default function VistaVerificarCorreo({ navigation, route }) {
                 </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
-                onPress={verificarCodigo} 
+              <TouchableOpacity
+                onPress={verificarCodigo}
                 style={[
                   styles.botonPrincipal,
                   (verificando || reenviando) && styles.botonDeshabilitado
@@ -517,18 +499,18 @@ export default function VistaVerificarCorreo({ navigation, route }) {
                 <Icon name="shield-checkmark-outline" size={20} color={COLORES.EXITO} />
                 <Text style={styles.infoTitulo}>Información importante</Text>
               </View>
-              
+
               <View style={styles.infoItems}>
                 <View style={styles.infoItem}>
                   <Icon name="time-outline" size={14} color={COLORES.AMARILLO_PLATANO} />
                   <Text style={styles.infoTexto}>El código es válido por 3 minutos</Text>
                 </View>
-                
+
                 <View style={styles.infoItem}>
                   <Icon name="warning-outline" size={14} color={COLORES.ROJO_CLARO} />
                   <Text style={styles.infoTexto}>Verifica tu carpeta de spam si no lo encuentras</Text>
                 </View>
-                
+
                 <View style={styles.infoItem}>
                   <Icon name="lock-closed-outline" size={14} color={COLORES.AZUL_CIELO_OSCURO} />
                   <Text style={styles.infoTexto}>Nunca compartas tu código con otras personas</Text>
@@ -576,7 +558,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 30,
   },
-  
+
   // Encabezado
   encabezado: {
     alignItems: 'center',
@@ -640,7 +622,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontStyle: 'italic',
   },
-  
+
   // Código
   codigoContainer: {
     alignItems: 'center',
@@ -696,7 +678,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontStyle: 'italic',
   },
-  
+
   // Timer y reenviar
   reenviarContainer: {
     flexDirection: 'row',
@@ -759,7 +741,7 @@ const styles = StyleSheet.create({
   textoReenviarDeshabilitado: {
     color: COLORES.GRIS_MEDIO,
   },
-  
+
   // Botones
   contenedorBotones: {
     flexDirection: 'row',
@@ -809,7 +791,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
   },
-  
+
   // Información
   infoContainer: {
     backgroundColor: COLORES.GRIS_CLARO,
@@ -844,7 +826,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     flex: 1,
   },
-  
+
   // Debug
   debugContainer: {
     backgroundColor: COLORES.AMARILLO_PLATANO + '20',

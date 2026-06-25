@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  TextInput, 
-  Image, 
-  Alert, 
-  Text, 
-  View, 
-  TouchableOpacity, 
+import {
+  TextInput,
+  Image,
+  Alert,
+  Text,
+  View,
+  TouchableOpacity,
   Platform,
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -18,6 +18,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { servicioAPI } from '../servicios/api';
+import { useAuth } from '../../AppNavegacion';
+
 
 // Colores de CuidaMe
 const COLORES = {
@@ -46,6 +48,7 @@ export default function VistaLogin({ navigation }) {
   const [contrasena, setContrasena] = useState('');
   const [codigoFamiliarNormal, setCodigoFamiliarNormal] = useState('');
   const [cargando, setCargando] = useState(false);
+  const auth = useAuth();
   const [mostrarContrasena, setMostrarContrasena] = useState(false);
   const [errorIdentificador, setErrorIdentificador] = useState('');
   const [errorContrasena, setErrorContrasena] = useState('');
@@ -60,7 +63,7 @@ export default function VistaLogin({ navigation }) {
   const generarFormatoCodigo = () => {
     const letras = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
     const numeros = '0123456789';
-    
+
     let codigo = '';
     // 3 letras
     for (let i = 0; i < 3; i++) {
@@ -71,7 +74,7 @@ export default function VistaLogin({ navigation }) {
     for (let i = 0; i < 3; i++) {
       codigo += numeros.charAt(Math.floor(Math.random() * numeros.length));
     }
-    
+
     return codigo;
   };
 
@@ -79,19 +82,19 @@ export default function VistaLogin({ navigation }) {
   const formatearCodigo = (text, esCodigoNormal = false) => {
     // Remover todo lo que no sea letra o número
     let limpio = text.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-    
+
     // Limitar a 6 caracteres
     if (limpio.length > 6) {
       limpio = limpio.substring(0, 6);
     }
-    
+
     // Insertar guión después de 3 caracteres
     let formateado = '';
     for (let i = 0; i < limpio.length; i++) {
       if (i === 3) formateado += '-';
       formateado += limpio[i];
     }
-    
+
     if (esCodigoNormal) {
       setCodigoFamiliarNormal(formateado);
       setErrorCodigoFamiliar('');
@@ -104,7 +107,7 @@ export default function VistaLogin({ navigation }) {
   // Validar campos según modo
   const validarCampos = () => {
     let valido = true;
-    
+
     if (modoIngreso === 'normal') {
       // Validar email/contraseña
       if (!identificador.trim()) {
@@ -116,14 +119,14 @@ export default function VistaLogin({ navigation }) {
       } else {
         setErrorIdentificador('');
       }
-      
+
       if (!contrasena.trim()) {
         setErrorContrasena('Por favor ingresa tu contraseña');
         valido = false;
       } else {
         setErrorContrasena('');
       }
-      
+
       // Validar código familiar (opcional)
       if (codigoFamiliarNormal.trim()) {
         const codigoLimpio = codigoFamiliarNormal.replace(/-/g, '');
@@ -134,7 +137,7 @@ export default function VistaLogin({ navigation }) {
           setErrorCodigoFamiliar('');
         }
       }
-    } 
+    }
     else if (modoIngreso === 'codigoPersonalizado') {
       // Validar código personalizado
       const codigoLimpio = codigoPersonalizado.replace(/-/g, '');
@@ -145,86 +148,51 @@ export default function VistaLogin({ navigation }) {
         setErrorCodigoPersonalizado('');
       }
     }
-    
+
     return valido;
   };
 
   const manejarLoginManual = async () => {
-    if (!validarCampos()) {
-      return;
-    }
+    if (!validarCampos()) return;
 
     setCargando(true);
 
     try {
-      console.log('Iniciando sesión...');
-      
       let respuesta;
-      
+      const codigoLimpio = codigoFamiliarNormal.replace(/-/g, '');
+
       if (modoIngreso === 'normal') {
-        // Login con email + contraseña + (opcional) código familiar
-        const codigoLimpio = codigoFamiliarNormal.replace(/-/g, '');
-        
         if (codigoLimpio) {
-          // Login con email, contraseña Y código familiar
           respuesta = await servicioAPI.iniciarSesionConCodigoFamiliar(
-            identificador, 
-            contrasena, 
+            identificador,
+            contrasena,
             codigoLimpio
           );
         } else {
-          // Login solo con email y contraseña
           respuesta = await servicioAPI.iniciarSesion(identificador, contrasena);
         }
-      } 
-      else {
-        // Login solo con código personalizado
-        const codigoLimpio = codigoPersonalizado.replace(/-/g, '');
-        respuesta = await servicioAPI.iniciarSesionConCodigoPersonalizado(codigoLimpio);
+      } else {
+        const codigoLimpioPersonal = codigoPersonalizado.replace(/-/g, '');
+        respuesta = await servicioAPI.iniciarSesionConCodigoPersonalizado(codigoLimpioPersonal);
       }
-      
-      if (respuesta.exito && respuesta.token && respuesta.usuario) {
-        console.log('Login exitoso');
-        
-        // Guardar datos de sesión
-        await AsyncStorage.setItem('sesionActiva', 'true');
-        await AsyncStorage.setItem('usuarioInfo', JSON.stringify(respuesta.usuario));
-        await AsyncStorage.setItem('usuarioId', respuesta.usuario.id.toString());
-        await AsyncStorage.setItem('token', respuesta.token);
-        await AsyncStorage.setItem('rol', respuesta.usuario.rol || 'familiar');
-        
-        // Verificar si el perfil está completo
-        const perfilCompleto = respuesta.usuario.perfil_completo || 
-                              (respuesta.usuario.nombre && respuesta.usuario.email);
-        
-        if (!perfilCompleto && modoIngreso === 'codigoPersonalizado') {
-          // Si es login con código personalizado y perfil incompleto
-          navigation.replace('CompletarPerfil', { 
-            codigoPersonalizado: codigoPersonalizado.replace(/-/g, ''),
-            usuarioId: respuesta.usuario.id 
-          });
+
+      if (respuesta.exito && respuesta.token) {
+        // Guardar sesión usando el contexto
+        await auth.iniciarSesion(respuesta.token, respuesta.usuario, respuesta.usuario.rol || 'familiar');
+
+        // Redirigir según perfil
+        const perfil = respuesta.usuario.rol || 'familiar';
+        if (perfil === 'familiar') {
+          navigation.replace('Principal');
+        } else if (perfil === 'adulto_mayor') {
+          navigation.replace('InfoAnciano'); // o la ruta que corresponda
         } else {
-          // Perfil completo o login normal
-          navigation.replace('MenuPrincipal');
+          navigation.replace('Principal'); // fallback
         }
       } else {
         Alert.alert('Error', respuesta.error || 'Credenciales incorrectas');
-        
-        // Mostrar errores específicos
-        if (modoIngreso === 'normal') {
-          if (respuesta.error?.includes('correo')) {
-            setErrorIdentificador('Correo no encontrado');
-          } else if (respuesta.error?.includes('contraseña')) {
-            setErrorContrasena('Contraseña incorrecta');
-          } else if (respuesta.error?.includes('código')) {
-            setErrorCodigoFamiliar('Código familiar incorrecto');
-          }
-        } else {
-          setErrorCodigoPersonalizado('Código personalizado incorrecto');
-        }
       }
     } catch (error) {
-      console.error('Error:', error);
       Alert.alert('Error', 'No se pudo conectar con el servidor');
     } finally {
       setCargando(false);
@@ -264,26 +232,26 @@ export default function VistaLogin({ navigation }) {
 
   const manejarLoginGoogle = async () => {
     setCargandoGoogle(true);
-    
+
     try {
       const TUNNEL_URL = 'https://veifibi-divinablasfemia-8081.exp.direct';
       const REDIRECT_URI = `${TUNNEL_URL}/--/auth/callback`;
       const CLIENT_ID = '875101074375-t8ghd22q0e7dler6qt1h31dbn5ltvutp.apps.googleusercontent.com';
-      
+
       const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
         `client_id=${CLIENT_ID}&` +
         `redirect_uri=${encodeURIComponent(REDIRECT_URI)}&` +
         `response_type=token&` +
         `scope=email%20profile&` +
         `prompt=consent`;
-      
+
       await WebBrowser.openBrowserAsync(authUrl);
-      
+
       setTimeout(async () => {
         // En una implementación real, manejarías el deep link aquí
         console.log('Google login iniciado');
       }, 2000);
-      
+
     } catch (error) {
       console.error('Error:', error);
       Alert.alert('Error', 'No se pudo iniciar sesión con Google');
@@ -297,10 +265,10 @@ export default function VistaLogin({ navigation }) {
       try {
         const sesionActiva = await AsyncStorage.getItem('sesionActiva');
         const usuarioInfo = await AsyncStorage.getItem('usuarioInfo');
-        
+
         if (sesionActiva === 'true' && usuarioInfo) {
           const token = await AsyncStorage.getItem('token');
-          
+
           if (token) {
             try {
               const verificado = await servicioAPI.verificarToken();
@@ -329,16 +297,16 @@ export default function VistaLogin({ navigation }) {
   }, []);
 
   return (
-    <LinearGradient 
+    <LinearGradient
       colors={[COLORES.AZUL_CIELO, COLORES.BLANCO, COLORES.AZUL_CIELO]}
       style={styles.fondo}
     >
       <SafeAreaView style={styles.contenedorPrincipal}>
-        <KeyboardAvoidingView 
+        <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.keyboardAvoidingView}
         >
-          <ScrollView 
+          <ScrollView
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
@@ -349,10 +317,10 @@ export default function VistaLogin({ navigation }) {
                 <Text style={styles.titulo}>CuidaMe</Text>
                 <Text style={styles.subtituloLogo}>Cuidado y organización para adultos mayores</Text>
               </View>
-              
+
               <Text style={styles.subtitulo}>
-                {modoIngreso === 'normal' 
-                  ? 'Ingresa con tu correo y contraseña' 
+                {modoIngreso === 'normal'
+                  ? 'Ingresa con tu correo y contraseña'
                   : 'Ingresa con tu código familiar personalizado'}
               </Text>
             </View>
@@ -373,7 +341,7 @@ export default function VistaLogin({ navigation }) {
                   📧 Correo
                 </Text>
               </TouchableOpacity>
-              
+
               <TouchableOpacity
                 style={[
                   styles.botonModo,
@@ -396,7 +364,7 @@ export default function VistaLogin({ navigation }) {
                 {/* Campo de email */}
                 <View style={styles.campoContainer}>
                   <Text style={styles.campoLabel}>CORREO ELECTRÓNICO *</Text>
-                  
+
                   <TextInput
                     style={[
                       styles.input,
@@ -415,7 +383,7 @@ export default function VistaLogin({ navigation }) {
                     editable={!cargando}
                     returnKeyType="next"
                   />
-                  
+
                   {errorIdentificador ? (
                     <Text style={styles.textoError}>❌ {errorIdentificador}</Text>
                   ) : (
@@ -428,7 +396,7 @@ export default function VistaLogin({ navigation }) {
                 {/* Campo de contraseña */}
                 <View style={styles.campoContainer}>
                   <Text style={styles.campoLabel}>CONTRASEÑA *</Text>
-                  
+
                   <View style={styles.inputPasswordContainer}>
                     <TextInput
                       style={[
@@ -457,7 +425,7 @@ export default function VistaLogin({ navigation }) {
                       </Text>
                     </TouchableOpacity>
                   </View>
-                  
+
                   {errorContrasena ? (
                     <Text style={styles.textoError}>❌ {errorContrasena}</Text>
                   ) : (
@@ -470,7 +438,7 @@ export default function VistaLogin({ navigation }) {
                 {/* Campo de código familiar (opcional) */}
                 <View style={styles.campoContainer}>
                   <Text style={styles.campoLabel}>CÓDIGO FAMILIAR (OPCIONAL)</Text>
-                  
+
                   <TextInput
                     style={[
                       styles.inputCodigo,
@@ -486,7 +454,7 @@ export default function VistaLogin({ navigation }) {
                     editable={!cargando}
                     maxLength={7}
                   />
-                  
+
                   {errorCodigoFamiliar ? (
                     <Text style={styles.textoError}>❌ {errorCodigoFamiliar}</Text>
                   ) : (
@@ -502,7 +470,7 @@ export default function VistaLogin({ navigation }) {
             {modoIngreso === 'codigoPersonalizado' && (
               <View style={styles.campoContainer}>
                 <Text style={styles.campoLabel}>CÓDIGO PERSONALIZADO *</Text>
-                
+
                 <TextInput
                   style={[
                     styles.inputCodigoGrande,
@@ -518,7 +486,7 @@ export default function VistaLogin({ navigation }) {
                   editable={!cargando}
                   maxLength={7}
                 />
-                
+
                 {errorCodigoPersonalizado ? (
                   <Text style={styles.textoError}>❌ {errorCodigoPersonalizado}</Text>
                 ) : (
@@ -526,8 +494,8 @@ export default function VistaLogin({ navigation }) {
                     🔑 Usa el código personalizado que te compartió el administrador
                   </Text>
                 )}
-                
-                <TouchableOpacity 
+
+                <TouchableOpacity
                   style={styles.botonInfoCodigo}
                   onPress={manejarInfoCodigo}
                   disabled={cargando}
@@ -540,13 +508,13 @@ export default function VistaLogin({ navigation }) {
             )}
 
             {/* Botón principal de login */}
-            <TouchableOpacity 
-              onPress={manejarLoginManual} 
+            <TouchableOpacity
+              onPress={manejarLoginManual}
               style={[
                 styles.botonPrincipal,
                 cargando && styles.botonDeshabilitado
               ]}
-              disabled={cargando || 
+              disabled={cargando ||
                 (modoIngreso === 'normal' && (!identificador.trim() || !contrasena.trim())) ||
                 (modoIngreso === 'codigoPersonalizado' && codigoPersonalizado.replace(/-/g, '').length !== 6)
               }
@@ -563,14 +531,14 @@ export default function VistaLogin({ navigation }) {
             {/* Enlaces para modo normal */}
             {modoIngreso === 'normal' && (
               <View style={styles.contenedorEnlaces}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   onPress={manejarCrearCuenta}
                   disabled={cargando}
                 >
                   <Text style={styles.enlace}>Crear nueva cuenta</Text>
                 </TouchableOpacity>
-                
-                <TouchableOpacity 
+
+                <TouchableOpacity
                   onPress={manejarRecuperarContrasena}
                   disabled={cargando}
                 >
@@ -602,8 +570,8 @@ export default function VistaLogin({ navigation }) {
                   <ActivityIndicator size="small" color={COLORES.TEXTO_OSCURO} />
                 ) : (
                   <>
-                    <Image 
-                      source={require('../recursos/img/google.png')} 
+                    <Image
+                      source={require('../recursos/img/google.png')}
                       style={styles.iconoGoogle}
                     />
                     <Text style={styles.textoBotonGoogle}>Google</Text>
@@ -631,36 +599,36 @@ export default function VistaLogin({ navigation }) {
         <View style={styles.modalFondo}>
           <View style={styles.modalContenido}>
             <Text style={styles.modalTitulo}>🔑 Código Personalizado</Text>
-            
+
             <View style={styles.modalEjemploContainer}>
               <Text style={styles.modalEjemploLabel}>Ejemplo:</Text>
               <View style={styles.codigoEjemploContainer}>
                 <Text style={styles.codigoEjemplo}>{codigoPersonalizado || "ABC-123"}</Text>
               </View>
             </View>
-            
+
             <Text style={styles.modalTexto}>
               Hay <Text style={styles.textoDestacado}>dos tipos de códigos</Text> en CuidaMe:
             </Text>
-            
+
             <View style={styles.modalLista}>
               <Text style={styles.modalSubtitulo}>1. Código Familiar Normal:</Text>
               <Text style={styles.modalItem}>• Se usa AL CREAR la cuenta</Text>
               <Text style={styles.modalItem}>• Vincula tu cuenta a un grupo familiar</Text>
               <Text style={styles.modalItem}>• Opcional en el login</Text>
-              
+
               <Text style={[styles.modalSubtitulo, { marginTop: 15 }]}>2. Código Personalizado:</Text>
               <Text style={styles.modalItem}>• Se usa PARA ACCEDER sin email/contraseña</Text>
               <Text style={styles.modalItem}>• Único para cada familiar/adulto mayor</Text>
               <Text style={styles.modalItem}>• Siempre es el mismo para esa persona</Text>
               <Text style={styles.modalItem}>• Lo genera el familiar administrador</Text>
             </View>
-            
+
             <Text style={styles.modalNota}>
-              💡 <Text style={styles.textoDestacado}>Consejo:</Text> Si no tienes código personalizado, 
+              💡 <Text style={styles.textoDestacado}>Consejo:</Text> Si no tienes código personalizado,
               pídeselo al familiar administrador de tu grupo.
             </Text>
-            
+
             <TouchableOpacity
               style={styles.botonModalCerrar}
               onPress={() => setModalCodigoVisible(false)}

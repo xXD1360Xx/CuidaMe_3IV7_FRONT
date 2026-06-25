@@ -17,6 +17,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { servicioAPI } from '../servicios/api';
+import { useAuth } from '../../AppNavegacion';
+
 
 // Colores de CuidaMe
 const COLORES = {
@@ -36,6 +38,8 @@ const COLORES = {
 };
 
 export default function VistaRegistro() {
+  const auth = useAuth();
+
   const navigation = useNavigation();
   const route = useRoute();
   const { tipoPerfil } = route.params || { tipoPerfil: 'familiar' };
@@ -82,13 +86,13 @@ export default function VistaRegistro() {
   const formatearCodigo = (text) => {
     let limpio = text.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
     if (limpio.length > 6) limpio = limpio.substring(0, 6);
-    
+
     let formateado = '';
     for (let i = 0; i < limpio.length; i++) {
       if (i === 3) formateado += '-';
       formateado += limpio[i];
     }
-    
+
     return formateado;
   };
 
@@ -176,8 +180,9 @@ export default function VistaRegistro() {
     setCargando(true);
 
     try {
+      let respuesta;
+      let endpoint = '/registro';
       let datosRegistro = {};
-      let endpoint = '';
 
       switch (tipoPerfil) {
         case 'profesional':
@@ -189,83 +194,62 @@ export default function VistaRegistro() {
             telefono: celularProfesional.trim() || null,
             codigo_familiar: codigoFamiliarProfesional.replace(/-/g, '') || null
           };
-          endpoint = '/registro';
           break;
 
         case 'familiar':
           if (tieneCodigoPersonalizado) {
-            datosRegistro = {
-              codigo_familiar: codigoFamiliarPersonalizado.replace(/-/g, ''),
-              rol: 'familiar'
-            };
-            endpoint = '/registro-con-codigo';
+            // ⚠️ Como el backend no tiene registro-con-codigo, usamos login con código personalizado
+            const codigoLimpio = codigoFamiliarPersonalizado.replace(/-/g, '');
+            respuesta = await servicioAPI.iniciarSesionConCodigoPersonalizado(codigoLimpio);
+            if (respuesta.exito && respuesta.token) {
+              await auth.iniciarSesion(respuesta.token, respuesta.usuario, respuesta.usuario.rol || 'familiar');
+              navigation.replace('Principal');
+            } else {
+              Alert.alert('Error', respuesta.error || 'Código inválido');
+            }
+            setCargando(false);
+            return;
           } else {
             datosRegistro = {
               nombre: nombreFamiliar.trim(),
               email: correoFamiliar.trim().toLowerCase(),
               password: contrasenaFamiliar,
               rol: 'familiar',
-              parentesco: 'familiar' // Este campo se completará después
+              parentesco: 'familiar'
             };
-            endpoint = '/registro';
           }
           break;
 
         case 'adultoMayor':
-          datosRegistro = {
-            codigo_familiar: codigoFamiliarAnciano.replace(/-/g, ''),
-            rol: 'adulto_mayor'
-          };
-          endpoint = '/registro-con-codigo';
-          break;
+          // Similar: usar login con código personalizado
+          const codigoLimpioAnciano = codigoFamiliarAnciano.replace(/-/g, '');
+          respuesta = await servicioAPI.iniciarSesionConCodigoPersonalizado(codigoLimpioAnciano);
+          if (respuesta.exito && respuesta.token) {
+            await auth.iniciarSesion(respuesta.token, respuesta.usuario, respuesta.usuario.rol || 'adulto_mayor');
+            navigation.replace('InfoAnciano');
+          } else {
+            Alert.alert('Error', respuesta.error || 'Código inválido');
+          }
+          setCargando(false);
+          return;
       }
 
-      console.log('Registrando con:', { datosRegistro, endpoint });
-      const respuesta = await servicioAPI.registrarUsuario(datosRegistro, endpoint);
+      // Para casos sin código personalizado, usar registro normal
+      respuesta = await servicioAPI.registrarUsuario(datosRegistro, endpoint);
 
-      if (respuesta.exito) {
-        // Guardar datos de sesión si el registro incluye login automático
-        if (respuesta.token && respuesta.usuario) {
-          await AsyncStorage.setItem('sesionActiva', 'true');
-          await AsyncStorage.setItem('usuarioInfo', JSON.stringify(respuesta.usuario));
-          await AsyncStorage.setItem('usuarioId', respuesta.usuario.id.toString());
-          await AsyncStorage.setItem('token', respuesta.token);
-          await AsyncStorage.setItem('rol', respuesta.usuario.rol);
-        }
-
-        // Mostrar mensaje de éxito y navegar
-        Alert.alert(
-          '¡Registro exitoso!',
-          tipoPerfil === 'adultoMayor' || tieneCodigoPersonalizado
-            ? 'Tu cuenta ha sido creada exitosamente. Ahora completa tu perfil.'
-            : 'Tu cuenta ha sido creada exitosamente. Ya puedes iniciar sesión.',
-          [
-            {
-              text: 'Continuar',
-              onPress: () => {
-                if (tipoPerfil === 'adultoMayor' || tieneCodigoPersonalizado) {
-                  navigation.replace('CompletarPerfil', {
-                    usuarioId: respuesta.usuario?.id,
-                    codigoFamiliar: datosRegistro.codigo_familiar
-                  });
-                } else {
-                  navigation.replace('VistaLogin');
-                }
-              }
-            }
-          ]
-        );
+      if (respuesta.exito && respuesta.token) {
+        await auth.iniciarSesion(respuesta.token, respuesta.usuario, respuesta.usuario.rol || 'familiar');
+        navigation.replace('Principal');
       } else {
         Alert.alert('Error', respuesta.error || 'Error en el registro');
       }
+
     } catch (error) {
-      console.error('Error en registro:', error);
-      Alert.alert('Error', 'No se pudo completar el registro. Intenta nuevamente.');
+      Alert.alert('Error', 'No se pudo completar el registro');
     } finally {
       setCargando(false);
     }
   };
-
   // Volver a selección de perfil
   const volverASeleccion = () => {
     navigation.goBack();
@@ -666,7 +650,7 @@ export default function VistaRegistro() {
               {/* Enlace a login */}
               <TouchableOpacity
                 style={styles.botonLogin}
-                onPress={() => navigation.navigate('VistaLogin')}
+                onPress={() => navigation.navigate('VistaPrincipal')}
                 disabled={cargando}
               >
                 <Text style={styles.textoBotonLogin}>

@@ -1,1457 +1,464 @@
-// api.js - Servicio de API para CuidaMe
+// servicios/api.js
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
-// 🔧 URL base - CAMBIA ESTA URL POR LA DE TU BACKEND
+// ========== CONFIGURACIÓN ==========
+// URL base - Cambia según el entorno
 const obtenerURLBase = () => {
   if (process.env.REACT_APP_API_URL) {
     return process.env.REACT_APP_API_URL;
   }
-  return 'https://tu-backend-cuidame.com/api';
+  // Para desarrollo local (cambia la IP si usas emulador)
+  if (Platform.OS === 'android') {
+    return 'http://10.0.2.2:3000/api'; // Emulador Android
+  }
+  return 'http://localhost:3000/api'; // iOS o web
 };
 
 const URL_BASE_API = obtenerURLBase();
-console.log('🔗 [API CuidaMe] URL base:', URL_BASE_API);
 
-// Función auxiliar para obtener token
+console.log(`🔗 [API] URL base: ${URL_BASE_API}`);
+
+// ========== FUNCIONES AUXILIARES ==========
 const obtenerToken = async () => {
   try {
-    const token = await AsyncStorage.getItem('token');
-    return token;
+    return await AsyncStorage.getItem('token');
   } catch (error) {
     console.error('❌ Error obteniendo token:', error);
     return null;
   }
 };
 
-// Función auxiliar para obtener headers
 const obtenerHeaders = async (contenidoJSON = true) => {
-  try {
-    const token = await obtenerToken();
-    const headers = contenidoJSON 
-      ? {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        }
-      : {};
-    
-    if (token && token.trim() !== '') {
-      headers['Authorization'] = `Bearer ${token}`;
+  const token = await obtenerToken();
+  const headers = {
+    Accept: 'application/json',
+  };
+  if (contenidoJSON) {
+    headers['Content-Type'] = 'application/json';
+  }
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+};
+
+const peticion = async (endpoint, metodo = 'POST', datos = null, formData = false) => {
+  const url = `${URL_BASE_API}${endpoint}`;
+  const headers = formData ? { Accept: 'application/json' } : await obtenerHeaders();
+
+  const opciones = {
+    method: metodo,
+    headers,
+  };
+
+  if (datos) {
+    if (formData) {
+      opciones.body = datos;
+    } else {
+      opciones.body = JSON.stringify(datos);
     }
-    
-    return headers;
+  }
+
+  try {
+    const respuesta = await fetch(url, opciones);
+    const texto = await respuesta.text();
+    try {
+      const json = JSON.parse(texto);
+      return json;
+    } catch (e) {
+      console.warn('⚠️ Respuesta no JSON:', texto);
+      return { exito: false, error: 'Respuesta inválida del servidor' };
+    }
   } catch (error) {
-    console.error('❌ Error obteniendo headers:', error);
-    return contenidoJSON 
-      ? { 'Content-Type': 'application/json' }
-      : {};
+    console.error(`❌ Error en petición ${metodo} ${endpoint}:`, error.message);
+    return { exito: false, error: 'Error de conexión con el servidor' };
   }
 };
 
-// Servicio de API para CuidaMe
+// ========== SERVICIO DE API ==========
 export const servicioAPI = {
   // ========== 🔐 AUTENTICACIÓN ==========
-  
-  iniciarSesion: async (identificador, contrasena) => {
-    const url = `${URL_BASE_API}/auth/login`;
-    console.log('🔍 [API] iniciarSesion →', url);
-    
-    try {
-      const respuesta = await fetch(url, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({ identificador, contrasena }),
-      });
-      
-      console.log('📡 [API] iniciarSesion Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] iniciarSesion Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión al servidor'
-      };
-    }
+  iniciarSesion: (identificador, contrasena) =>
+    peticion('/auth/login', 'POST', { identificador, contrasena }),
+
+  iniciarSesionConCodigoFamiliar: (email, contrasena, codigo) =>
+    peticion('/auth/login-codigo-familiar', 'POST', { email, contrasena, codigo_familiar: codigo }),
+
+  iniciarSesionConCodigoPersonalizado: (codigo) =>
+    peticion('/auth/login-codigo-personalizado', 'POST', { codigo_personalizado: codigo }),
+
+  completarPerfilConCodigo: (usuarioId, datosPerfil) =>
+    peticion('/auth/completar-perfil', 'POST', { usuario_id: usuarioId, ...datosPerfil }),
+
+  registrarUsuario: (datos, endpoint = '/registro') =>
+    peticion(`/auth${endpoint}`, 'POST', datos),
+
+  // Recuperación de contraseña
+  solicitarRecuperacion: (email) =>
+    peticion('/auth/recuperar-contrasena/solicitar', 'POST', { email }),
+
+  verificarCodigoRecuperacion: (usuarioId, codigo) =>
+    peticion('/auth/recuperar-contrasena/verificar', 'POST', { usuario_id: usuarioId, codigo }),
+
+  restablecerContrasena: (usuarioId, codigoId, nuevaContrasena) =>
+    peticion('/auth/recuperar-contrasena/restablecer', 'POST', {
+      usuario_id: usuarioId,
+      codigo_id: codigoId,
+      nueva_contrasena: nuevaContrasena,
+    }),
+
+  cambiarContrasena: (usuarioId, actual, nueva) =>
+    peticion('/auth/cambiar-contrasena', 'POST', {
+      usuario_id: usuarioId,
+      contrasena_actual: actual,
+      nueva_contrasena: nueva,
+    }),
+
+  verificarToken: (token) => {
+    // Si no se pasa token, intenta obtenerlo del almacenamiento
+    return peticion('/auth/verificar', 'POST', { token: token || null });
   },
 
-  iniciarSesionConCodigoFamiliar: async (email, contrasena, codigo) => {
-    const url = `${URL_BASE_API}/auth/login-con-codigo-familiar`;
-    console.log('🔍 [API] iniciarSesionConCodigoFamiliar →', url);
-    
-    try {
-      const respuesta = await fetch(url, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({ email, contrasena, codigo }),
-      });
-      
-      console.log('📡 [API] iniciarSesionConCodigoFamiliar Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] iniciarSesionConCodigoFamiliar Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión al servidor'
-      };
-    }
-  },
-
-  iniciarSesionConCodigoPersonalizado: async (codigo) => {
-    const url = `${URL_BASE_API}/auth/login-con-codigo-personalizado`;
-    console.log('🔍 [API] iniciarSesionConCodigoPersonalizado →', url);
-    
-    try {
-      const respuesta = await fetch(url, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({ codigo }),
-      });
-      
-      console.log('📡 [API] iniciarSesionConCodigoPersonalizado Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] iniciarSesionConCodigoPersonalizado Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión al servidor'
-      };
-    }
-  },
-
-  registrarUsuario: async (datosUsuario, endpoint = '/registro') => {
-    const url = `${URL_BASE_API}${endpoint}`;
-    console.log('🔍 [API] registrarUsuario →', url);
-    
-    try {
-      const respuesta = await fetch(url, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify(datosUsuario),
-      });
-      
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] registrarUsuario Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión de red'
-      };
-    }
-  },
-
-  verificarToken: async () => {
-    console.log('🔍 [API] verificarToken →', `${URL_BASE_API}/auth/verificar`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/auth/verificar`, {
-        method: 'GET',
-        headers,
-      });
-      
-      console.log('📡 [API] verificarToken Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] verificarToken Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
-
-  cerrarSesion: async () => {
-    console.log('🔍 [API] cerrarSesion →', `${URL_BASE_API}/auth/logout`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/auth/logout`, {
-        method: 'POST',
-        headers,
-      });
-      
-      console.log('📡 [API] cerrarSesion Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] cerrarSesion Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
-
-  enviarCorreoVerificacion: async (datos) => {
-    console.log('🔍 [API] enviarCorreoVerificacion →', `${URL_BASE_API}/auth/enviar-codigo`);
-    
-    try {
-      const respuesta = await fetch(`${URL_BASE_API}/auth/enviar-codigo`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify(datos),
-      });
-      
-      console.log('📡 [API] enviarCorreoVerificacion Status:', respuesta.status);
-      const datosRespuesta = await respuesta.json();
-      return datosRespuesta;
-    } catch (error) {
-      console.error('❌ [API] enviarCorreoVerificacion Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión al servidor'
-      };
-    }
-  },
-
-  recuperarContrasena: async (datos) => {
-    console.log('🔍 [API] recuperarContrasena →', `${URL_BASE_API}/auth/recuperar-contrasena`);
-    
-    try {
-      const respuesta = await fetch(`${URL_BASE_API}/auth/recuperar-contrasena`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify(datos),
-      });
-      
-      console.log('📡 [API] recuperarContrasena Status:', respuesta.status);
-      const datosRespuesta = await respuesta.json();
-      return datosRespuesta;
-    } catch (error) {
-      console.error('❌ [API] recuperarContrasena Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión al servidor'
-      };
-    }
-  },
-
-  cambiarContrasena: async (datos) => {
-    console.log('🔍 [API] cambiarContrasena →', `${URL_BASE_API}/auth/cambiar-contrasena`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/auth/cambiar-contrasena`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(datos),
-      });
-      
-      console.log('📡 [API] cambiarContrasena Status:', respuesta.status);
-      const datosRespuesta = await respuesta.json();
-      return datosRespuesta;
-    } catch (error) {
-      console.error('❌ [API] cambiarContrasena Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión al servidor'
-      };
-    }
-  },
+  cerrarSesion: (usuarioId) =>
+    peticion('/auth/cerrar-sesion', 'POST', { usuario_id: usuarioId }),
 
   // ========== 👤 USUARIOS Y PERFILES ==========
+  obtenerMiPerfil: (usuarioId) =>
+    peticion('/preferencias/informacion-usuario', 'POST', { usuario_id: usuarioId }),
 
-  obtenerMiPerfil: async () => {
-    console.log('🔍 [API] obtenerMiPerfil →', `${URL_BASE_API}/usuario/perfil`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/usuario/perfil`, {
-        method: 'GET',
-        headers,
-      });
-      
-      console.log('📡 [API] obtenerMiPerfil Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] obtenerMiPerfil Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión',
-        usuario: null
-      };
-    }
-  },
+  actualizarUsuario: (usuarioId, datos) =>
+    peticion('/preferencias/actualizar-usuario', 'PUT', { usuario_id: usuarioId, datos }),
 
-  actualizarUsuario: async (usuarioId, datosUsuario) => {
-    console.log('🔍 [API] actualizarUsuario →', `${URL_BASE_API}/usuario/${usuarioId}`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/usuario/${usuarioId}`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify(datosUsuario),
-      });
-      
-      console.log('📡 [API] actualizarUsuario Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] actualizarUsuario Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión al servidor'
-      };
-    }
-  },
+  obtenerTelefonosUsuario: (usuarioId) =>
+    peticion('/preferencias/telefonos', 'POST', { usuario_id: usuarioId }),
 
-  obtenerTelefonosUsuario: async (usuarioId) => {
-    console.log('🔍 [API] obtenerTelefonosUsuario →', `${URL_BASE_API}/usuario/${usuarioId}/telefonos`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/usuario/${usuarioId}/telefonos`, {
-        method: 'GET',
-        headers,
-      });
-      
-      console.log('📡 [API] obtenerTelefonosUsuario Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] obtenerTelefonosUsuario Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión',
-        telefonos: []
-      };
-    }
-  },
+  agregarTelefono: (usuarioId, numero, tipo, principal) =>
+    peticion('/preferencias/telefonos/agregar', 'POST', { usuario_id: usuarioId, numero, tipo, principal }),
 
-  agregarTelefono: async (datosTelefono) => {
-    console.log('🔍 [API] agregarTelefono →', `${URL_BASE_API}/usuario/telefonos`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/usuario/telefonos`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(datosTelefono),
-      });
-      
-      console.log('📡 [API] agregarTelefono Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] agregarTelefono Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
+  eliminarTelefono: (usuarioId, telefonoId) =>
+    peticion(`/preferencias/telefonos/eliminar/${telefonoId}`, 'DELETE', { usuario_id: usuarioId }),
 
-  eliminarTelefono: async (telefonoId) => {
-    console.log('🔍 [API] eliminarTelefono →', `${URL_BASE_API}/usuario/telefonos/${telefonoId}`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/usuario/telefonos/${telefonoId}`, {
-        method: 'DELETE',
-        headers,
-      });
-      
-      console.log('📡 [API] eliminarTelefono Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] eliminarTelefono Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
+  marcarTelefonoPrincipal: (usuarioId, telefonoId) =>
+    peticion(`/preferencias/telefonos/marcar-principal/${telefonoId}`, 'POST', { usuario_id: usuarioId }),
 
-  marcarTelefonoPrincipal: async (telefonoId) => {
-    console.log('🔍 [API] marcarTelefonoPrincipal →', `${URL_BASE_API}/usuario/telefonos/${telefonoId}/principal`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/usuario/telefonos/${telefonoId}/principal`, {
-        method: 'PUT',
-        headers,
-      });
-      
-      console.log('📡 [API] marcarTelefonoPrincipal Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] marcarTelefonoPrincipal Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
+  obtenerPreferenciasUsuario: (usuarioId) =>
+    peticion('/preferencias/preferencias', 'POST', { usuario_id: usuarioId }),
 
-  obtenerPreferenciasUsuario: async (usuarioId) => {
-    console.log('🔍 [API] obtenerPreferenciasUsuario →', `${URL_BASE_API}/usuario/${usuarioId}/preferencias`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/usuario/${usuarioId}/preferencias`, {
-        method: 'GET',
-        headers,
-      });
-      
-      console.log('📡 [API] obtenerPreferenciasUsuario Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] obtenerPreferenciasUsuario Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión',
-        preferencias: null
-      };
-    }
-  },
+  actualizarPreferencias: (usuarioId, preferencias) =>
+    peticion('/preferencias/actualizar-preferencias', 'PUT', { usuario_id: usuarioId, preferencias }),
 
-  actualizarPreferencias: async (preferencias) => {
-    console.log('🔍 [API] actualizarPreferencias →', `${URL_BASE_API}/usuario/preferencias`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/usuario/preferencias`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify(preferencias),
-      });
-      
-      console.log('📡 [API] actualizarPreferencias Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] actualizarPreferencias Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión al servidor'
-      };
-    }
-  },
+  verificarOtrosAdministradores: (usuarioId) =>
+    peticion('/preferencias/verificar-administradores', 'POST', { usuario_id: usuarioId }),
 
-  verificarOtrosAdministradores: async () => {
-    console.log('🔍 [API] verificarOtrosAdministradores →', `${URL_BASE_API}/usuario/verificar-otros-admins`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/usuario/verificar-otros-admins`, {
-        method: 'GET',
-        headers,
-      });
-      
-      console.log('📡 [API] verificarOtrosAdministradores Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] verificarOtrosAdministradores Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
+  renunciarAdministrador: (usuarioId) =>
+    peticion('/preferencias/renunciar-administrador', 'POST', { usuario_id: usuarioId }),
 
-  renunciarAdministrador: async () => {
-    console.log('🔍 [API] renunciarAdministrador →', `${URL_BASE_API}/usuario/renunciar-admin`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/usuario/renunciar-admin`, {
-        method: 'POST',
-        headers,
-      });
-      
-      console.log('📡 [API] renunciarAdministrador Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] renunciarAdministrador Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
+  solicitarEliminacionCuenta: (usuarioId, razon) =>
+    peticion('/preferencias/solicitar-eliminacion-cuenta', 'POST', { usuario_id: usuarioId, razon }),
 
-  solicitarEliminacionCuenta: async () => {
-    console.log('🔍 [API] solicitarEliminacionCuenta →', `${URL_BASE_API}/usuario/solicitar-eliminacion`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/usuario/solicitar-eliminacion`, {
-        method: 'POST',
-        headers,
-      });
-      
-      console.log('📡 [API] solicitarEliminacionCuenta Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] solicitarEliminacionCuenta Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
+  actualizarFotoPerfil: (usuarioId, fotoBase64, tipo) =>
+    peticion('/preferencias/actualizar-foto-perfil', 'POST', {
+      usuario_id: usuarioId,
+      foto_base64: fotoBase64,
+      tipo,
+    }),
 
   // ========== 👴 ADULTOS MAYORES ==========
+  obtenerAdultoMayorPrincipal: (usuarioId) =>
+    peticion('/info-adulto/principal', 'POST', { usuario_id: usuarioId }),
 
-  obtenerAdultoMayorPrincipal: async (usuarioId) => {
-    console.log('🔍 [API] obtenerAdultoMayorPrincipal →', `${URL_BASE_API}/adultos-mayores/principal/${usuarioId}`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/adultos-mayores/principal/${usuarioId}`, {
-        method: 'GET',
-        headers,
-      });
-      
-      console.log('📡 [API] obtenerAdultoMayorPrincipal Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] obtenerAdultoMayorPrincipal Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión',
-        adultoMayor: null
-      };
-    }
-  },
+  actualizarAdultoMayor: (usuarioId, adultoId, datos) =>
+    peticion('/info-adulto/actualizar', 'POST', { usuario_id: usuarioId, adulto_id: adultoId, datos }),
+
+  obtenerEstadisticasSalud: (usuarioId, adultoId) =>
+    peticion('/info-adulto/estadisticas', 'POST', { usuario_id: usuarioId, adulto_id: adultoId }),
+
+  generarReporteSalud: (usuarioId, adultoId, tipo) =>
+    peticion('/info-adulto/generar-reporte', 'POST', { usuario_id: usuarioId, adulto_id: adultoId, tipo }),
+
+  // Enfermedades
+  obtenerEnfermedades: (adultoId) =>
+    peticion('/info-adulto/enfermedades', 'POST', { adulto_id: adultoId }),
+
+  agregarEnfermedad: (usuarioId, adultoId, enfermedad) =>
+    peticion('/info-adulto/enfermedades/agregar', 'POST', { usuario_id: usuarioId, adulto_id: adultoId, enfermedad }),
+
+  actualizarEnfermedad: (usuarioId, enfermedadId, datos) =>
+    peticion('/info-adulto/enfermedades/actualizar', 'POST', { usuario_id: usuarioId, enfermedad_id: enfermedadId, datos }),
+
+  eliminarEnfermedad: (usuarioId, enfermedadId) =>
+    peticion('/info-adulto/enfermedades/eliminar', 'POST', { usuario_id: usuarioId, enfermedad_id: enfermedadId }),
+
+  // Alergias
+  obtenerAlergias: (adultoId) =>
+    peticion('/info-adulto/alergias', 'POST', { adulto_id: adultoId }),
+
+  agregarAlergia: (usuarioId, adultoId, alergia) =>
+    peticion('/info-adulto/alergias/agregar', 'POST', { usuario_id: usuarioId, adulto_id: adultoId, alergia }),
+
+  // Artículos
+  obtenerArticulos: (adultoId) =>
+    peticion('/info-adulto/articulos', 'POST', { adulto_id: adultoId }),
+
+  agregarArticulo: (usuarioId, adultoId, articulo) =>
+    peticion('/info-adulto/articulos/agregar', 'POST', { usuario_id: usuarioId, adulto_id: adultoId, articulo }),
+
+  // Hobbies
+  obtenerHobbies: (adultoId) =>
+    peticion('/info-adulto/hobbies', 'POST', { adulto_id: adultoId }),
+
+  agregarHobby: (usuarioId, adultoId, hobby) =>
+    peticion('/info-adulto/hobbies/agregar', 'POST', { usuario_id: usuarioId, adulto_id: adultoId, hobby }),
 
   // ========== 💊 MEDICINAS ==========
+  obtenerTodasMedicinas: (usuarioId) =>
+    peticion('/medicinas/todas', 'POST', { usuario_id: usuarioId }),
 
-  obtenerMedicinasPorFecha: async (fecha) => {
-    console.log('🔍 [API] obtenerMedicinasPorFecha →', `${URL_BASE_API}/medicinas/fecha/${fecha}`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/medicinas/fecha/${fecha}`, {
-        method: 'GET',
-        headers,
-      });
-      
-      console.log('📡 [API] obtenerMedicinasPorFecha Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] obtenerMedicinasPorFecha Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión',
-        medicinas: []
-      };
-    }
-  },
+  obtenerMedicinasHoy: (usuarioId) =>
+    peticion('/medicinas/hoy', 'POST', { usuario_id: usuarioId }),
 
-  obtenerTodasMedicinas: async () => {
-    console.log('🔍 [API] obtenerTodasMedicinas →', `${URL_BASE_API}/medicinas`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/medicinas`, {
-        method: 'GET',
-        headers,
-      });
-      
-      console.log('📡 [API] obtenerTodasMedicinas Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] obtenerTodasMedicinas Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión',
-        medicinas: []
-      };
-    }
-  },
+  obtenerMedicinasFrecuentes: (usuarioId, limite = 5) =>
+    peticion('/medicinas/frecuentes', 'POST', { usuario_id: usuarioId, limite }),
 
-  obtenerMedicinasFrecuentes: async () => {
-    console.log('🔍 [API] obtenerMedicinasFrecuentes →', `${URL_BASE_API}/medicinas/frecuentes`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/medicinas/frecuentes`, {
-        method: 'GET',
-        headers,
-      });
-      
-      console.log('📡 [API] obtenerMedicinasFrecuentes Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] obtenerMedicinasFrecuentes Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión',
-        medicinas: []
-      };
-    }
-  },
+  crearMedicina: (usuarioId, medicina) =>
+    peticion('/medicinas/crear', 'POST', { usuario_id: usuarioId, medicina }),
 
-  crearMedicina: async (datosMedicina) => {
-    console.log('🔍 [API] crearMedicina →', `${URL_BASE_API}/medicinas`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/medicinas`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(datosMedicina),
-      });
-      
-      console.log('📡 [API] crearMedicina Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] crearMedicina Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
+  actualizarMedicina: (usuarioId, medicinaId, medicina) =>
+    peticion('/medicinas/actualizar', 'POST', { usuario_id: usuarioId, medicina_id: medicinaId, medicina }),
 
-  actualizarMedicina: async (medicinaId, datosMedicina) => {
-    console.log('🔍 [API] actualizarMedicina →', `${URL_BASE_API}/medicinas/${medicinaId}`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/medicinas/${medicinaId}`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify(datosMedicina),
-      });
-      
-      console.log('📡 [API] actualizarMedicina Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] actualizarMedicina Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
+  eliminarMedicina: (usuarioId, medicinaId) =>
+    peticion('/medicinas/eliminar', 'POST', { usuario_id: usuarioId, medicina_id: medicinaId }),
 
-  eliminarMedicina: async (medicinaId) => {
-    console.log('🔍 [API] eliminarMedicina →', `${URL_BASE_API}/medicinas/${medicinaId}`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/medicinas/${medicinaId}`, {
-        method: 'DELETE',
-        headers,
-      });
-      
-      console.log('📡 [API] eliminarMedicina Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] eliminarMedicina Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
+  marcarMedicinaTomada: (usuarioId, medicinaId, fechaToma, horario, observaciones) =>
+    peticion('/medicinas/marcar-tomada', 'POST', {
+      usuario_id: usuarioId,
+      medicina_id: medicinaId,
+      fecha_toma: fechaToma,
+      horario,
+      observaciones,
+    }),
 
-  marcarMedicinaTomada: async (medicinaId, fecha, horarioId) => {
-    console.log('🔍 [API] marcarMedicinaTomada →', `${URL_BASE_API}/medicinas/${medicinaId}/tomada`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/medicinas/${medicinaId}/tomada`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ fecha, horarioId }),
-      });
-      
-      console.log('📡 [API] marcarMedicinaTomada Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] marcarMedicinaTomada Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
+  obtenerRegistrosMedicina: (usuarioId, fechaInicio, fechaFin) =>
+    peticion('/medicinas/registros', 'POST', { usuario_id: usuarioId, fecha_inicio: fechaInicio, fecha_fin: fechaFin }),
 
-  // ========== 📅 EVENTOS Y CALENDARIO ==========
+  obtenerMedicinasPorFrecuencia: (usuarioId, frecuencia) =>
+    peticion('/medicinas/por-frecuencia', 'POST', { usuario_id: usuarioId, frecuencia }),
 
-  obtenerEventosPorRango: async (fechaInicio, fechaFin) => {
-    console.log('🔍 [API] obtenerEventosPorRango →', `${URL_BASE_API}/eventos?fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/eventos?fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}`, {
-        method: 'GET',
-        headers,
-      });
-      
-      console.log('📡 [API] obtenerEventosPorRango Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] obtenerEventosPorRango Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión',
-        eventos: []
-      };
-    }
-  },
+  obtenerEstadisticasMedicinas: (usuarioId) =>
+    peticion('/medicinas/estadisticas', 'POST', { usuario_id: usuarioId }),
 
-  crearEvento: async (datosEvento) => {
-    console.log('🔍 [API] crearEvento →', `${URL_BASE_API}/eventos`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/eventos`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(datosEvento),
-      });
-      
-      console.log('📡 [API] crearEvento Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] crearEvento Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
+  actualizarStockMedicina: (usuarioId, medicinaId, nuevoStock) =>
+    peticion('/medicinas/actualizar-stock', 'POST', { usuario_id: usuarioId, medicina_id: medicinaId, nuevo_stock: nuevoStock }),
 
-  actualizarEvento: async (eventoId, datosEvento) => {
-    console.log('🔍 [API] actualizarEvento →', `${URL_BASE_API}/eventos/${eventoId}`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/eventos/${eventoId}`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify(datosEvento),
-      });
-      
-      console.log('📡 [API] actualizarEvento Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] actualizarEvento Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
+  obtenerMedicinasStockBajo: (usuarioId) =>
+    peticion('/medicinas/stock-bajo', 'POST', { usuario_id: usuarioId }),
 
-  eliminarEvento: async (eventoId) => {
-    console.log('🔍 [API] eliminarEvento →', `${URL_BASE_API}/eventos/${eventoId}`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/eventos/${eventoId}`, {
-        method: 'DELETE',
-        headers,
-      });
-      
-      console.log('📡 [API] eliminarEvento Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] eliminarEvento Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
+  buscarMedicinas: (usuarioId, busqueda) =>
+    peticion('/medicinas/buscar', 'POST', { usuario_id: usuarioId, busqueda }),
 
-  // ========== 👨‍👩‍👧‍👦 FAMILIA Y GRUPOS ==========
+  obtenerMedicamentosPredefinidos: () =>
+    peticion('/medicinas/predefinidos', 'GET'),
 
-  obtenerFamiliares: async () => {
-    console.log('🔍 [API] obtenerFamiliares →', `${URL_BASE_API}/familiares`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/familiares`, {
-        method: 'GET',
-        headers,
-      });
-      
-      console.log('📡 [API] obtenerFamiliares Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] obtenerFamiliares Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión',
-        familiares: []
-      };
-    }
-  },
+  // ========== 📅 CALENDARIO ==========
+  obtenerConfiguracionCalendario: (usuarioId) =>
+    peticion('/calendario/configuracion', 'POST', { usuario_id: usuarioId }),
 
-  obtenerCodigoFamiliar: async () => {
-    console.log('🔍 [API] obtenerCodigoFamiliar →', `${URL_BASE_API}/familia/codigo`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/familia/codigo`, {
-        method: 'GET',
-        headers,
-      });
-      
-      console.log('📡 [API] obtenerCodigoFamiliar Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] obtenerCodigoFamiliar Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
+  guardarConfiguracionCalendario: (usuarioId, configuracion) =>
+    peticion('/calendario/guardar-configuracion', 'POST', { usuario_id: usuarioId, configuracion }),
 
-  regenerarCodigoFamiliar: async () => {
-    console.log('🔍 [API] regenerarCodigoFamiliar →', `${URL_BASE_API}/familia/codigo/regenerar`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/familia/codigo/regenerar`, {
-        method: 'POST',
-        headers,
-      });
-      
-      console.log('📡 [API] regenerarCodigoFamiliar Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] regenerarCodigoFamiliar Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
+  obtenerEventos: (usuarioId) =>
+    peticion('/calendario/eventos', 'POST', { usuario_id: usuarioId }),
 
-  obtenerCodigosPersonalizados: async () => {
-    console.log('🔍 [API] obtenerCodigosPersonalizados →', `${URL_BASE_API}/familia/codigos-personalizados`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/familia/codigos-personalizados`, {
-        method: 'GET',
-        headers,
-      });
-      
-      console.log('📡 [API] obtenerCodigosPersonalizados Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] obtenerCodigosPersonalizados Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión',
-        codigos: []
-      };
-    }
-  },
+  obtenerEventosPorRango: (usuarioId, fechaInicio, fechaFin) =>
+    peticion('/calendario/eventos-rango', 'POST', { usuario_id: usuarioId, fecha_inicio: fechaInicio, fecha_fin: fechaFin }),
 
-  crearFamiliar: async (datosFamiliar) => {
-    console.log('🔍 [API] crearFamiliar →', `${URL_BASE_API}/familiares`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/familiares`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(datosFamiliar),
-      });
-      
-      console.log('📡 [API] crearFamiliar Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] crearFamiliar Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
+  obtenerEventosPorFecha: (usuarioId, fecha) =>
+    peticion('/calendario/eventos-fecha', 'POST', { usuario_id: usuarioId, fecha }),
 
-  actualizarFamiliar: async (familiarId, datosFamiliar) => {
-    console.log('🔍 [API] actualizarFamiliar →', `${URL_BASE_API}/familiares/${familiarId}`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/familiares/${familiarId}`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify(datosFamiliar),
-      });
-      
-      console.log('📡 [API] actualizarFamiliar Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] actualizarFamiliar Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
+  obtenerEventosProximos: (usuarioId, limite = 10) =>
+    peticion('/calendario/eventos-proximos', 'POST', { usuario_id: usuarioId, limite }),
 
-  eliminarFamiliar: async (familiarId) => {
-    console.log('🔍 [API] eliminarFamiliar →', `${URL_BASE_API}/familiares/${familiarId}`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/familiares/${familiarId}`, {
-        method: 'DELETE',
-        headers,
-      });
-      
-      console.log('📡 [API] eliminarFamiliar Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] eliminarFamiliar Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
+  crearEvento: (usuarioId, evento) =>
+    peticion('/calendario/crear-evento', 'POST', { usuario_id: usuarioId, evento }),
 
-  crearCodigoPersonalizado: async (datosCodigo) => {
-    console.log('🔍 [API] crearCodigoPersonalizado →', `${URL_BASE_API}/familia/codigos-personalizados`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/familia/codigos-personalizados`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(datosCodigo),
-      });
-      
-      console.log('📡 [API] crearCodigoPersonalizado Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] crearCodigoPersonalizado Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
+  actualizarEvento: (usuarioId, eventoId, evento) =>
+    peticion(`/calendario/actualizar-evento/${eventoId}`, 'PUT', { usuario_id: usuarioId, evento }),
 
-  eliminarCodigoPersonalizado: async (codigoId) => {
-    console.log('🔍 [API] eliminarCodigoPersonalizado →', `${URL_BASE_API}/familia/codigos-personalizados/${codigoId}`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/familia/codigos-personalizados/${codigoId}`, {
-        method: 'DELETE',
-        headers,
-      });
-      
-      console.log('📡 [API] eliminarCodigoPersonalizado Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] eliminarCodigoPersonalizado Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
+  eliminarEvento: (usuarioId, eventoId) =>
+    peticion(`/calendario/eliminar-evento/${eventoId}`, 'DELETE', { usuario_id: usuarioId }),
+
+  obtenerEventosPorTipo: (usuarioId, tipo) =>
+    peticion('/calendario/eventos-tipo', 'POST', { usuario_id: usuarioId, tipo }),
+
+  obtenerEventosHoy: (usuarioId) =>
+    peticion('/calendario/eventos-hoy', 'POST', { usuario_id: usuarioId }),
+
+  obtenerEstadisticasEventos: (usuarioId, fechaInicio, fechaFin) =>
+    peticion('/calendario/estadisticas', 'POST', { usuario_id: usuarioId, fecha_inicio: fechaInicio, fecha_fin: fechaFin }),
+
+  buscarEventos: (usuarioId, busqueda) =>
+    peticion('/calendario/buscar-eventos', 'POST', { usuario_id: usuarioId, busqueda }),
+
+  obtenerTiposEventosPredefinidos: () =>
+    peticion('/calendario/tipos-eventos', 'GET'),
+
+  obtenerCumpleanosFamiliares: (usuarioId) =>
+    peticion('/calendario/cumpleanos', 'POST', { usuario_id: usuarioId }),
+
+  // ========== 👨‍👩‍👧‍👦 FAMILIA ==========
+  obtenerGrupoFamiliar: (usuarioId) =>
+    peticion('/familia/grupo-familiar', 'POST', { usuario_id: usuarioId }),
+
+  obtenerCodigoFamiliar: (usuarioId) =>
+    peticion('/familia/codigo-familiar', 'POST', { usuario_id: usuarioId }),
+
+  regenerarCodigoFamiliar: (usuarioId) =>
+    peticion('/familia/regenerar-codigo', 'POST', { usuario_id: usuarioId }),
+
+  obtenerFamiliares: (usuarioId) =>
+    peticion('/familia/familiares', 'POST', { usuario_id: usuarioId }),
+
+  crearFamiliar: (usuarioId, datosFamiliar) =>
+    peticion('/familia/agregar-familiar', 'POST', { usuario_id: usuarioId, datos_familiar: datosFamiliar }),
+
+  actualizarFamiliar: (usuarioId, familiarId, datos) =>
+    peticion(`/familia/actualizar-familiar/${familiarId}`, 'PUT', { usuario_id: usuarioId, datos_familiar: datos }),
+
+  eliminarFamiliar: (usuarioId, familiarId) =>
+    peticion(`/familia/eliminar-familiar/${familiarId}`, 'DELETE', { usuario_id: usuarioId }),
+
+  obtenerCodigosPersonalizados: (usuarioId) =>
+    peticion('/familia/codigos-personalizados', 'POST', { usuario_id: usuarioId }),
+
+  crearCodigoPersonalizado: (usuarioId, datosCodigo) =>
+    peticion('/familia/crear-codigo-personalizado', 'POST', { usuario_id: usuarioId, datos_codigo: datosCodigo }),
+
+  eliminarCodigoPersonalizado: (usuarioId, codigoId) =>
+    peticion(`/familia/eliminar-codigo-personalizado/${codigoId}`, 'DELETE', { usuario_id: usuarioId }),
+
+  actualizarAdultoMayorGrupo: (usuarioId, datosAdultoMayor) =>
+    peticion('/familia/actualizar-adulto-mayor', 'POST', { usuario_id: usuarioId, datos_adulto_mayor: datosAdultoMayor }),
+
+  obtenerAdultoMayorGrupo: (usuarioId) =>
+    peticion('/familia/adulto-mayor', 'POST', { usuario_id: usuarioId }),
 
   // ========== 💰 GASTOS ==========
+  crearGasto: (usuarioId, datosGasto) =>
+    peticion('/gastos/crear', 'POST', { usuario_id: usuarioId, datos_gasto: datosGasto }),
 
-  obtenerGastosFuturos: async () => {
-    console.log('🔍 [API] obtenerGastosFuturos →', `${URL_BASE_API}/gastos/futuros`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/gastos/futuros`, {
-        method: 'GET',
-        headers,
-      });
-      
-      console.log('📡 [API] obtenerGastosFuturos Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] obtenerGastosFuturos Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión',
-        gastos: []
-      };
-    }
-  },
+  obtenerGastosFuturos: (usuarioId) =>
+    peticion('/gastos/futuros', 'POST', { usuario_id: usuarioId }),
 
-  obtenerGastosMesActual: async () => {
-    console.log('🔍 [API] obtenerGastosMesActual →', `${URL_BASE_API}/gastos/mes-actual`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/gastos/mes-actual`, {
-        method: 'GET',
-        headers,
-      });
-      
-      console.log('📡 [API] obtenerGastosMesActual Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] obtenerGastosMesActual Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión',
-        gastos: []
-      };
-    }
-  },
+  obtenerGastosMesActual: (usuarioId) =>
+    peticion('/gastos/mes-actual', 'POST', { usuario_id: usuarioId }),
 
-  obtenerAportesMesActual: async () => {
-    console.log('🔍 [API] obtenerAportesMesActual →', `${URL_BASE_API}/gastos/aportes/mes-actual`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/gastos/aportes/mes-actual`, {
-        method: 'GET',
-        headers,
-      });
-      
-      console.log('📡 [API] obtenerAportesMesActual Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] obtenerAportesMesActual Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión',
-        aportes: []
-      };
-    }
-  },
+  obtenerGastosPasados: (usuarioId, limite = 50) =>
+    peticion('/gastos/historial', 'POST', { usuario_id: usuarioId, limite }),
 
-  crearGasto: async (datosGasto) => {
-    console.log('🔍 [API] crearGasto →', `${URL_BASE_API}/gastos`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/gastos`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(datosGasto),
-      });
-      
-      console.log('📡 [API] crearGasto Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] crearGasto Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
+  obtenerGastoPorId: (usuarioId, gastoId) =>
+    peticion('/gastos/detalle', 'POST', { usuario_id: usuarioId, gasto_id: gastoId }),
 
-  actualizarGasto: async (gastoId, datosGasto) => {
-    console.log('🔍 [API] actualizarGasto →', `${URL_BASE_API}/gastos/${gastoId}`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/gastos/${gastoId}`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify(datosGasto),
-      });
-      
-      console.log('📡 [API] actualizarGasto Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] actualizarGasto Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
+  actualizarGasto: (usuarioId, gastoId, datos) =>
+    peticion(`/gastos/actualizar/${gastoId}`, 'PUT', { usuario_id: usuarioId, datos_actualizacion: datos }),
 
-  eliminarGasto: async (gastoId) => {
-    console.log('🔍 [API] eliminarGasto →', `${URL_BASE_API}/gastos/${gastoId}`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/gastos/${gastoId}`, {
-        method: 'DELETE',
-        headers,
-      });
-      
-      console.log('📡 [API] eliminarGasto Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] eliminarGasto Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
+  eliminarGasto: (usuarioId, gastoId) =>
+    peticion(`/gastos/eliminar/${gastoId}`, 'DELETE', { usuario_id: usuarioId }),
 
-  marcarGastoPagado: async (gastoId) => {
-    console.log('🔍 [API] marcarGastoPagado →', `${URL_BASE_API}/gastos/${gastoId}/pagado`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/gastos/${gastoId}/pagado`, {
-        method: 'PUT',
-        headers,
-      });
-      
-      console.log('📡 [API] marcarGastoPagado Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] marcarGastoPagado Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
+  marcarGastoPagado: (usuarioId, gastoId) =>
+    peticion(`/gastos/marcar-pagado/${gastoId}`, 'POST', { usuario_id: usuarioId }),
 
-  guardarDistribucionPorcentajes: async (porcentajes) => {
-    console.log('🔍 [API] guardarDistribucionPorcentajes →', `${URL_BASE_API}/gastos/distribucion`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/gastos/distribucion`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ porcentajes }),
-      });
-      
-      console.log('📡 [API] guardarDistribucionPorcentajes Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] guardarDistribucionPorcentajes Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
+  obtenerDistribucionPorcentajes: (usuarioId) =>
+    peticion('/gastos/distribucion', 'POST', { usuario_id: usuarioId }),
 
-  obtenerDistribucionPorcentajes: async () => {
-    console.log('🔍 [API] obtenerDistribucionPorcentajes →', `${URL_BASE_API}/gastos/distribucion`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/gastos/distribucion`, {
-        method: 'GET',
-        headers,
-      });
-      
-      console.log('📡 [API] obtenerDistribucionPorcentajes Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] obtenerDistribucionPorcentajes Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión',
-        distribucion: {}
-      };
-    }
-  },
+  guardarDistribucionPorcentajes: (usuarioId, porcentajes) =>
+    peticion('/gastos/guardar-distribucion', 'POST', { usuario_id: usuarioId, porcentajes }),
 
-  // ========== 📋 RUTINAS Y ACTIVIDADES ==========
+  obtenerAportesMesActual: (usuarioId) =>
+    peticion('/gastos/aportes-mes', 'POST', { usuario_id: usuarioId }),
 
-  obtenerConfiguracionHorario: async () => {
-    console.log('🔍 [API] obtenerConfiguracionHorario →', `${URL_BASE_API}/horario/configuracion`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/horario/configuracion`, {
-        method: 'GET',
-        headers,
-      });
-      
-      console.log('📡 [API] obtenerConfiguracionHorario Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] obtenerConfiguracionHorario Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión',
-        configuracion: null
-      };
-    }
-  },
+  registrarAporteGasto: (usuarioId, gastoId, monto, notas) =>
+    peticion(`/gastos/registrar-aporte/${gastoId}`, 'POST', { usuario_id: usuarioId, monto, notas }),
 
-  obtenerActividadesFijas: async () => {
-    console.log('🔍 [API] obtenerActividadesFijas →', `${URL_BASE_API}/horario/actividades-fijas`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/horario/actividades-fijas`, {
-        method: 'GET',
-        headers,
-      });
-      
-      console.log('📡 [API] obtenerActividadesFijas Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] obtenerActividadesFijas Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión',
-        actividades: []
-      };
-    }
-  },
+  verificarEsAdministrador: (usuarioId) =>
+    peticion('/gastos/verificar-admin', 'POST', { usuario_id: usuarioId }),
 
-  guardarConfiguracionHorario: async (configuracion) => {
-    console.log('🔍 [API] guardarConfiguracionHorario →', `${URL_BASE_API}/horario/configuracion`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/horario/configuracion`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify(configuracion),
-      });
-      
-      console.log('📡 [API] guardarConfiguracionHorario Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] guardarConfiguracionHorario Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
+  obtenerEstadisticasResumen: (usuarioId) =>
+    peticion('/gastos/estadisticas', 'POST', { usuario_id: usuarioId }),
 
-  crearActividad: async (datosActividad) => {
-    console.log('🔍 [API] crearActividad →', `${URL_BASE_API}/horario/actividades`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/horario/actividades`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(datosActividad),
-      });
-      
-      console.log('📡 [API] crearActividad Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] crearActividad Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
+  generarReporteGastos: (usuarioId, tipoReporte, filtros) =>
+    peticion('/gastos/generar-reporte', 'POST', { usuario_id: usuarioId, tipo_reporte: tipoReporte, filtros }),
 
-  actualizarActividad: async (actividadId, datosActividad) => {
-    console.log('🔍 [API] actualizarActividad →', `${URL_BASE_API}/horario/actividades/${actividadId}`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/horario/actividades/${actividadId}`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify(datosActividad),
-      });
-      
-      console.log('📡 [API] actualizarActividad Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] actualizarActividad Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
+  // ========== 📋 HORARIO ==========
+  obtenerConfiguracionHorario: (usuarioId) =>
+    peticion('/horario/configuracion', 'POST', { usuario_id: usuarioId }),
 
-  eliminarActividad: async (actividadId) => {
-    console.log('🔍 [API] eliminarActividad →', `${URL_BASE_API}/horario/actividades/${actividadId}`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/horario/actividades/${actividadId}`, {
-        method: 'DELETE',
-        headers,
-      });
-      
-      console.log('📡 [API] eliminarActividad Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] eliminarActividad Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
+  guardarConfiguracionHorario: (usuarioId, configuracion) =>
+    peticion('/horario/guardar-configuracion', 'POST', { usuario_id: usuarioId, configuracion }),
 
-  // ========== 🩺 INFORMACIÓN MÉDICA ==========
+  obtenerActividadesFijas: (usuarioId) =>
+    peticion('/horario/actividades-fijas', 'POST', { usuario_id: usuarioId }),
 
-  obtenerInformacionAnciano: async (adultoMayorId) => {
-    console.log('🔍 [API] obtenerInformacionAnciano →', `${URL_BASE_API}/info-anciano/${adultoMayorId}`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/info-anciano/${adultoMayorId}`, {
-        method: 'GET',
-        headers,
-      });
-      
-      console.log('📡 [API] obtenerInformacionAnciano Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] obtenerInformacionAnciano Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión',
-        info: null
-      };
-    }
-  },
+  crearActividad: (usuarioId, actividad) =>
+    peticion('/horario/crear-actividad', 'POST', { usuario_id: usuarioId, actividad }),
 
-  actualizarInformacionAnciano: async (adultoMayorId, datosInfo) => {
-    console.log('🔍 [API] actualizarInformacionAnciano →', `${URL_BASE_API}/info-anciano/${adultoMayorId}`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/info-anciano/${adultoMayorId}`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify(datosInfo),
-      });
-      
-      console.log('📡 [API] actualizarInformacionAnciano Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] actualizarInformacionAnciano Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
+  actualizarActividad: (usuarioId, actividadId, actividad) =>
+    peticion(`/horario/actualizar-actividad/${actividadId}`, 'PUT', { usuario_id: usuarioId, actividad }),
 
-  // ========== 📊 REPORTES Y ESTADÍSTICAS ==========
+  eliminarActividad: (usuarioId, actividadId) =>
+    peticion(`/horario/eliminar-actividad/${actividadId}`, 'DELETE', { usuario_id: usuarioId }),
 
-  generarReporte: async (tipoReporte, parametros) => {
-    console.log('🔍 [API] generarReporte →', `${URL_BASE_API}/reportes/${tipoReporte}`);
-    
-    try {
-      const headers = await obtenerHeaders();
-      const respuesta = await fetch(`${URL_BASE_API}/reportes/${tipoReporte}`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(parametros),
-      });
-      
-      console.log('📡 [API] generarReporte Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] generarReporte Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
+  obtenerActividadesPorFecha: (usuarioId, fecha) =>
+    peticion('/horario/actividades-fecha', 'POST', { usuario_id: usuarioId, fecha }),
+
+  obtenerActividadesHoy: (usuarioId) =>
+    peticion('/horario/actividades-hoy', 'POST', { usuario_id: usuarioId }),
+
+  obtenerActividadesPorTipo: (usuarioId, tipo) =>
+    peticion('/horario/actividades-tipo', 'POST', { usuario_id: usuarioId, tipo }),
+
+  obtenerActividadesSemana: (usuarioId, fechaInicio) =>
+    peticion('/horario/actividades-semana', 'POST', { usuario_id: usuarioId, fecha_inicio: fechaInicio }),
+
+  registrarActividadRealizada: (usuarioId, actividadId, fecha, completada, observaciones) =>
+    peticion('/horario/registrar-actividad', 'POST', {
+      usuario_id: usuarioId,
+      actividad_id: actividadId,
+      fecha,
+      completada,
+      observaciones,
+    }),
+
+  obtenerResumenDiario: (usuarioId, fecha) =>
+    peticion('/horario/resumen-diario', 'POST', { usuario_id: usuarioId, fecha }),
+
+  buscarConflictosHorario: (usuarioId, dias, horaInicio, horaFin, actividadId) =>
+    peticion('/horario/buscar-conflictos', 'POST', {
+      usuario_id: usuarioId,
+      dias,
+      hora_inicio: horaInicio,
+      hora_fin: horaFin,
+      actividad_id: actividadId,
+    }),
+
+  obtenerActividadesPredefinidas: () =>
+    peticion('/horario/actividades-predeifinidas', 'GET'),
+
+  // ========== 🩺 INFORMACIÓN COMPLETA DEL ADULTO (opcional) ==========
+  obtenerInfoCompletaAnciano: (usuarioId) =>
+    peticion('/info-adulto/completa', 'POST', { usuario_id: usuarioId }),
+
+  // ========== 📧 ENVÍO DE CORREOS (genérico) ==========
+  enviarCorreoVerificacion: (datos) => {
+    // Este endpoint no existe en el backend actual, pero lo dejamos por compatibilidad
+    // Se puede implementar como un proxy o usar el servicio de correo directamente
+    console.warn('⚠️ enviarCorreoVerificacion no está implementado en el backend. Usa solicitarRecuperacion o completarPerfilConCodigo según el caso.');
+    return Promise.resolve({ exito: false, error: 'Función no disponible' });
   },
 
   // ========== 🔧 UTILIDADES ==========
+  probarConexion: () => peticion('/test', 'GET'),
 
-  probarConexion: async () => {
-    console.log('🔍 [API] probarConexion →', `${URL_BASE_API}/test`);
-    
-    try {
-      const respuesta = await fetch(`${URL_BASE_API}/test`, {
-        method: 'GET',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-      });
-      
-      console.log('📡 [API] probarConexion Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] probarConexion Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
-  },
-
-  // Función auxiliar para obtener ID de usuario actual
   obtenerUsuarioActualId: async () => {
     try {
       const usuarioData = await AsyncStorage.getItem('usuarioInfo');
@@ -1466,29 +473,10 @@ export const servicioAPI = {
     }
   },
 
-  // Función para subir imagen de perfil
-  subirImagenPerfil: async (formData) => {
-    console.log('🔍 [API] subirImagenPerfil →', `${URL_BASE_API}/usuario/upload-profile-image`);
-    
-    try {
-      const token = await obtenerToken();
-      const respuesta = await fetch(`${URL_BASE_API}/usuario/upload-profile-image`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        body: formData,
-      });
-      
-      console.log('📡 [API] subirImagenPerfil Status:', respuesta.status);
-      const datos = await respuesta.json();
-      return datos;
-    } catch (error) {
-      console.error('❌ [API] subirImagenPerfil Error:', error.message);
-      return { 
-        exito: false, 
-        error: 'Error de conexión'
-      };
-    }
+  subirImagenPerfil: async (usuarioId, formData) => {
+    // Este endpoint puede variar; se asume que existe en el backend
+    return peticion('/preferencias/subir-foto-perfil', 'POST', formData, true);
   },
 };
+
+export default servicioAPI;

@@ -1,9 +1,9 @@
 import React from 'react';
-import { 
-  View, 
-  Text, 
-  TouchableOpacity, 
-  StyleSheet, 
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
   SafeAreaView,
   Image,
   ScrollView,
@@ -47,29 +47,29 @@ export default function VistaSeleccionPerfil() {
   };
 
   return (
-    <LinearGradient 
+    <LinearGradient
       colors={[COLORES.AZUL_CIELO, COLORES.BLANCO, COLORES.AZUL_CIELO]}
       style={styles.fondo}
     >
       <SafeAreaView style={styles.contenedorPrincipal}>
-        <ScrollView 
+        <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
           {/* Encabezado */}
           <View style={styles.encabezado}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.botonVolver}
               onPress={volverAlLogin}
             >
               <Text style={styles.textoBotonVolver}>← Volver</Text>
             </TouchableOpacity>
-            
+
             <View style={styles.logoContainer}>
               <Text style={styles.titulo}>CuidaMe</Text>
               <Text style={styles.subtituloLogo}>Cuidado y organización para adultos mayores</Text>
             </View>
-            
+
             <Text style={styles.subtitulo}>
               Selecciona el tipo de perfil que deseas crear
             </Text>
@@ -80,9 +80,9 @@ export default function VistaSeleccionPerfil() {
 
           {/* Opciones de perfil */}
           <View style={styles.opcionesContainer}>
-            
+
             {/* Adulto Mayor */}
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.opcionCard}
               onPress={() => seleccionarTipoPerfil('adultoMayor')}
             >
@@ -97,7 +97,7 @@ export default function VistaSeleccionPerfil() {
                 <Text style={styles.opcionDescripcion}>
                   Soy la persona que recibirá cuidados y seguimiento
                 </Text>
-                
+
                 <View style={styles.caracteristicasContainer}>
                   <View style={styles.caracteristicaItem}>
                     <Text style={styles.caracteristicaIcono}>✓</Text>
@@ -112,7 +112,7 @@ export default function VistaSeleccionPerfil() {
                     <Text style={styles.caracteristicaTexto}>Comunicación con familiares</Text>
                   </View>
                 </View>
-                
+
                 <View style={styles.badgeContainer}>
                   <Text style={styles.badge}>Versión AM</Text>
                 </View>
@@ -120,7 +120,7 @@ export default function VistaSeleccionPerfil() {
             </TouchableOpacity>
 
             {/* Familiar */}
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.opcionCard}
               onPress={() => seleccionarTipoPerfil('familiar')}
             >
@@ -135,7 +135,7 @@ export default function VistaSeleccionPerfil() {
                 <Text style={styles.opcionDescripcion}>
                   Soy familiar de un adulto mayor y quiero acompañar su cuidado
                 </Text>
-                
+
                 <View style={styles.caracteristicasContainer}>
                   <View style={styles.caracteristicaItem}>
                     <Text style={styles.caracteristicaIcono}>✓</Text>
@@ -150,7 +150,7 @@ export default function VistaSeleccionPerfil() {
                     <Text style={styles.caracteristicaTexto}>Compartir información</Text>
                   </View>
                 </View>
-                
+
                 <View style={styles.badgeContainer}>
                   <Text style={styles.badge}>Versión Familiar</Text>
                 </View>
@@ -158,7 +158,7 @@ export default function VistaSeleccionPerfil() {
             </TouchableOpacity>
 
             {/* Profesional/Cuidador */}
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.opcionCard}
               onPress={() => seleccionarTipoPerfil('profesional')}
             >
@@ -173,7 +173,7 @@ export default function VistaSeleccionPerfil() {
                 <Text style={styles.opcionDescripcion}>
                   Soy profesional de la salud o cuidador que brinda servicios
                 </Text>
-                
+
                 <View style={styles.caracteristicasContainer}>
                   <View style={styles.caracteristicaItem}>
                     <Text style={styles.caracteristicaIcono}>✓</Text>
@@ -188,7 +188,7 @@ export default function VistaSeleccionPerfil() {
                     <Text style={styles.caracteristicaTexto}>Coordinación con familiares</Text>
                   </View>
                 </View>
-                
+
                 <View style={styles.badgeContainer}>
                   <Text style={styles.badge}>Versión Profesional</Text>
                 </View>

@@ -19,6 +19,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { servicioAPI } from '../../servicios/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+const usuarioId = await servicioAPI.obtenerUsuarioActualId();
+
 
 // Colores de CuidaMe
 const COLORES = {
@@ -52,11 +54,11 @@ export default function VistaFamilia({ navigation }) {
   const [usuarioActual, setUsuarioActual] = useState(null);
   const [apellidoFamilia, setApellidoFamilia] = useState('');
   const [esAdministrador, setEsAdministrador] = useState(false);
-  
+
   // Estados para modales
   const [modalTipo, setModalTipo] = useState(''); // 'agregar', 'editar', 'ver', 'personalizar'
   const [familiarSeleccionado, setFamiliarSeleccionado] = useState(null);
-  
+
   // Estados para formularios
   const [formData, setFormData] = useState({
     nombre: '',
@@ -79,8 +81,8 @@ export default function VistaFamilia({ navigation }) {
 
   // Parentescos disponibles
   const PARENTESCOS = [
-    'Hijo/a', 'Hijo/a político/a', 'Nieto/a', 'Hermano/a', 
-    'Esposo/a', 'Sobrino/a', 'Primo/a', 'Amigo/a', 
+    'Hijo/a', 'Hijo/a político/a', 'Nieto/a', 'Hermano/a',
+    'Esposo/a', 'Sobrino/a', 'Primo/a', 'Amigo/a',
     'Cuidador/a', 'Médico', 'Enfermero/a', 'Otro'
   ];
 
@@ -96,46 +98,50 @@ export default function VistaFamilia({ navigation }) {
 
   // Cargar datos iniciales
   const cargarDatos = useCallback(async () => {
-    try {
-      setCargando(true);
-      
-      // Obtener usuario actual
-      const usuarioData = await AsyncStorage.getItem('usuarioInfo');
-      if (usuarioData) {
-        const usuario = JSON.parse(usuarioData);
-        setUsuarioActual(usuario);
-        setEsAdministrador(usuario.rol === 'familiar_administrador');
-        
-        // Obtener apellido para el título
-        if (usuario.apellido) {
-          setApellidoFamilia(`Familia ${usuario.apellido}`);
+
+    if (usuarioId) {
+      try {
+        setCargando(true);
+
+        // Obtener usuario actual
+        const usuarioData = await AsyncStorage.getItem('usuarioInfo');
+        if (usuarioData) {
+          const usuario = JSON.parse(usuarioData);
+          setUsuarioActual(usuario);
+          setEsAdministrador(usuario.rol === 'familiar_administrador');
+
+          // Obtener apellido para el título
+          if (usuario.apellido) {
+            setApellidoFamilia(`Familia ${usuario.apellido}`);
+          }
         }
+
+        // Cargar familiares
+        const familiaresResponse = await servicioAPI.obtenerFamiliares();
+        if (familiaresResponse.exito) {
+          setFamiliares(familiaresResponse.familiares || []);
+        }
+
+        // Cargar código familiar
+        const codigoResponse = await servicioAPI.obtenerCodigoFamiliar();
+        if (codigoResponse.exito) {
+          setCodigoFamiliar(codigoResponse.codigo || '');
+        }
+
+        // Cargar códigos personalizados
+        const codigosResponse = await servicioAPI.obtenerCodigosPersonalizados();
+        if (codigosResponse.exito) {
+          setCodigosPersonalizados(codigosResponse.codigos || []);
+        }
+
+      } catch (error) {
+        console.error('Error cargando datos familia:', error);
+        Alert.alert('Error', 'No se pudieron cargar los datos');
+      } finally {
+        setCargando(false);
+        setRefrescando(false);
       }
-      
-      // Cargar familiares
-      const familiaresResponse = await servicioAPI.obtenerFamiliares();
-      if (familiaresResponse.exito) {
-        setFamiliares(familiaresResponse.familiares || []);
-      }
-      
-      // Cargar código familiar
-      const codigoResponse = await servicioAPI.obtenerCodigoFamiliar();
-      if (codigoResponse.exito) {
-        setCodigoFamiliar(codigoResponse.codigo || '');
-      }
-      
-      // Cargar códigos personalizados
-      const codigosResponse = await servicioAPI.obtenerCodigosPersonalizados();
-      if (codigosResponse.exito) {
-        setCodigosPersonalizados(codigosResponse.codigos || []);
-      }
-      
-    } catch (error) {
-      console.error('Error cargando datos familia:', error);
-      Alert.alert('Error', 'No se pudieron cargar los datos');
-    } finally {
-      setCargando(false);
-      setRefrescando(false);
+
     }
   }, []);
 
@@ -193,7 +199,7 @@ export default function VistaFamilia({ navigation }) {
   const abrirModalFamiliar = (tipo, familiar = null) => {
     setModalTipo(tipo);
     setFamiliarSeleccionado(familiar);
-    
+
     if (familiar) {
       setFormData({
         nombre: familiar.nombre || '',
@@ -217,7 +223,7 @@ export default function VistaFamilia({ navigation }) {
         relacionAdultoMayor: ''
       });
     }
-    
+
     setModalVisible(true);
   };
 
@@ -240,17 +246,17 @@ export default function VistaFamilia({ navigation }) {
         Alert.alert('Error', 'Debes ingresar el nombre');
         return;
       }
-      
+
       if (!formData.apellido.trim()) {
         Alert.alert('Error', 'Debes ingresar el apellido');
         return;
       }
-      
+
       if (!formData.email.trim()) {
         Alert.alert('Error', 'Debes ingresar el email');
         return;
       }
-      
+
       if (!formData.telefono.trim()) {
         Alert.alert('Error', 'Debes ingresar el teléfono');
         return;
@@ -312,14 +318,14 @@ export default function VistaFamilia({ navigation }) {
         Alert.alert('Error', 'Debes ingresar el nombre');
         return;
       }
-      
+
       if (!codigoPersonalizadoData.apellido.trim()) {
         Alert.alert('Error', 'Debes ingresar el apellido');
         return;
       }
 
       const response = await servicioAPI.crearCodigoPersonalizado(codigoPersonalizadoData);
-      
+
       if (response.exito) {
         Alert.alert(
           'Código Personalizado Generado',
@@ -376,7 +382,7 @@ export default function VistaFamilia({ navigation }) {
 
   // Obtener icono según rol
   const obtenerIconoRol = (rol) => {
-    switch(rol) {
+    switch (rol) {
       case 'familiar_administrador':
         return { icon: 'shield-checkmark-outline', color: COLORES.AMARILLO_PLATANO };
       case 'adulto_mayor':
@@ -394,7 +400,7 @@ export default function VistaFamilia({ navigation }) {
 
   // Obtener color según estado
   const obtenerColorEstado = (estado) => {
-    switch(estado) {
+    switch (estado) {
       case 'activo':
         return COLORES.EXITO;
       case 'pendiente':
@@ -411,7 +417,7 @@ export default function VistaFamilia({ navigation }) {
   // Renderizar tarjeta de familiar
   const renderTarjetaFamiliar = ({ item }) => {
     const iconoRol = obtenerIconoRol(item.rol);
-    
+
     return (
       <TouchableOpacity
         style={styles.tarjetaFamiliar}
@@ -421,7 +427,7 @@ export default function VistaFamilia({ navigation }) {
           <View style={[styles.iconoRolContainer, { backgroundColor: `${iconoRol.color}20` }]}>
             <Icon name={iconoRol.icon} size={22} color={iconoRol.color} />
           </View>
-          
+
           <View style={styles.infoPrincipal}>
             <Text style={styles.nombreFamiliar}>
               {item.nombre} {item.apellido}
@@ -430,7 +436,7 @@ export default function VistaFamilia({ navigation }) {
               {ROLES.find(r => r.value === item.rol)?.label || 'Familiar'}
             </Text>
           </View>
-          
+
           <View style={styles.accionesTarjeta}>
             <TouchableOpacity
               style={styles.botonAccionTarjeta}
@@ -441,7 +447,7 @@ export default function VistaFamilia({ navigation }) {
             >
               <Icon name="create-outline" size={18} color={COLORES.AZUL_CIELO_OSCURO} />
             </TouchableOpacity>
-            
+
             {esAdministrador && item.rol !== 'familiar_administrador' && (
               <TouchableOpacity
                 style={styles.botonAccionTarjeta}
@@ -455,18 +461,18 @@ export default function VistaFamilia({ navigation }) {
             )}
           </View>
         </View>
-        
+
         <View style={styles.detallesTarjeta}>
           <View style={styles.detalleItem}>
             <Icon name="call-outline" size={14} color={COLORES.GRIS_OSCURO} />
             <Text style={styles.textoDetalle}>{item.telefono}</Text>
           </View>
-          
+
           <View style={styles.detalleItem}>
             <Icon name="mail-outline" size={14} color={COLORES.GRIS_OSCURO} />
             <Text style={styles.textoDetalle}>{item.email}</Text>
           </View>
-          
+
           {item.parentesco && (
             <View style={styles.detalleItem}>
               <Icon name="heart-outline" size={14} color={COLORES.GRIS_OSCURO} />
@@ -474,7 +480,7 @@ export default function VistaFamilia({ navigation }) {
             </View>
           )}
         </View>
-        
+
         <View style={[
           styles.badgeEstado,
           { backgroundColor: obtenerColorEstado(item.estado) + '20' }
@@ -491,7 +497,7 @@ export default function VistaFamilia({ navigation }) {
   const renderTarjetaCodigo = ({ item }) => {
     const formateado = formatearCodigo(item.codigo);
     const usado = item.estado === 'usado';
-    
+
     return (
       <TouchableOpacity
         style={[
@@ -510,7 +516,7 @@ export default function VistaFamilia({ navigation }) {
               {formateado}
             </Text>
           </View>
-          
+
           <TouchableOpacity
             style={styles.botonCopiarCodigo}
             onPress={(e) => {
@@ -521,7 +527,7 @@ export default function VistaFamilia({ navigation }) {
             <Icon name="copy-outline" size={18} color={usado ? COLORES.GRIS_OSCURO : COLORES.AZUL_CIELO_OSCURO} />
           </TouchableOpacity>
         </View>
-        
+
         <View style={styles.infoCodigo}>
           <Text style={[
             styles.nombreCodigo,
@@ -529,14 +535,14 @@ export default function VistaFamilia({ navigation }) {
           ]}>
             {item.nombre} {item.apellido}
           </Text>
-          
+
           <View style={styles.detallesCodigo}>
             <View style={styles.badgeCodigo}>
               <Text style={styles.textoBadgeCodigo}>
                 {ROLES.find(r => r.value === item.rol)?.label || 'Familiar'}
               </Text>
             </View>
-            
+
             {item.parentesco && (
               <View style={styles.badgeCodigo}>
                 <Text style={styles.textoBadgeCodigo}>{item.parentesco}</Text>
@@ -544,7 +550,7 @@ export default function VistaFamilia({ navigation }) {
             )}
           </View>
         </View>
-        
+
         <View style={styles.pieCodigo}>
           <Text style={[
             styles.estadoCodigo,
@@ -552,7 +558,7 @@ export default function VistaFamilia({ navigation }) {
           ]}>
             {item.estado === 'usado' ? '✓ Usado' : '⏳ Pendiente'}
           </Text>
-          
+
           {esAdministrador && !usado && (
             <TouchableOpacity
               style={styles.botonEliminarCodigo}
@@ -588,7 +594,7 @@ export default function VistaFamilia({ navigation }) {
           <TouchableOpacity style={styles.botonAtras} onPress={() => navigation.goBack()}>
             <Icon name="arrow-back-outline" size={28} color={COLORES.TEXTO_OSCURO} />
           </TouchableOpacity>
-          
+
           <View style={styles.tituloContainer}>
             <Text style={styles.tituloPrincipal}>
               {apellidoFamilia || 'Mi Familia'}
@@ -597,12 +603,12 @@ export default function VistaFamilia({ navigation }) {
               {familiares.length} miembro(s) • {codigosPersonalizados.length} código(s) activo(s)
             </Text>
           </View>
-          
+
           <TouchableOpacity style={styles.botonRefrescar} onPress={onRefresh} disabled={refrescando}>
-            <Icon 
-              name="refresh-outline" 
-              size={24} 
-              color={refrescando ? COLORES.GRIS_OSCURO : COLORES.TEXTO_OSCURO} 
+            <Icon
+              name="refresh-outline"
+              size={24}
+              color={refrescando ? COLORES.GRIS_OSCURO : COLORES.TEXTO_OSCURO}
             />
           </TouchableOpacity>
         </View>
@@ -624,11 +630,11 @@ export default function VistaFamilia({ navigation }) {
               <Icon name="key-outline" size={24} color={COLORES.AMARILLO_PLATANO} />
               <Text style={styles.tituloSeccion}>Código Familiar</Text>
             </View>
-            
+
             <View style={styles.contenedorCodigoFamiliar}>
               <View style={styles.infoCodigoFamiliar}>
                 <Text style={styles.etiquetaCodigo}>Código compartido para la familia:</Text>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.codigoDisplay}
                   onPress={() => copiarAlPortapapeles(codigoFamiliar)}
                 >
@@ -641,9 +647,9 @@ export default function VistaFamilia({ navigation }) {
                   Comparte este código con otros familiares para que se unan
                 </Text>
               </View>
-              
+
               {esAdministrador && (
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.botonRegenerar}
                   onPress={generarNuevoCodigoFamiliar}
                 >
@@ -660,9 +666,9 @@ export default function VistaFamilia({ navigation }) {
               <View style={styles.encabezadoSeccion}>
                 <Icon name="sparkles-outline" size={24} color={COLORES.MORADO} />
                 <Text style={styles.tituloSeccion}>Códigos Personalizados</Text>
-                
+
                 {esAdministrador && (
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={styles.botonAgregarSeccion}
                     onPress={abrirModalCodigoPersonalizado}
                   >
@@ -670,7 +676,7 @@ export default function VistaFamilia({ navigation }) {
                   </TouchableOpacity>
                 )}
               </View>
-              
+
               <FlatList
                 data={codigosPersonalizados}
                 renderItem={renderTarjetaCodigo}
@@ -687,9 +693,9 @@ export default function VistaFamilia({ navigation }) {
             <View style={styles.encabezadoSeccion}>
               <Icon name="people-outline" size={24} color={COLORES.AZUL_CIELO_OSCURO} />
               <Text style={styles.tituloSeccion}>Miembros de la Familia</Text>
-              
+
               {esAdministrador && (
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.botonAgregarSeccion}
                   onPress={() => abrirModalFamiliar('agregar')}
                 >
@@ -697,7 +703,7 @@ export default function VistaFamilia({ navigation }) {
                 </TouchableOpacity>
               )}
             </View>
-            
+
             {familiares.length > 0 ? (
               <FlatList
                 data={familiares}
@@ -710,16 +716,16 @@ export default function VistaFamilia({ navigation }) {
                 <Icon name="people-outline" size={60} color={COLORES.GRIS_MEDIO} />
                 <Text style={styles.textoSinMiembros}>No hay miembros registrados</Text>
                 <Text style={styles.subtextoSinMiembros}>
-                  {esAdministrador 
-                    ? 'Toca el botón + para agregar familiares' 
+                  {esAdministrador
+                    ? 'Toca el botón + para agregar familiares'
                     : 'El administrador debe agregar miembros'}
                 </Text>
               </View>
             )}
-            
+
             {/* Tarjeta para agregar nuevo familiar */}
             {esAdministrador && (
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.tarjetaAgregar}
                 onPress={() => abrirModalFamiliar('agregar')}
               >
@@ -739,7 +745,7 @@ export default function VistaFamilia({ navigation }) {
           {/* Sección para generar código personalizado */}
           {esAdministrador && (
             <View style={styles.seccion}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.botonPersonalizarCodigo}
                 onPress={abrirModalCodigoPersonalizado}
               >
@@ -790,7 +796,7 @@ export default function VistaFamilia({ navigation }) {
             <View style={styles.modalEncabezado}>
               <Text style={styles.modalTitulo}>
                 {modalTipo === 'ver' ? 'Información del Familiar' :
-                 modalTipo === 'editar' ? 'Editar Familiar' : 'Agregar Familiar'}
+                  modalTipo === 'editar' ? 'Editar Familiar' : 'Agregar Familiar'}
               </Text>
               <TouchableOpacity onPress={() => setModalVisible(false)}>
                 <Icon name="close-outline" size={24} color={COLORES.TEXTO_OSCURO} />
@@ -807,29 +813,29 @@ export default function VistaFamilia({ navigation }) {
                       {familiarSeleccionado?.nombre} {familiarSeleccionado?.apellido}
                     </Text>
                   </View>
-                  
+
                   <View style={styles.infoItemModal}>
                     <Text style={styles.labelModal}>Email:</Text>
                     <Text style={styles.valorModal}>{familiarSeleccionado?.email}</Text>
                   </View>
-                  
+
                   <View style={styles.infoItemModal}>
                     <Text style={styles.labelModal}>Teléfono:</Text>
                     <Text style={styles.valorModal}>{familiarSeleccionado?.telefono}</Text>
                   </View>
-                  
+
                   <View style={styles.infoItemModal}>
                     <Text style={styles.labelModal}>Rol:</Text>
                     <Text style={styles.valorModal}>
                       {ROLES.find(r => r.value === familiarSeleccionado?.rol)?.label}
                     </Text>
                   </View>
-                  
+
                   <View style={styles.infoItemModal}>
                     <Text style={styles.labelModal}>Parentesco:</Text>
                     <Text style={styles.valorModal}>{familiarSeleccionado?.parentesco}</Text>
                   </View>
-                  
+
                   <View style={styles.infoItemModal}>
                     <Text style={styles.labelModal}>Estado:</Text>
                     <View style={[
@@ -844,7 +850,7 @@ export default function VistaFamilia({ navigation }) {
                       </Text>
                     </View>
                   </View>
-                  
+
                   {familiarSeleccionado?.fechaNacimiento && (
                     <View style={styles.infoItemModal}>
                       <Text style={styles.labelModal}>Fecha Nacimiento:</Text>
@@ -859,7 +865,7 @@ export default function VistaFamilia({ navigation }) {
                   <TextInput
                     style={styles.input}
                     value={formData.nombre}
-                    onChangeText={(text) => setFormData({...formData, nombre: text})}
+                    onChangeText={(text) => setFormData({ ...formData, nombre: text })}
                     placeholder="Nombre del familiar"
                     placeholderTextColor={COLORES.GRIS_MEDIO}
                     editable={modalTipo !== 'ver'}
@@ -869,7 +875,7 @@ export default function VistaFamilia({ navigation }) {
                   <TextInput
                     style={styles.input}
                     value={formData.apellido}
-                    onChangeText={(text) => setFormData({...formData, apellido: text})}
+                    onChangeText={(text) => setFormData({ ...formData, apellido: text })}
                     placeholder="Apellido del familiar"
                     placeholderTextColor={COLORES.GRIS_MEDIO}
                     editable={modalTipo !== 'ver'}
@@ -879,7 +885,7 @@ export default function VistaFamilia({ navigation }) {
                   <TextInput
                     style={styles.input}
                     value={formData.email}
-                    onChangeText={(text) => setFormData({...formData, email: text})}
+                    onChangeText={(text) => setFormData({ ...formData, email: text })}
                     placeholder="correo@ejemplo.com"
                     keyboardType="email-address"
                     autoCapitalize="none"
@@ -891,7 +897,7 @@ export default function VistaFamilia({ navigation }) {
                   <TextInput
                     style={styles.input}
                     value={formData.telefono}
-                    onChangeText={(text) => setFormData({...formData, telefono: text})}
+                    onChangeText={(text) => setFormData({ ...formData, telefono: text })}
                     placeholder="Número de teléfono"
                     keyboardType="phone-pad"
                     placeholderTextColor={COLORES.GRIS_MEDIO}
@@ -907,7 +913,7 @@ export default function VistaFamilia({ navigation }) {
                           styles.opcionRol,
                           formData.rol === rol.value && styles.opcionRolSeleccionada
                         ]}
-                        onPress={() => setFormData({...formData, rol: rol.value})}
+                        onPress={() => setFormData({ ...formData, rol: rol.value })}
                         disabled={modalTipo === 'ver'}
                       >
                         <Text style={[
@@ -931,7 +937,7 @@ export default function VistaFamilia({ navigation }) {
                             styles.opcionParentesco,
                             formData.parentesco === item && styles.opcionParentescoSeleccionada
                           ]}
-                          onPress={() => setFormData({...formData, parentesco: item})}
+                          onPress={() => setFormData({ ...formData, parentesco: item })}
                           disabled={modalTipo === 'ver'}
                         >
                           <Text style={[
@@ -951,7 +957,7 @@ export default function VistaFamilia({ navigation }) {
                   <TextInput
                     style={styles.input}
                     value={formData.fechaNacimiento}
-                    onChangeText={(text) => setFormData({...formData, fechaNacimiento: text})}
+                    onChangeText={(text) => setFormData({ ...formData, fechaNacimiento: text })}
                     placeholder="DD/MM/AAAA"
                     placeholderTextColor={COLORES.GRIS_MEDIO}
                     editable={modalTipo !== 'ver'}
@@ -961,7 +967,7 @@ export default function VistaFamilia({ navigation }) {
                   <TextInput
                     style={[styles.input, styles.textArea]}
                     value={formData.relacionAdultoMayor}
-                    onChangeText={(text) => setFormData({...formData, relacionAdultoMayor: text})}
+                    onChangeText={(text) => setFormData({ ...formData, relacionAdultoMayor: text })}
                     placeholder="Describe la relación principal..."
                     multiline
                     numberOfLines={3}
@@ -975,16 +981,16 @@ export default function VistaFamilia({ navigation }) {
             <View style={styles.modalBotones}>
               {modalTipo === 'ver' ? (
                 <>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={styles.botonModalSecundario}
                     onPress={() => setModalVisible(false)}
                   >
                     <Text style={styles.textoBotonModalSecundario}>Cerrar</Text>
                   </TouchableOpacity>
-                  
+
                   {esAdministrador && familiarSeleccionado?.rol !== 'familiar_administrador' && (
                     <>
-                      <TouchableOpacity 
+                      <TouchableOpacity
                         style={styles.botonModalPrincipal}
                         onPress={() => {
                           setModalVisible(false);
@@ -993,8 +999,8 @@ export default function VistaFamilia({ navigation }) {
                       >
                         <Text style={styles.textoBotonModalPrincipal}>Editar</Text>
                       </TouchableOpacity>
-                      
-                      <TouchableOpacity 
+
+                      <TouchableOpacity
                         style={[styles.botonModalAccion, { backgroundColor: COLORES.ERROR }]}
                         onPress={() => {
                           setModalVisible(false);
@@ -1008,15 +1014,15 @@ export default function VistaFamilia({ navigation }) {
                 </>
               ) : (
                 <>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={styles.botonModalCancelar}
                     onPress={() => setModalVisible(false)}
                   >
                     <Text style={styles.textoBotonModalCancelar}>Cancelar</Text>
                   </TouchableOpacity>
-                  
+
                   {modalTipo === 'editar' && esAdministrador && familiarSeleccionado?.rol !== 'familiar_administrador' && (
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       style={[styles.botonModalAccion, { backgroundColor: COLORES.ERROR }]}
                       onPress={() => {
                         setModalVisible(false);
@@ -1026,8 +1032,8 @@ export default function VistaFamilia({ navigation }) {
                       <Text style={styles.textoBotonModalAccion}>Eliminar</Text>
                     </TouchableOpacity>
                   )}
-                  
-                  <TouchableOpacity 
+
+                  <TouchableOpacity
                     style={[styles.botonModalAccion, { backgroundColor: COLORES.EXITO }]}
                     onPress={guardarFamiliar}
                   >
@@ -1070,7 +1076,7 @@ export default function VistaFamilia({ navigation }) {
               <TextInput
                 style={styles.input}
                 value={codigoPersonalizadoData.nombre}
-                onChangeText={(text) => setCodigoPersonalizadoData({...codigoPersonalizadoData, nombre: text})}
+                onChangeText={(text) => setCodigoPersonalizadoData({ ...codigoPersonalizadoData, nombre: text })}
                 placeholder="Nombre del usuario"
                 placeholderTextColor={COLORES.GRIS_MEDIO}
               />
@@ -1079,7 +1085,7 @@ export default function VistaFamilia({ navigation }) {
               <TextInput
                 style={styles.input}
                 value={codigoPersonalizadoData.apellido}
-                onChangeText={(text) => setCodigoPersonalizadoData({...codigoPersonalizadoData, apellido: text})}
+                onChangeText={(text) => setCodigoPersonalizadoData({ ...codigoPersonalizadoData, apellido: text })}
                 placeholder="Apellido del usuario"
                 placeholderTextColor={COLORES.GRIS_MEDIO}
               />
@@ -1093,7 +1099,7 @@ export default function VistaFamilia({ navigation }) {
                       styles.opcionRol,
                       codigoPersonalizadoData.rol === rol.value && styles.opcionRolSeleccionada
                     ]}
-                    onPress={() => setCodigoPersonalizadoData({...codigoPersonalizadoData, rol: rol.value})}
+                    onPress={() => setCodigoPersonalizadoData({ ...codigoPersonalizadoData, rol: rol.value })}
                   >
                     <Text style={[
                       styles.textoOpcionRol,
@@ -1116,7 +1122,7 @@ export default function VistaFamilia({ navigation }) {
                         styles.opcionParentesco,
                         codigoPersonalizadoData.parentesco === item && styles.opcionParentescoSeleccionada
                       ]}
-                      onPress={() => setCodigoPersonalizadoData({...codigoPersonalizadoData, parentesco: item})}
+                      onPress={() => setCodigoPersonalizadoData({ ...codigoPersonalizadoData, parentesco: item })}
                     >
                       <Text style={[
                         styles.textoOpcionParentesco,
@@ -1133,14 +1139,14 @@ export default function VistaFamilia({ navigation }) {
             </ScrollView>
 
             <View style={styles.modalBotones}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.botonModalCancelar}
                 onPress={() => setModalCodigoVisible(false)}
               >
                 <Text style={styles.textoBotonModalCancelar}>Cancelar</Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={[styles.botonModalAccion, { backgroundColor: COLORES.MORADO }]}
                 onPress={generarCodigoPersonalizado}
               >
@@ -1172,7 +1178,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
     fontSize: 16,
   },
-  
+
   // Encabezado
   encabezado: {
     flexDirection: 'row',
@@ -1204,13 +1210,13 @@ const styles = StyleSheet.create({
   botonRefrescar: {
     padding: 8,
   },
-  
+
   // Contenido
   contenedorScroll: {
     padding: 20,
     paddingBottom: 80,
   },
-  
+
   // Secciones
   seccion: {
     marginBottom: 25,
@@ -1230,7 +1236,7 @@ const styles = StyleSheet.create({
   botonAgregarSeccion: {
     padding: 8,
   },
-  
+
   // Código Familiar
   contenedorCodigoFamiliar: {
     backgroundColor: COLORES.BLANCO,
@@ -1288,12 +1294,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 8,
   },
-  
+
   // Lista de códigos personalizados
   listaCodigos: {
     paddingVertical: 5,
   },
-  
+
   // Tarjeta de código personalizado
   tarjetaCodigo: {
     width: 200,
@@ -1378,7 +1384,7 @@ const styles = StyleSheet.create({
     color: COLORES.GRIS_OSCURO,
     textDecorationLine: 'line-through',
   },
-  
+
   // Tarjeta de familiar
   tarjetaFamiliar: {
     backgroundColor: COLORES.BLANCO,
@@ -1446,7 +1452,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: 'bold',
   },
-  
+
   // Sin miembros
   sinMiembros: {
     backgroundColor: COLORES.BLANCO,
@@ -1468,7 +1474,7 @@ const styles = StyleSheet.create({
     color: COLORES.GRIS_MEDIO,
     textAlign: 'center',
   },
-  
+
   // Tarjeta agregar
   tarjetaAgregar: {
     backgroundColor: COLORES.BLANCO,
@@ -1502,7 +1508,7 @@ const styles = StyleSheet.create({
     color: COLORES.GRIS_OSCURO,
     textAlign: 'center',
   },
-  
+
   // Botón personalizar código
   botonPersonalizarCodigo: {
     backgroundColor: COLORES.MORADO,
@@ -1532,7 +1538,7 @@ const styles = StyleSheet.create({
     opacity: 0.8,
     marginTop: 4,
   },
-  
+
   // Información adicional
   infoAdicional: {
     flexDirection: 'row',
@@ -1565,7 +1571,7 @@ const styles = StyleSheet.create({
     color: COLORES.AZUL_CIELO_OSCURO,
     fontWeight: '600',
   },
-  
+
   // Modal
   modalFondo: {
     flex: 1,
@@ -1595,7 +1601,7 @@ const styles = StyleSheet.create({
     padding: 20,
     maxHeight: Dimensions.get('window').height * 0.6,
   },
-  
+
   // Vista información en modal
   vistaInformacion: {
     padding: 10,
@@ -1625,7 +1631,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
   },
-  
+
   // Formulario modal
   modalLabel: {
     fontSize: 14,
@@ -1647,7 +1653,7 @@ const styles = StyleSheet.create({
     minHeight: 80,
     textAlignVertical: 'top',
   },
-  
+
   // Opciones de rol
   opcionesRol: {
     flexDirection: 'row',
@@ -1674,7 +1680,7 @@ const styles = StyleSheet.create({
     color: COLORES.BLANCO,
     fontWeight: 'bold',
   },
-  
+
   // Opciones de parentesco
   pickerContainer: {
     marginBottom: 10,
@@ -1701,7 +1707,7 @@ const styles = StyleSheet.create({
     color: COLORES.BLANCO,
     fontWeight: 'bold',
   },
-  
+
   // Información código personalizado
   infoCodigoPersonalizado: {
     alignItems: 'center',
@@ -1716,7 +1722,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-  
+
   // Botones del modal
   modalBotones: {
     flexDirection: 'row',

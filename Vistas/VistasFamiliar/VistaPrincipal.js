@@ -51,7 +51,7 @@ export default function PantallaPrincipal({ navigation }) {
       if (usuarioData) {
         const usuario = JSON.parse(usuarioData);
         setUsuarioInfo(usuario);
-        
+
         // Cargar el adulto mayor principal del usuario
         if (usuario.id) {
           const response = await servicioAPI.obtenerAdultoMayorPrincipal(usuario.id);
@@ -85,12 +85,12 @@ export default function PantallaPrincipal({ navigation }) {
       const hoy = new Date();
       const finSemana = new Date();
       finSemana.setDate(hoy.getDate() + 7);
-      
+
       const response = await servicioAPI.obtenerEventosPorRango(
         hoy.toISOString().split('T')[0],
         finSemana.toISOString().split('T')[0]
       );
-      
+
       if (response.exito) {
         setEventosSemana(response.eventos || []);
       }
@@ -117,19 +117,44 @@ export default function PantallaPrincipal({ navigation }) {
   // Cargar todos los datos
   const cargarTodosDatos = useCallback(async () => {
     try {
-      await Promise.all([
-        cargarDatosUsuario(),
-        cargarMedicinasHoy(),
-        cargarEventosSemana(),
-        cargarGastosFuturos()
+      const usuarioId = await servicioAPI.obtenerUsuarioActualId();
+
+      if (!usuarioId) {
+        console.warn('No se encontró ID de usuario');
+        setCargando(false);
+        return;
+      }
+
+      const [adultoResponse, medicinasResponse, eventosResponse, gastosResponse] = await Promise.all([
+        servicioAPI.obtenerAdultoMayorPrincipal(usuarioId),
+        servicioAPI.obtenerMedicinasHoy(usuarioId),
+        servicioAPI.obtenerEventosProximos(usuarioId, 10),
+        servicioAPI.obtenerGastosFuturos(usuarioId)
       ]);
+
+      if (adultoResponse.exito) {
+        setAdultoMayorInfo(adultoResponse.adultoMayor);
+      }
+
+      if (medicinasResponse.exito) {
+        setMedicinasHoy(medicinasResponse.medicinas || []);
+      }
+
+      if (eventosResponse.exito) {
+        setEventosSemana(eventosResponse.eventos || []);
+      }
+
+      if (gastosResponse.exito) {
+        setGastosFuturos(gastosResponse.gastos || []);
+      }
+
     } catch (error) {
       console.error('Error cargando datos:', error);
     } finally {
       setCargando(false);
       setRefrescando(false);
     }
-  }, [cargarDatosUsuario, cargarMedicinasHoy, cargarEventosSemana, cargarGastosFuturos]);
+  }, []);
 
   // Cargar al montar
   useEffect(() => {
@@ -161,7 +186,7 @@ export default function PantallaPrincipal({ navigation }) {
       const response = await servicioAPI.marcarMedicinaTomada(medicinaId);
       if (response.exito) {
         // Actualizar lista local
-        setMedicinasHoy(prev => 
+        setMedicinasHoy(prev =>
           prev.map(m => m.id === medicinaId ? { ...m, tomada: true } : m)
         );
       }
@@ -173,10 +198,10 @@ export default function PantallaPrincipal({ navigation }) {
   // Formatear fecha
   const formatearFecha = (fechaStr) => {
     const fecha = new Date(fechaStr);
-    return fecha.toLocaleDateString('es-ES', { 
-      weekday: 'short', 
-      day: 'numeric', 
-      month: 'short' 
+    return fecha.toLocaleDateString('es-ES', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short'
     });
   };
 
@@ -194,7 +219,7 @@ export default function PantallaPrincipal({ navigation }) {
   // Mostrar pantalla de carga
   if (cargando) {
     return (
-      <LinearGradient 
+      <LinearGradient
         colors={[COLORES.AZUL_CIELO, COLORES.BLANCO, COLORES.AZUL_CIELO]}
         style={styles.fondo}
       >
@@ -215,57 +240,57 @@ export default function PantallaPrincipal({ navigation }) {
             <Text style={styles.tituloMenu}>CuidaMe</Text>
             <Text style={styles.subtituloMenu}>Panel de Control</Text>
           </View>
-          
+
           <ScrollView style={styles.listaMenu}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.itemMenu}
               onPress={() => navegarA('InformacionGeneral')}
             >
               <Icon name="person-outline" size={22} color={COLORES.TEXTO_OSCURO} />
               <Text style={styles.textoItemMenu}>Información General</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.itemMenu}
               onPress={() => navegarA('Medicinas')}
             >
               <Icon name="medical-outline" size={22} color={COLORES.TEXTO_OSCURO} />
               <Text style={styles.textoItemMenu}>Medicinas</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.itemMenu}
               onPress={() => navegarA('Horario')}
             >
               <Icon name="time-outline" size={22} color={COLORES.TEXTO_OSCURO} />
               <Text style={styles.textoItemMenu}>Horario</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.itemMenu}
               onPress={() => navegarA('Calendario')}
             >
               <Icon name="calendar-outline" size={22} color={COLORES.TEXTO_OSCURO} />
               <Text style={styles.textoItemMenu}>Calendario</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.itemMenu}
               onPress={() => navegarA('Gastos')}
             >
               <Icon name="cash-outline" size={22} color={COLORES.TEXTO_OSCURO} />
               <Text style={styles.textoItemMenu}>Gastos</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.itemMenu}
               onPress={() => navegarA('Familia')}
             >
               <Icon name="people-outline" size={22} color={COLORES.TEXTO_OSCURO} />
               <Text style={styles.textoItemMenu}>Familia</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.itemMenu}
               onPress={() => navegarA('Configuracion')}
             >
@@ -273,7 +298,7 @@ export default function PantallaPrincipal({ navigation }) {
               <Text style={styles.textoItemMenu}>Configuración</Text>
             </TouchableOpacity>
           </ScrollView>
-          
+
           <View style={styles.pieMenu}>
             <Text style={styles.version}>CuidaMe v1.0</Text>
             <Text style={styles.rolUsuario}>
@@ -281,10 +306,10 @@ export default function PantallaPrincipal({ navigation }) {
             </Text>
           </View>
         </View>
-        
+
         {/* Overlay para cerrar menú */}
         {menuAbierto && (
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.overlayMenu}
             onPress={() => setMenuAbierto(false)}
           />
@@ -292,39 +317,39 @@ export default function PantallaPrincipal({ navigation }) {
       </View>
 
       {/* Contenido principal */}
-      <LinearGradient 
+      <LinearGradient
         colors={[COLORES.AZUL_CIELO, COLORES.BLANCO]}
         style={styles.fondo}
       >
         <SafeAreaView style={styles.contenedor}>
           {/* Encabezado */}
           <View style={styles.encabezado}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.botonMenu}
               onPress={() => setMenuAbierto(!menuAbierto)}
             >
               <Icon name={menuAbierto ? "close-outline" : "menu-outline"} size={28} color={COLORES.TEXTO_OSCURO} />
             </TouchableOpacity>
-            
+
             <View style={styles.tituloContainer}>
               <Text style={styles.tituloPrincipal}>CuidaMe</Text>
               <Text style={styles.subtituloPrincipal}>Panel de Control Familiar</Text>
             </View>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.botonRefrescar}
               onPress={onRefresh}
               disabled={refrescando}
             >
-              <Icon 
-                name="refresh-outline" 
-                size={24} 
-                color={refrescando ? COLORES.GRIS_OSCURO : COLORES.TEXTO_OSCURO} 
+              <Icon
+                name="refresh-outline"
+                size={24}
+                color={refrescando ? COLORES.GRIS_OSCURO : COLORES.TEXTO_OSCURO}
               />
             </TouchableOpacity>
           </View>
 
-          <ScrollView 
+          <ScrollView
             refreshControl={
               <RefreshControl
                 refreshing={refrescando}
@@ -343,7 +368,7 @@ export default function PantallaPrincipal({ navigation }) {
                   {adultoMayorInfo?.nombre || 'Adulto Mayor'}
                 </Text>
               </View>
-              
+
               <View style={styles.contenedorTarjeta}>
                 <View style={styles.filaInfo}>
                   <View style={styles.itemInfo}>
@@ -353,7 +378,7 @@ export default function PantallaPrincipal({ navigation }) {
                       {adultoMayorInfo?.estadoSalud || 'Estable'}
                     </Text>
                   </View>
-                  
+
                   <View style={styles.itemInfo}>
                     <Icon name="calendar-outline" size={20} color={COLORES.GRIS_OSCURO} />
                     <Text style={styles.labelInfo}>Edad:</Text>
@@ -362,7 +387,7 @@ export default function PantallaPrincipal({ navigation }) {
                     </Text>
                   </View>
                 </View>
-                
+
                 <View style={styles.filaInfo}>
                   <View style={styles.itemInfo}>
                     <Icon name="medkit-outline" size={20} color={COLORES.GRIS_OSCURO} />
@@ -371,7 +396,7 @@ export default function PantallaPrincipal({ navigation }) {
                       {adultoMayorInfo?.condiciones?.length || 0}
                     </Text>
                   </View>
-                  
+
                   <View style={styles.itemInfo}>
                     <Icon name="call-outline" size={20} color={COLORES.GRIS_OSCURO} />
                     <Text style={styles.labelInfo}>Médico:</Text>
@@ -380,8 +405,8 @@ export default function PantallaPrincipal({ navigation }) {
                     </Text>
                   </View>
                 </View>
-                
-                <TouchableOpacity 
+
+                <TouchableOpacity
                   style={styles.botonVerDetalles}
                   onPress={() => navegarA('InformacionGeneral')}
                 >
@@ -397,7 +422,7 @@ export default function PantallaPrincipal({ navigation }) {
                 <Text style={styles.tituloSeccion}>Medicinas para hoy</Text>
                 <Text style={styles.badge}>{medicinasHoy.length}</Text>
               </View>
-              
+
               <View style={styles.contenedorTarjeta}>
                 {medicinasHoy.length === 0 ? (
                   <Text style={styles.textoVacio}>No hay medicinas programadas para hoy</Text>
@@ -410,7 +435,7 @@ export default function PantallaPrincipal({ navigation }) {
                           {medicina.dosis} • {formatearHora(medicina.hora)}
                         </Text>
                       </View>
-                      
+
                       <TouchableOpacity
                         style={[
                           styles.botonTomar,
@@ -429,9 +454,9 @@ export default function PantallaPrincipal({ navigation }) {
                     </View>
                   ))
                 )}
-                
+
                 {medicinasHoy.length > 0 && (
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={styles.botonVerTodo}
                     onPress={() => navegarA('Medicinas')}
                   >
@@ -447,7 +472,7 @@ export default function PantallaPrincipal({ navigation }) {
                 <Icon name="calendar-outline" size={24} color={COLORES.AMARILLO_PLATANO} />
                 <Text style={styles.tituloSeccion}>Eventos esta semana</Text>
               </View>
-              
+
               <View style={styles.contenedorTarjeta}>
                 {eventosSemana.length === 0 ? (
                   <Text style={styles.textoVacio}>No hay eventos programados</Text>
@@ -456,11 +481,13 @@ export default function PantallaPrincipal({ navigation }) {
                     <View key={evento.id} style={styles.itemEvento}>
                       <View style={[
                         styles.indicatorEvento,
-                        { backgroundColor: evento.tipo === 'cita_medica' ? COLORES.ERROR : 
-                                         evento.tipo === 'visita_familiar' ? COLORES.EXITO : 
-                                         COLORES.AMARILLO_PLATANO }
+                        {
+                          backgroundColor: evento.tipo === 'cita_medica' ? COLORES.ERROR :
+                            evento.tipo === 'visita_familiar' ? COLORES.EXITO :
+                              COLORES.AMARILLO_PLATANO
+                        }
                       ]} />
-                      
+
                       <View style={styles.infoEvento}>
                         <Text style={styles.nombreEvento}>{evento.titulo}</Text>
                         <Text style={styles.detalleEvento}>
@@ -470,9 +497,9 @@ export default function PantallaPrincipal({ navigation }) {
                     </View>
                   ))
                 )}
-                
+
                 {eventosSemana.length > 0 && (
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={styles.botonVerTodo}
                     onPress={() => navegarA('Calendario')}
                   >
@@ -489,7 +516,7 @@ export default function PantallaPrincipal({ navigation }) {
                 <Text style={styles.tituloSeccion}>Gastos próximos</Text>
                 <Text style={styles.badge}>${calcularTotalGastos().toFixed(2)}</Text>
               </View>
-              
+
               <View style={styles.contenedorTarjeta}>
                 {gastosFuturos.length === 0 ? (
                   <Text style={styles.textoVacio}>No hay gastos programados</Text>
@@ -502,16 +529,16 @@ export default function PantallaPrincipal({ navigation }) {
                           {formatearFecha(gasto.fecha_vencimiento)}
                         </Text>
                       </View>
-                      
+
                       <Text style={styles.montoGasto}>
                         ${parseFloat(gasto.monto).toFixed(2)}
                       </Text>
                     </View>
                   ))
                 )}
-                
+
                 {gastosFuturos.length > 0 && (
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={styles.botonVerTodo}
                     onPress={() => navegarA('Gastos')}
                   >
@@ -524,9 +551,9 @@ export default function PantallaPrincipal({ navigation }) {
             {/* Acciones rápidas */}
             <View style={styles.seccion}>
               <Text style={styles.tituloSeccion}>Acciones rápidas</Text>
-              
+
               <View style={styles.contenedorAccionesRapidas}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.accionRapida}
                   onPress={() => navegarA('AgregarMedicina')}
                 >
@@ -535,8 +562,8 @@ export default function PantallaPrincipal({ navigation }) {
                   </View>
                   <Text style={styles.textoAccionRapida}>Agregar medicina</Text>
                 </TouchableOpacity>
-                
-                <TouchableOpacity 
+
+                <TouchableOpacity
                   style={styles.accionRapida}
                   onPress={() => navegarA('AgendarEvento')}
                 >
@@ -545,8 +572,8 @@ export default function PantallaPrincipal({ navigation }) {
                   </View>
                   <Text style={styles.textoAccionRapida}>Agendar evento</Text>
                 </TouchableOpacity>
-                
-                <TouchableOpacity 
+
+                <TouchableOpacity
                   style={styles.accionRapida}
                   onPress={() => navegarA('RegistrarGasto')}
                 >
@@ -555,8 +582,8 @@ export default function PantallaPrincipal({ navigation }) {
                   </View>
                   <Text style={styles.textoAccionRapida}>Registrar gasto</Text>
                 </TouchableOpacity>
-                
-                <TouchableOpacity 
+
+                <TouchableOpacity
                   style={styles.accionRapida}
                   onPress={() => navegarA('ContactarFamiliar')}
                 >
@@ -571,26 +598,26 @@ export default function PantallaPrincipal({ navigation }) {
             {/* Resumen */}
             <View style={styles.resumenContainer}>
               <Text style={styles.tituloResumen}>Resumen del día</Text>
-              
+
               <View style={styles.filaResumen}>
                 <View style={styles.itemResumen}>
                   <Text style={styles.numeroResumen}>{medicinasHoy.filter(m => !m.tomada).length}</Text>
                   <Text style={styles.textoResumen}>Medicinas pendientes</Text>
                 </View>
-                
+
                 <View style={styles.separadorResumen} />
-                
+
                 <View style={styles.itemResumen}>
                   <Text style={styles.numeroResumen}>
-                    {eventosSemana.filter(e => 
+                    {eventosSemana.filter(e =>
                       new Date(e.fecha).toDateString() === new Date().toDateString()
                     ).length}
                   </Text>
                   <Text style={styles.textoResumen}>Eventos hoy</Text>
                 </View>
-                
+
                 <View style={styles.separadorResumen} />
-                
+
                 <View style={styles.itemResumen}>
                   <Text style={styles.numeroResumen}>{gastosFuturos.length}</Text>
                   <Text style={styles.textoResumen}>Gastos próximos</Text>
@@ -621,7 +648,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
     fontSize: 16,
   },
-  
+
   // Menú lateral
   menuLateral: {
     position: 'absolute',
@@ -704,7 +731,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.5)',
   },
-  
+
   // Contenido principal
   contenedor: {
     flex: 1,
@@ -743,7 +770,7 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 40,
   },
-  
+
   // Secciones
   seccion: {
     marginBottom: 25,
@@ -779,7 +806,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  
+
   // Información adulto mayor
   filaInfo: {
     flexDirection: 'row',
@@ -811,7 +838,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
-  
+
   // Medicinas
   itemMedicina: {
     flexDirection: 'row',
@@ -853,7 +880,7 @@ const styles = StyleSheet.create({
   textoBotonTomado: {
     color: COLORES.GRIS_OSCURO,
   },
-  
+
   // Eventos
   itemEvento: {
     flexDirection: 'row',
@@ -881,7 +908,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORES.GRIS_OSCURO,
   },
-  
+
   // Gastos
   itemGasto: {
     flexDirection: 'row',
@@ -909,7 +936,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: COLORES.VERDE_CLARO,
   },
-  
+
   // Botones ver todo
   botonVerTodo: {
     marginTop: 15,
@@ -920,7 +947,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
-  
+
   // Acciones rápidas
   contenedorAccionesRapidas: {
     flexDirection: 'row',
@@ -955,7 +982,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontWeight: '500',
   },
-  
+
   // Resumen
   resumenContainer: {
     backgroundColor: COLORES.BLANCO,
@@ -998,7 +1025,7 @@ const styles = StyleSheet.create({
     width: 1,
     backgroundColor: COLORES.GRIS_CLARO,
   },
-  
+
   // Textos vacíos
   textoVacio: {
     textAlign: 'center',
