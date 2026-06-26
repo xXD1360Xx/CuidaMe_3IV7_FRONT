@@ -19,8 +19,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { servicioAPI } from '../../servicios/api';
 import { useAuth } from '../../AppNavegacion';
 
-
-// Colores de CuidaMe
 const COLORES = {
   AZUL_CIELO: '#87CEEB',
   AZUL_CIELO_OSCURO: '#5D8AA8',
@@ -39,7 +37,6 @@ const COLORES = {
 
 export default function VistaRegistro() {
   const auth = useAuth();
-
   const navigation = useNavigation();
   const route = useRoute();
   const { tipoPerfil } = route.params || { tipoPerfil: 'familiar' };
@@ -86,13 +83,11 @@ export default function VistaRegistro() {
   const formatearCodigo = (text) => {
     let limpio = text.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
     if (limpio.length > 6) limpio = limpio.substring(0, 6);
-
     let formateado = '';
     for (let i = 0; i < limpio.length; i++) {
       if (i === 3) formateado += '-';
       formateado += limpio[i];
     }
-
     return formateado;
   };
 
@@ -163,14 +158,16 @@ export default function VistaRegistro() {
         if (!validarCodigoFamiliar(codigoFamiliarAnciano)) {
           nuevosErrores.codigoAnciano = 'Código debe tener 6 caracteres (ej: ABC-123)';
         }
-
+        break;
     }
 
     setErrores(nuevosErrores);
     return Object.keys(nuevosErrores).length === 0;
   };
 
-  // Manejar registro
+  // ============================================================
+  // 🔥 FUNCIÓN PRINCIPAL DE REGISTRO (CORREGIDA)
+  // ============================================================
   const manejarRegistro = async () => {
     // Validación del formulario
     if (!validarFormulario()) {
@@ -203,6 +200,7 @@ export default function VistaRegistro() {
             respuesta = await servicioAPI.iniciarSesionConCodigoPersonalizado(codigoLimpio);
             if (respuesta.exito && respuesta.token) {
               await auth.iniciarSesion(respuesta.token, respuesta.usuario, respuesta.usuario.rol || 'familiar');
+              // Familiar con código personalizado → no verifica correo
               navigation.replace('CrearAnciano', {
                 usuarioId: respuesta.usuario.id,
                 codigoFamiliar: codigoLimpio
@@ -228,7 +226,8 @@ export default function VistaRegistro() {
           respuesta = await servicioAPI.iniciarSesionConCodigoPersonalizado(codigoLimpioAnciano);
           if (respuesta.exito && respuesta.token) {
             await auth.iniciarSesion(respuesta.token, respuesta.usuario, 'adulto_mayor');
-            navigation.replace('PrincipalAnciano');
+            // Adulto mayor con código personalizado → no verifica correo
+            navigation.replace('Principal');
           } else {
             Alert.alert('Error', respuesta.error || 'Código inválido');
           }
@@ -236,14 +235,15 @@ export default function VistaRegistro() {
           return;
       }
 
+      // --- FLUJO NORMAL: REGISTRO CON EMAIL/CONTRASEÑA (familiar_principal o profesional) ---
       console.log('📤 Datos enviados al registro:', JSON.stringify(datosRegistro, null, 2));
       respuesta = await servicioAPI.registrarUsuario(datosRegistro, endpoint);
       console.log('📥 Respuesta del backend:', JSON.stringify(respuesta, null, 2));
 
       if (respuesta.exito && respuesta.token) {
+        // Guardar sesión
         await auth.iniciarSesion(respuesta.token, respuesta.usuario, respuesta.usuario.rol || 'familiar');
 
-        // Verificar que el correo existe antes de navegar
         const correoParaVerificar = datosRegistro.email;
         if (!correoParaVerificar) {
           Alert.alert('Error', 'No se pudo obtener el correo para verificación');
@@ -251,10 +251,11 @@ export default function VistaRegistro() {
           return;
         }
 
-        navigation.replace('VerificarCorreo', {
+        // ✅ REDIRIGIR A MANDAR CORREO (para generar código de verificación)
+        navigation.replace('MandarCorreo', {
           correo: correoParaVerificar,
           modo: 'verificacion',
-          tipo: 'crear_cuenta',
+          tipo: 'crear_cuenta',          // ← importante: contexto "crear_cuenta"
           usuarioId: respuesta.usuario.id,
           redirigirA: 'CrearAnciano',
           datosAnciano: {
@@ -325,7 +326,6 @@ export default function VistaRegistro() {
       case 'profesional':
         return (
           <>
-            {/* Nombre */}
             <View style={styles.campoContainer}>
               <Text style={styles.campoLabel}>NOMBRE COMPLETO *</Text>
               <TextInput
@@ -341,8 +341,6 @@ export default function VistaRegistro() {
               />
               {errores.nombre && <Text style={styles.textoError}>❌ {errores.nombre}</Text>}
             </View>
-
-            {/* Correo */}
             <View style={styles.campoContainer}>
               <Text style={styles.campoLabel}>CORREO ELECTRÓNICO *</Text>
               <TextInput
@@ -360,8 +358,6 @@ export default function VistaRegistro() {
               />
               {errores.correo && <Text style={styles.textoError}>❌ {errores.correo}</Text>}
             </View>
-
-            {/* Contraseña */}
             <View style={styles.campoContainer}>
               <Text style={styles.campoLabel}>CONTRASEÑA *</Text>
               <View style={styles.inputPasswordContainer}>
@@ -377,17 +373,12 @@ export default function VistaRegistro() {
                   secureTextEntry={!mostrarContrasena}
                   editable={!cargando}
                 />
-                <TouchableOpacity
-                  style={styles.botonOjo}
-                  onPress={() => setMostrarContrasena(!mostrarContrasena)}
-                >
+                <TouchableOpacity style={styles.botonOjo} onPress={() => setMostrarContrasena(!mostrarContrasena)}>
                   <Text style={styles.textoOjo}>{mostrarContrasena ? '🙈' : '👁️'}</Text>
                 </TouchableOpacity>
               </View>
               {errores.contrasena && <Text style={styles.textoError}>❌ {errores.contrasena}</Text>}
             </View>
-
-            {/* Confirmar Contraseña */}
             <View style={styles.campoContainer}>
               <Text style={styles.campoLabel}>CONFIRMAR CONTRASEÑA *</Text>
               <View style={styles.inputPasswordContainer}>
@@ -403,19 +394,12 @@ export default function VistaRegistro() {
                   secureTextEntry={!mostrarConfirmarContrasena}
                   editable={!cargando}
                 />
-                <TouchableOpacity
-                  style={styles.botonOjo}
-                  onPress={() => setMostrarConfirmarContrasena(!mostrarConfirmarContrasena)}
-                >
+                <TouchableOpacity style={styles.botonOjo} onPress={() => setMostrarConfirmarContrasena(!mostrarConfirmarContrasena)}>
                   <Text style={styles.textoOjo}>{mostrarConfirmarContrasena ? '🙈' : '👁️'}</Text>
                 </TouchableOpacity>
               </View>
-              {errores.confirmarContrasena && (
-                <Text style={styles.textoError}>❌ {errores.confirmarContrasena}</Text>
-              )}
+              {errores.confirmarContrasena && <Text style={styles.textoError}>❌ {errores.confirmarContrasena}</Text>}
             </View>
-
-            {/* Celular */}
             <View style={styles.campoContainer}>
               <Text style={styles.campoLabel}>NÚMERO DE CELULAR (OPCIONAL)</Text>
               <TextInput
@@ -428,8 +412,6 @@ export default function VistaRegistro() {
                 editable={!cargando}
               />
             </View>
-
-            {/* Código Familiar */}
             <View style={styles.campoContainer}>
               <Text style={styles.campoLabel}>CÓDIGO FAMILIAR (OPCIONAL)</Text>
               <TextInput
@@ -448,9 +430,7 @@ export default function VistaRegistro() {
               {errores.codigoFamiliar ? (
                 <Text style={styles.textoError}>❌ {errores.codigoFamiliar}</Text>
               ) : (
-                <Text style={styles.textoAyuda}>
-                  🔗 Ingresa si ya tienes un código familiar para asociarte
-                </Text>
+                <Text style={styles.textoAyuda}>🔗 Ingresa si ya tienes un código familiar para asociarte</Text>
               )}
             </View>
           </>
@@ -459,7 +439,6 @@ export default function VistaRegistro() {
       case 'familiar':
         return (
           <>
-            {/* Switch para código personalizado */}
             <View style={styles.switchContainer}>
               <Text style={styles.switchLabel}>¿Tienes un código familiar personalizado?</Text>
               <Switch
@@ -473,9 +452,7 @@ export default function VistaRegistro() {
                 disabled={cargando}
               />
             </View>
-
             {tieneCodigoPersonalizado ? (
-              /* Formulario solo con código */
               <View style={styles.campoContainer}>
                 <Text style={styles.campoLabel}>CÓDIGO FAMILIAR PERSONALIZADO *</Text>
                 <TextInput
@@ -494,15 +471,11 @@ export default function VistaRegistro() {
                 {errores.codigoPersonalizado ? (
                   <Text style={styles.textoError}>❌ {errores.codigoPersonalizado}</Text>
                 ) : (
-                  <Text style={styles.textoAyuda}>
-                    🔑 Pide el código al familiar administrador del adulto mayor
-                  </Text>
+                  <Text style={styles.textoAyuda}>🔑 Pide el código al familiar administrador del adulto mayor</Text>
                 )}
               </View>
             ) : (
-              /* Formulario completo para familiar */
               <>
-                {/* Nombre */}
                 <View style={styles.campoContainer}>
                   <Text style={styles.campoLabel}>NOMBRE COMPLETO *</Text>
                   <TextInput
@@ -518,8 +491,6 @@ export default function VistaRegistro() {
                   />
                   {errores.nombre && <Text style={styles.textoError}>❌ {errores.nombre}</Text>}
                 </View>
-
-                {/* Correo */}
                 <View style={styles.campoContainer}>
                   <Text style={styles.campoLabel}>CORREO ELECTRÓNICO *</Text>
                   <TextInput
@@ -537,8 +508,6 @@ export default function VistaRegistro() {
                   />
                   {errores.correo && <Text style={styles.textoError}>❌ {errores.correo}</Text>}
                 </View>
-
-                {/* Contraseña */}
                 <View style={styles.campoContainer}>
                   <Text style={styles.campoLabel}>CONTRASEÑA *</Text>
                   <View style={styles.inputPasswordContainer}>
@@ -554,17 +523,12 @@ export default function VistaRegistro() {
                       secureTextEntry={!mostrarContrasena}
                       editable={!cargando}
                     />
-                    <TouchableOpacity
-                      style={styles.botonOjo}
-                      onPress={() => setMostrarContrasena(!mostrarContrasena)}
-                    >
+                    <TouchableOpacity style={styles.botonOjo} onPress={() => setMostrarContrasena(!mostrarContrasena)}>
                       <Text style={styles.textoOjo}>{mostrarContrasena ? '🙈' : '👁️'}</Text>
                     </TouchableOpacity>
                   </View>
                   {errores.contrasena && <Text style={styles.textoError}>❌ {errores.contrasena}</Text>}
                 </View>
-
-                {/* Confirmar Contraseña */}
                 <View style={styles.campoContainer}>
                   <Text style={styles.campoLabel}>CONFIRMAR CONTRASEÑA *</Text>
                   <View style={styles.inputPasswordContainer}>
@@ -580,16 +544,11 @@ export default function VistaRegistro() {
                       secureTextEntry={!mostrarConfirmarContrasena}
                       editable={!cargando}
                     />
-                    <TouchableOpacity
-                      style={styles.botonOjo}
-                      onPress={() => setMostrarConfirmarContrasena(!mostrarConfirmarContrasena)}
-                    >
+                    <TouchableOpacity style={styles.botonOjo} onPress={() => setMostrarConfirmarContrasena(!mostrarConfirmarContrasena)}>
                       <Text style={styles.textoOjo}>{mostrarConfirmarContrasena ? '🙈' : '👁️'}</Text>
                     </TouchableOpacity>
                   </View>
-                  {errores.confirmarContrasena && (
-                    <Text style={styles.textoError}>❌ {errores.confirmarContrasena}</Text>
-                  )}
+                  {errores.confirmarContrasena && <Text style={styles.textoError}>❌ {errores.confirmarContrasena}</Text>}
                 </View>
               </>
             )}
@@ -617,12 +576,8 @@ export default function VistaRegistro() {
               <Text style={styles.textoError}>❌ {errores.codigoAnciano}</Text>
             ) : (
               <>
-                <Text style={styles.textoAyuda}>
-                  🔑 Pide el código personalizado al familiar administrador que creó tu cuenta
-                </Text>
-                <Text style={styles.textoInfo}>
-                  Con este código podrás acceder a tu perfil y recibir seguimiento de salud
-                </Text>
+                <Text style={styles.textoAyuda}>🔑 Pide el código personalizado al familiar administrador que creó tu cuenta</Text>
+                <Text style={styles.textoInfo}>Con este código podrás acceder a tu perfil y recibir seguimiento de salud</Text>
               </>
             )}
           </View>
@@ -642,23 +597,18 @@ export default function VistaRegistro() {
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            {/* Encabezado */}
             <View style={styles.encabezado}>
               <TouchableOpacity style={styles.botonVolver} onPress={volverASeleccion}>
                 <Text style={styles.textoBotonVolver}>← Volver</Text>
               </TouchableOpacity>
-
               <View style={styles.logoContainer}>
                 <Text style={styles.titulo}>{infoPerfil.titulo}</Text>
                 <Text style={styles.subtitulo}>{infoPerfil.subtitulo}</Text>
               </View>
             </View>
 
-            {/* Formulario */}
             <View style={styles.formularioContainer}>
               {renderFormulario()}
-
-              {/* Botón de registro */}
               <TouchableOpacity
                 style={[styles.botonRegistro, cargando && styles.botonDeshabilitado]}
                 onPress={manejarRegistro}
@@ -674,11 +624,9 @@ export default function VistaRegistro() {
                   </Text>
                 )}
               </TouchableOpacity>
-
-              {/* Enlace a login */}
               <TouchableOpacity
                 style={styles.botonLogin}
-                onPress={() => navigation.navigate('VistaPrincipal')}
+                onPress={() => navigation.navigate('Principal')}
                 disabled={cargando}
               >
                 <Text style={styles.textoBotonLogin}>
@@ -687,7 +635,6 @@ export default function VistaRegistro() {
               </TouchableOpacity>
             </View>
 
-            {/* Footer */}
             <View style={styles.footer}>
               <Text style={styles.textoFooter}>© 2025 CuidaMe - Cuidado de Adultos Mayores</Text>
               <Text style={styles.version}>{infoPerfil.version}</Text>
@@ -697,53 +644,32 @@ export default function VistaRegistro() {
       </SafeAreaView>
     </LinearGradient>
   );
-};
+}
 
 const styles = StyleSheet.create({
-  fondo: {
-    flex: 1,
-  },
-  contenedorPrincipal: {
-    flex: 1,
-  },
-  keyboardAvoidingView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-  },
-  encabezado: {
-    marginBottom: 30,
-  },
+  fondo: { flex: 1 },
+  contenedorPrincipal: { flex: 1 },
+  keyboardAvoidingView: { flex: 1 },
+  scrollContent: { flexGrow: 1, paddingHorizontal: 20, paddingVertical: 20 },
+  encabezado: { marginBottom: 30 },
   botonVolver: {
     alignSelf: 'flex-start',
     marginBottom: 20,
     paddingVertical: 8,
     paddingHorizontal: 15,
-    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    backgroundColor: 'rgba(255,255,255,0.7)',
     borderRadius: 20,
     borderWidth: 1,
     borderColor: COLORES.GRIS_MEDIO,
   },
-  textoBotonVolver: {
-    color: COLORES.TEXTO_OSCURO,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  logoContainer: {
-    alignItems: 'center',
-  },
+  textoBotonVolver: { color: COLORES.TEXTO_OSCURO, fontSize: 14, fontWeight: '600' },
+  logoContainer: { alignItems: 'center' },
   titulo: {
     color: COLORES.TEXTO_OSCURO,
     fontSize: 28,
     fontWeight: 'bold',
     textAlign: 'center',
     marginBottom: 10,
-    textShadowColor: 'rgba(255, 255, 255, 0.5)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
   },
   subtitulo: {
     color: COLORES.TEXTO_OSCURO,
@@ -753,7 +679,7 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
   formularioContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    backgroundColor: 'rgba(255,255,255,0.9)',
     borderRadius: 20,
     padding: 25,
     marginBottom: 30,
@@ -772,16 +698,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORES.GRIS_CLARO,
     borderRadius: 12,
   },
-  switchLabel: {
-    color: COLORES.TEXTO_OSCURO,
-    fontSize: 16,
-    fontWeight: '600',
-    flex: 1,
-    marginRight: 15,
-  },
-  campoContainer: {
-    marginBottom: 20,
-  },
+  switchLabel: { color: COLORES.TEXTO_OSCURO, fontSize: 16, fontWeight: '600', flex: 1, marginRight: 15 },
+  campoContainer: { marginBottom: 20 },
   campoLabel: {
     color: COLORES.TEXTO_OSCURO,
     fontSize: 12,
@@ -836,45 +754,13 @@ const styles = StyleSheet.create({
     borderColor: COLORES.GRIS_MEDIO,
     overflow: 'hidden',
   },
-  inputPassword: {
-    flex: 1,
-    color: COLORES.TEXTO_OSCURO,
-    fontSize: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  inputError: {
-    borderColor: COLORES.ERROR,
-    borderWidth: 2,
-  },
-  botonOjo: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  textoOjo: {
-    fontSize: 20,
-    color: COLORES.GRIS_OSCURO,
-  },
-  textoError: {
-    color: COLORES.ERROR,
-    fontSize: 12,
-    marginTop: 6,
-    marginLeft: 5,
-  },
-  textoAyuda: {
-    color: COLORES.GRIS_OSCURO,
-    fontSize: 12,
-    marginTop: 6,
-    marginLeft: 5,
-    fontStyle: 'italic',
-  },
-  textoInfo: {
-    color: COLORES.AZUL_CIELO_OSCURO,
-    fontSize: 13,
-    marginTop: 10,
-    textAlign: 'center',
-    lineHeight: 18,
-  },
+  inputPassword: { flex: 1, color: COLORES.TEXTO_OSCURO, fontSize: 16, paddingHorizontal: 16, paddingVertical: 14 },
+  inputError: { borderColor: COLORES.ERROR, borderWidth: 2 },
+  botonOjo: { paddingHorizontal: 16, paddingVertical: 14 },
+  textoOjo: { fontSize: 20, color: COLORES.GRIS_OSCURO },
+  textoError: { color: COLORES.ERROR, fontSize: 12, marginTop: 6, marginLeft: 5 },
+  textoAyuda: { color: COLORES.GRIS_OSCURO, fontSize: 12, marginTop: 6, marginLeft: 5, fontStyle: 'italic' },
+  textoInfo: { color: COLORES.AZUL_CIELO_OSCURO, fontSize: 13, marginTop: 10, textAlign: 'center', lineHeight: 18 },
   botonRegistro: {
     backgroundColor: COLORES.TEXTO_OSCURO,
     borderRadius: 12,
@@ -888,48 +774,12 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 4,
   },
-  botonDeshabilitado: {
-    backgroundColor: COLORES.GRIS_OSCURO,
-    opacity: 0.7,
-  },
-  textoBotonRegistro: {
-    color: COLORES.BLANCO,
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  botonLogin: {
-    alignItems: 'center',
-    paddingVertical: 10,
-  },
-  textoBotonLogin: {
-    color: COLORES.GRIS_OSCURO,
-    fontSize: 14,
-  },
-  textoLoginDestacado: {
-    color: COLORES.AZUL_CIELO_OSCURO,
-    fontWeight: 'bold',
-    textDecorationLine: 'underline',
-  },
-  footer: {
-    alignItems: 'center',
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  textoFooter: {
-    color: COLORES.TEXTO_OSCURO,
-    fontSize: 12,
-    textShadowColor: 'rgba(255, 255, 255, 0.5)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 1,
-  },
-  version: {
-    color: COLORES.TEXTO_OSCURO,
-    fontSize: 10,
-    marginTop: 5,
-    fontStyle: 'italic',
-    textShadowColor: 'rgba(255, 255, 255, 0.5)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 1,
-  },
+  botonDeshabilitado: { backgroundColor: COLORES.GRIS_OSCURO, opacity: 0.7 },
+  textoBotonRegistro: { color: COLORES.BLANCO, fontSize: 18, fontWeight: 'bold' },
+  botonLogin: { alignItems: 'center', paddingVertical: 10 },
+  textoBotonLogin: { color: COLORES.GRIS_OSCURO, fontSize: 14 },
+  textoLoginDestacado: { color: COLORES.AZUL_CIELO_OSCURO, fontWeight: 'bold', textDecorationLine: 'underline' },
+  footer: { alignItems: 'center', paddingTop: 20, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.3)' },
+  textoFooter: { color: COLORES.TEXTO_OSCURO, fontSize: 12 },
+  version: { color: COLORES.TEXTO_OSCURO, fontSize: 10, marginTop: 5, fontStyle: 'italic' },
 });
