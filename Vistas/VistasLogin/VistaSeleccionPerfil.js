@@ -82,43 +82,7 @@ export default function VistaSeleccionPerfil() {
           {/* Opciones de perfil */}
           <View style={styles.opcionesContainer}>
 
-            {/* Adulto Mayor */}
-            <TouchableOpacity
-              style={styles.opcionCard}
-              onPress={() => seleccionarTipoPerfil('adultoMayor')}
-            >
-              <LinearGradient
-                colors={[COLORES.AZUL_CIELO_OSCURO, COLORES.AZUL_CIELO]}
-                style={styles.cardGradient}
-              >
-                <View style={styles.iconoContainer}>
-                  <Text style={styles.icono}>👴</Text>
-                </View>
-                <Text style={styles.opcionTitulo}>Adulto Mayor</Text>
-                <Text style={styles.opcionDescripcion}>
-                  Soy la persona que recibirá cuidados y seguimiento
-                </Text>
 
-                <View style={styles.caracteristicasContainer}>
-                  <View style={styles.caracteristicaItem}>
-                    <Text style={styles.caracteristicaIcono}>✓</Text>
-                    <Text style={styles.caracteristicaTexto}>Seguimiento de salud</Text>
-                  </View>
-                  <View style={styles.caracteristicaItem}>
-                    <Text style={styles.caracteristicaIcono}>✓</Text>
-                    <Text style={styles.caracteristicaTexto}>Recordatorios de medicamentos</Text>
-                  </View>
-                  <View style={styles.caracteristicaItem}>
-                    <Text style={styles.caracteristicaIcono}>✓</Text>
-                    <Text style={styles.caracteristicaTexto}>Comunicación con familiares</Text>
-                  </View>
-                </View>
-
-                <View style={styles.badgeContainer}>
-                  <Text style={styles.badge}>Versión AM</Text>
-                </View>
-              </LinearGradient>
-            </TouchableOpacity>
 
             {/* Familiar */}
             <TouchableOpacity
@@ -126,7 +90,7 @@ export default function VistaSeleccionPerfil() {
               onPress={() => seleccionarTipoPerfil('familiar')}
             >
               <LinearGradient
-                colors={[COLORES.VERDE, '#A5D6A7']}
+                colors={[COLORES.AZUL_CIELO_OSCURO, COLORES.AZUL_CIELO]}
                 style={styles.cardGradient}
               >
                 <View style={styles.iconoContainer}>
@@ -154,6 +118,44 @@ export default function VistaSeleccionPerfil() {
 
                 <View style={styles.badgeContainer}>
                   <Text style={styles.badge}>Versión Familiar</Text>
+                </View>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            {/* Adulto Mayor */}
+            <TouchableOpacity
+              style={styles.opcionCard}
+              onPress={() => seleccionarTipoPerfil('adultoMayor')}
+            >
+              <LinearGradient
+                colors={[COLORES.VERDE, '#A5D6A7']}
+                style={styles.cardGradient}
+              >
+                <View style={styles.iconoContainer}>
+                  <Text style={styles.icono}>👴</Text>
+                </View>
+                <Text style={styles.opcionTitulo}>Adulto Mayor</Text>
+                <Text style={styles.opcionDescripcion}>
+                  Soy la persona que recibirá cuidados y seguimiento
+                </Text>
+
+                <View style={styles.caracteristicasContainer}>
+                  <View style={styles.caracteristicaItem}>
+                    <Text style={styles.caracteristicaIcono}>✓</Text>
+                    <Text style={styles.caracteristicaTexto}>Seguimiento de salud</Text>
+                  </View>
+                  <View style={styles.caracteristicaItem}>
+                    <Text style={styles.caracteristicaIcono}>✓</Text>
+                    <Text style={styles.caracteristicaTexto}>Recordatorios de medicamentos</Text>
+                  </View>
+                  <View style={styles.caracteristicaItem}>
+                    <Text style={styles.caracteristicaIcono}>✓</Text>
+                    <Text style={styles.caracteristicaTexto}>Comunicación con familiares</Text>
+                  </View>
+                </View>
+
+                <View style={styles.badgeContainer}>
+                  <Text style={styles.badge}>Versión AM</Text>
                 </View>
               </LinearGradient>
             </TouchableOpacity>

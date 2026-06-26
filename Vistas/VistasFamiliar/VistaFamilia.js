@@ -107,7 +107,7 @@ export default function VistaFamilia({ navigation }) {
         if (usuarioData) {
           const usuario = JSON.parse(usuarioData);
           setUsuarioActual(usuario);
-          setEsAdministrador(usuario.rol === 'familiar_administrador');
+          setEsAdministrador(usuario.rol === 'familiar_admin');
 
           // Obtener apellido para el título
           if (usuario.apellido) {
@@ -634,7 +634,7 @@ export default function VistaFamilia({ navigation }) {
                   onPress={() => copiarAlPortapapeles(codigoFamiliar)}
                 >
                   <Text style={styles.codigoTexto}>
-                    {formatearCodigo(codigoFamiliar) || 'No disponible'}
+                    {formatearCodigo(codigoFamiliar) || 'No tienes grupo familiar asignado'}
                   </Text>
                   <Text style={{ fontSize: 18 }}>📋</Text>
                 </TouchableOpacity>

@@ -234,7 +234,7 @@ export default function VistaLogin({ navigation }) {
   };
 
   const manejarRecuperarContrasena = () => {
-    navigation.navigate('VerificarCorreo', { modo: 'recuperar' });
+    navigation.navigate('MandarCorreo', { modo: 'recuperar' });
   };
 
   const manejarCrearCuenta = () => {

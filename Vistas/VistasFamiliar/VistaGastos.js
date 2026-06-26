@@ -111,7 +111,7 @@ export default function VistaGastos({ navigation }) {
       if (usuarioData) {
         const usuario = JSON.parse(usuarioData);
         setUsuarioActual(usuario);
-        setEsAdministrador(usuario.rol === 'familiar_administrador');
+        setEsAdministrador(usuario.rol === 'familiar_admini');
       }
 
       // Obtener mes y año actual
@@ -514,8 +514,8 @@ export default function VistaGastos({ navigation }) {
                   abrirModalGasto('editar', item);
                 }}
               >
-                 <Text style={{ fontSize: 14 }}>📝</Text>
-                 <Text style={styles.textoBotonAccionGasto}>Editar</Text>
+                <Text style={{ fontSize: 14 }}>📝</Text>
+                <Text style={styles.textoBotonAccionGasto}>Editar</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -525,8 +525,8 @@ export default function VistaGastos({ navigation }) {
                   eliminarGasto(item.id);
                 }}
               >
-                 <Text style={{ fontSize: 14 }}>🗑️</Text>
-                 <Text style={styles.textoBotonAccionGasto}>Eliminar</Text>
+                <Text style={{ fontSize: 14 }}>🗑️</Text>
+                <Text style={styles.textoBotonAccionGasto}>Eliminar</Text>
               </TouchableOpacity>
             </>
           )}

@@ -118,30 +118,35 @@ export default function VistaVerificarCorreo({ navigation, route }) {
     }
 
     setVerificando(true);
-
     try {
-      const codigoCorrecto = codigo || '';
-      const esValido = codigoIngresado === codigoCorrecto;
+      const usuarioId = route.params?.usuarioId;
+      if (!usuarioId) {
+        Alert.alert('Error', 'Falta información del usuario');
+        setVerificando(false);
+        return;
+      }
 
-      if (esValido) {
+      // 🔥 VERIFICAR CONTRA EL BACKEND
+      const resultado = await servicioAPI.verificarCodigoRecuperacion(usuarioId, codigoIngresado);
+
+      if (resultado.exito) {
+        const redirigirA = route.params?.redirigirA || 'Principal';
+        const datosAnciano = route.params?.datosAnciano || {};
+
         if (contexto === 'recuperar') {
-          // Para recuperación, verificar código con el backend
-          const resultado = await servicioAPI.verificarCodigoRecuperacion(usuarioId, codigoIngresado);
-          if (resultado.exito) {
-            navigation.navigate('CambiarContrasena', {
-              usuarioId,
-              codigoId: resultado.codigo_id,
-              tipoRecuperacion: 'recuperar'
-            });
-          } else {
-            Alert.alert('Error', resultado.error || 'Código inválido');
-          }
+          // Si es recuperación, ir a cambiar contraseña con el codigo_id
+          navigation.replace('CambiarContrasena', {
+            usuarioId: usuarioId,
+            codigoId: resultado.codigo_id,
+            tipoRecuperacion: 'recuperar'
+          });
+        } else if (contexto === 'crear_cuenta' && redirigirA === 'CrearAnciano') {
+          navigation.replace('CrearAnciano', datosAnciano);
         } else {
-          // Creación de cuenta: ir a CrearAnciano
-          navigation.replace(redirigirA || 'CrearAnciano', datosAnciano || {});
+          navigation.replace('Principal');
         }
       } else {
-        Alert.alert('Código incorrecto', 'El código ingresado no coincide. Verifica e intenta nuevamente.');
+        Alert.alert('Código incorrecto', resultado.error || 'El código no es válido o ha expirado');
         setCaracteres(Array(TOTAL_DIGITS).fill(''));
         setCodigoIngresado('');
         inputRefs.current[0]?.focus();

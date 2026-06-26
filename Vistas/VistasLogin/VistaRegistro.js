@@ -291,14 +291,14 @@ export default function VistaRegistro() {
         return {
           titulo: 'Registro de Adulto Mayor',
           subtitulo: 'Ingresa el código familiar proporcionado por tu familiar administrador',
-          colorGradient: [COLORES.AZUL_CIELO_OSCURO, COLORES.AZUL_CIELO],
+          colorGradient: [COLORES.VERDE, '#A5D6A7'],
           version: 'Versión Adulto Mayor'
         };
       case 'familiar':
         return {
           titulo: 'Registro de Familiar',
           subtitulo: 'Crea tu cuenta para acompañar el cuidado de tu ser querido',
-          colorGradient: [COLORES.VERDE, '#A5D6A7'],
+          colorGradient: [COLORES.AZUL_CIELO_OSCURO, COLORES.AZUL_CIELO],
           version: 'Versión Familiar'
         };
       case 'profesional':
