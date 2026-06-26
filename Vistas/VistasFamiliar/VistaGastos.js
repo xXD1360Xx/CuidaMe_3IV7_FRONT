@@ -15,7 +15,7 @@ import {
   Dimensions
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import Icon from 'react-native-vector-icons/Ionicons';
+// Removida importación de Icon de expo-vector-icons
 import { servicioAPI } from '../../servicios/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PieChart, BarChart } from 'react-native-chart-kit';
@@ -60,11 +60,11 @@ export default function VistaGastos({ navigation }) {
   const [mesActual, setMesActual] = useState('');
   const [anioActual, setAnioActual] = useState('');
   const [esAdministrador, setEsAdministrador] = useState(false);
-  
+
   // Estados para modales
   const [modalTipo, setModalTipo] = useState(''); // 'agregar', 'editar', 'ver'
   const [gastoSeleccionado, setGastoSeleccionado] = useState(null);
-  
+
   // Estados para formularios
   const [formData, setFormData] = useState({
     descripcion: '',
@@ -84,14 +84,14 @@ export default function VistaGastos({ navigation }) {
 
   // Categorías de gastos
   const CATEGORIAS = [
-    { id: 'medicina', nombre: 'Medicinas', icono: 'medkit-outline', color: COLORES.ROJO_CLARO },
-    { id: 'cita_medica', nombre: 'Citas Médicas', icono: 'medical-outline', color: COLORES.EXITO },
-    { id: 'alimentos', nombre: 'Alimentos', icono: 'restaurant-outline', color: COLORES.AMARILLO_PLATANO },
-    { id: 'transporte', nombre: 'Transporte', icono: 'car-outline', color: COLORES.AZUL_CIELO },
-    { id: 'cuidador', nombre: 'Cuidador', icono: 'person-outline', color: COLORES.MORADO },
-    { id: 'equipamiento', nombre: 'Equipamiento', icono: 'cube-outline', color: COLORES.TURQUESA },
-    { id: 'servicios', nombre: 'Servicios', icono: 'construct-outline', color: COLORES.GRIS_OSCURO },
-    { id: 'otros', nombre: 'Otros', icono: 'ellipsis-horizontal-outline', color: COLORES.INDIGO }
+    { id: 'medicina', nombre: 'Medicinas', icono: '💊', color: COLORES.ROJO_CLARO },
+    { id: 'cita_medica', nombre: 'Citas Médicas', icono: '🩺', color: COLORES.EXITO },
+    { id: 'alimentos', nombre: 'Alimentos', icono: '🍎', color: COLORES.AMARILLO_PLATANO },
+    { id: 'transporte', nombre: 'Transporte', icono: '🚗', color: COLORES.AZUL_CIELO },
+    { id: 'cuidador', nombre: 'Cuidador', icono: '👤', color: COLORES.MORADO },
+    { id: 'equipamiento', nombre: 'Equipamiento', icono: '📦', color: COLORES.TURQUESA },
+    { id: 'servicios', nombre: 'Servicios', icono: '🛠️', color: COLORES.GRIS_OSCURO },
+    { id: 'otros', nombre: 'Otros', icono: '📌', color: COLORES.INDIGO }
   ];
 
   // Prioridades
@@ -105,7 +105,7 @@ export default function VistaGastos({ navigation }) {
   const cargarDatos = useCallback(async () => {
     try {
       setCargando(true);
-      
+
       // Obtener usuario actual
       const usuarioData = await AsyncStorage.getItem('usuarioInfo');
       if (usuarioData) {
@@ -113,50 +113,50 @@ export default function VistaGastos({ navigation }) {
         setUsuarioActual(usuario);
         setEsAdministrador(usuario.rol === 'familiar_administrador');
       }
-      
+
       // Obtener mes y año actual
       const ahora = new Date();
       setMesActual(ahora.toLocaleString('es-ES', { month: 'long' }));
       setAnioActual(ahora.getFullYear().toString());
-      
+
       // Cargar familiares
       const familiaresResponse = await servicioAPI.obtenerFamiliares();
       if (familiaresResponse.exito) {
         setFamiliares(familiaresResponse.familiares || []);
-        
+
         // Inicializar porcentajes equitativos
         const porcentajesIniciales = {};
         const porcentajeEquitativo = 100 / familiaresResponse.familiares.length;
-        
+
         familiaresResponse.familiares.forEach(familiar => {
           porcentajesIniciales[familiar.id] = porcentajeEquitativo.toFixed(2);
         });
-        
+
         setPorcentajes(porcentajesIniciales);
         setTotalPorcentaje(100);
       }
-      
+
       // Cargar gastos futuros
       const gastosFuturosResponse = await servicioAPI.obtenerGastosFuturos();
       if (gastosFuturosResponse.exito) {
         setGastosFuturos(gastosFuturosResponse.gastos || []);
       }
-      
+
       // Cargar gastos del mes actual
       const gastosMesResponse = await servicioAPI.obtenerGastosMesActual();
       if (gastosMesResponse.exito) {
         setGastosPasados(gastosMesResponse.gastos || []);
       }
-      
+
       // Cargar aportes familiares del mes
       const aportesResponse = await servicioAPI.obtenerAportesMesActual();
       if (aportesResponse.exito) {
         setAportesFamiliares(aportesResponse.aportes || []);
       }
-      
+
       // Calcular distribución sugerida
       calcularDistribucionSugerida();
-      
+
     } catch (error) {
       console.error('Error cargando datos de gastos:', error);
       Alert.alert('Error', 'No se pudieron cargar los datos');
@@ -177,14 +177,14 @@ export default function VistaGastos({ navigation }) {
 
   // Calcular distribución sugerida basada en gastos futuros
   const calcularDistribucionSugerida = () => {
-    const totalGastosFuturos = gastosFuturos.reduce((total, gasto) => 
+    const totalGastosFuturos = gastosFuturos.reduce((total, gasto) =>
       total + parseFloat(gasto.monto || 0), 0
     );
-    
+
     const distribucion = familiares.map(familiar => {
       const porcentaje = parseFloat(porcentajes[familiar.id] || 0);
       const montoSugerido = (totalGastosFuturos * porcentaje) / 100;
-      
+
       return {
         familiarId: familiar.id,
         nombre: familiar.nombre,
@@ -194,20 +194,20 @@ export default function VistaGastos({ navigation }) {
         aportado: 0 // Se calcularía luego
       };
     });
-    
+
     setDistribucionSugerida(distribucion);
   };
 
   // Calcular total de gastos futuros
   const calcularTotalGastosFuturos = () => {
-    return gastosFuturos.reduce((total, gasto) => 
+    return gastosFuturos.reduce((total, gasto) =>
       total + parseFloat(gasto.monto || 0), 0
     ).toFixed(2);
   };
 
   // Calcular total aportado este mes
   const calcularTotalAportado = () => {
-    return aportesFamiliares.reduce((total, aporte) => 
+    return aportesFamiliares.reduce((total, aporte) =>
       total + parseFloat(aporte.monto || 0), 0
     ).toFixed(2);
   };
@@ -277,7 +277,7 @@ export default function VistaGastos({ navigation }) {
   const abrirModalGasto = (tipo, gasto = null) => {
     setModalTipo(tipo);
     setGastoSeleccionado(gasto);
-    
+
     if (gasto) {
       setFormData({
         descripcion: gasto.descripcion || '',
@@ -305,7 +305,7 @@ export default function VistaGastos({ navigation }) {
         compartido: true
       });
     }
-    
+
     setModalVisible(true);
   };
 
@@ -317,12 +317,12 @@ export default function VistaGastos({ navigation }) {
         Alert.alert('Error', 'Debes ingresar la descripción');
         return;
       }
-      
+
       if (!formData.monto.trim() || parseFloat(formData.monto) <= 0) {
         Alert.alert('Error', 'Debes ingresar un monto válido');
         return;
       }
-      
+
       if (!formData.fecha.trim()) {
         Alert.alert('Error', 'Debes ingresar la fecha');
         return;
@@ -399,14 +399,14 @@ export default function VistaGastos({ navigation }) {
   // Actualizar porcentaje
   const actualizarPorcentaje = (familiarId, valor) => {
     const nuevoValor = Math.max(0, Math.min(100, parseFloat(valor) || 0));
-    
+
     const nuevosPorcentajes = { ...porcentajes };
     nuevosPorcentajes[familiarId] = nuevoValor.toFixed(2);
-    
+
     setPorcentajes(nuevosPorcentajes);
-    
+
     // Calcular nuevo total
-    const total = Object.values(nuevosPorcentajes).reduce((sum, val) => 
+    const total = Object.values(nuevosPorcentajes).reduce((sum, val) =>
       sum + parseFloat(val || 0), 0
     );
     setTotalPorcentaje(parseFloat(total.toFixed(2)));
@@ -435,11 +435,11 @@ export default function VistaGastos({ navigation }) {
   const restablecerEquitativo = () => {
     const porcentajesEquitativos = {};
     const porcentajeEquitativo = (100 / familiares.length).toFixed(2);
-    
+
     familiares.forEach(familiar => {
       porcentajesEquitativos[familiar.id] = porcentajeEquitativo;
     });
-    
+
     setPorcentajes(porcentajesEquitativos);
     setTotalPorcentaje(100);
   };
@@ -448,7 +448,7 @@ export default function VistaGastos({ navigation }) {
   const renderTarjetaGasto = ({ item }) => {
     const categoria = CATEGORIAS.find(c => c.id === item.categoria);
     const prioridad = PRIORIDADES.find(p => p.id === item.prioridad);
-    
+
     return (
       <TouchableOpacity
         style={styles.tarjetaGasto}
@@ -456,24 +456,24 @@ export default function VistaGastos({ navigation }) {
       >
         <View style={styles.encabezadoGasto}>
           <View style={[styles.iconoCategoria, { backgroundColor: `${categoria?.color}20` }]}>
-            <Icon name={categoria?.icono || 'help-outline'} size={20} color={categoria?.color} />
+            <Text style={{ fontSize: 20 }}>{categoria?.icono || '📌'}</Text>
           </View>
-          
+
           <View style={styles.infoPrincipalGasto}>
             <Text style={styles.descripcionGasto}>{item.descripcion}</Text>
             <Text style={styles.fechaGasto}>{formatearFecha(item.fecha)}</Text>
           </View>
-          
+
           <View style={styles.montoContainer}>
             <Text style={styles.montoGasto}>{formatearMoneda(item.monto)}</Text>
           </View>
         </View>
-        
+
         <View style={styles.detallesGasto}>
           <View style={[styles.badgePrioridad, { backgroundColor: prioridad?.color }]}>
             <Text style={styles.textoBadgePrioridad}>{prioridad?.nombre}</Text>
           </View>
-          
+
           <View style={[
             styles.badgeEstado,
             { backgroundColor: item.estado === 'pagado' ? COLORES.EXITO + '20' : COLORES.AMARILLO_PLATANO + '20' }
@@ -485,12 +485,12 @@ export default function VistaGastos({ navigation }) {
               {item.estado === 'pagado' ? '✓ Pagado' : '⏳ Pendiente'}
             </Text>
           </View>
-          
+
           {item.responsable && (
             <Text style={styles.textoResponsable}>Por: {item.responsable}</Text>
           )}
         </View>
-        
+
         <View style={styles.accionesGasto}>
           {item.estado !== 'pagado' && esAdministrador && (
             <TouchableOpacity
@@ -500,11 +500,11 @@ export default function VistaGastos({ navigation }) {
                 marcarComoPagado(item.id);
               }}
             >
-              <Icon name="checkmark-outline" size={16} color={COLORES.EXITO} />
+              <Text style={{ fontSize: 16 }}>✓</Text>
               <Text style={styles.textoBotonAccionGasto}>Marcar pagado</Text>
             </TouchableOpacity>
           )}
-          
+
           {esAdministrador && (
             <>
               <TouchableOpacity
@@ -514,10 +514,10 @@ export default function VistaGastos({ navigation }) {
                   abrirModalGasto('editar', item);
                 }}
               >
-                <Icon name="create-outline" size={16} color={COLORES.AZUL_CIELO_OSCURO} />
-                <Text style={styles.textoBotonAccionGasto}>Editar</Text>
+                 <Text style={{ fontSize: 14 }}>📝</Text>
+                 <Text style={styles.textoBotonAccionGasto}>Editar</Text>
               </TouchableOpacity>
-              
+
               <TouchableOpacity
                 style={styles.botonAccionGasto}
                 onPress={(e) => {
@@ -525,8 +525,8 @@ export default function VistaGastos({ navigation }) {
                   eliminarGasto(item.id);
                 }}
               >
-                <Icon name="trash-outline" size={16} color={COLORES.ERROR} />
-                <Text style={styles.textoBotonAccionGasto}>Eliminar</Text>
+                 <Text style={{ fontSize: 14 }}>🗑️</Text>
+                 <Text style={styles.textoBotonAccionGasto}>Eliminar</Text>
               </TouchableOpacity>
             </>
           )}
@@ -539,7 +539,7 @@ export default function VistaGastos({ navigation }) {
   const renderItemDistribucion = ({ item }) => {
     const aporte = calcularAportePorFamiliar(item.familiarId);
     const diferencia = item.montoSugerido - parseFloat(aporte);
-    
+
     return (
       <View style={styles.itemDistribucion}>
         <View style={styles.infoFamiliar}>
@@ -550,7 +550,7 @@ export default function VistaGastos({ navigation }) {
             {item.porcentaje}% del total
           </Text>
         </View>
-        
+
         <View style={styles.montosFamiliar}>
           <Text style={styles.montoAportado}>
             Aportado: {formatearMoneda(aporte)}
@@ -593,22 +593,18 @@ export default function VistaGastos({ navigation }) {
         {/* Encabezado */}
         <View style={styles.encabezado}>
           <TouchableOpacity style={styles.botonAtras} onPress={() => navigation.goBack()}>
-            <Icon name="arrow-back-outline" size={28} color={COLORES.TEXTO_OSCURO} />
+            <Text style={{ fontSize: 24 }}>⬅️</Text>
           </TouchableOpacity>
-          
+
           <View style={styles.tituloContainer}>
             <Text style={styles.tituloPrincipal}>Gestión de Gastos</Text>
             <Text style={styles.subtituloPrincipal}>
               {mesActual} {anioActual} • {gastosFuturos.length} gasto(s)
             </Text>
           </View>
-          
+
           <TouchableOpacity style={styles.botonRefrescar} onPress={onRefresh} disabled={refrescando}>
-            <Icon 
-              name="refresh-outline" 
-              size={24} 
-              color={refrescando ? COLORES.GRIS_OSCURO : COLORES.TEXTO_OSCURO} 
-            />
+            <Text style={{ fontSize: 22, opacity: refrescando ? 0.5 : 1 }}>🔄</Text>
           </TouchableOpacity>
         </View>
 
@@ -626,37 +622,36 @@ export default function VistaGastos({ navigation }) {
           {/* Resumen Financiero */}
           <View style={styles.seccion}>
             <Text style={styles.tituloSeccion}>Resumen Financiero</Text>
-            
+
             <View style={styles.contenedorResumen}>
               <View style={styles.itemResumen}>
                 <View style={[styles.iconoResumen, { backgroundColor: COLORES.ROJO_CLARO + '20' }]}>
-                  <Icon name="trending-up-outline" size={24} color={COLORES.ROJO_CLARO} />
+                  <Text style={{ fontSize: 24 }}>📈</Text>
                 </View>
                 <Text style={styles.valorResumen}>{formatearMoneda(totalGastosFuturos)}</Text>
                 <Text style={styles.labelResumen}>Gastos Futuros</Text>
               </View>
-              
+
               <View style={styles.separadorResumen} />
-              
+
               <View style={styles.itemResumen}>
                 <View style={[styles.iconoResumen, { backgroundColor: COLORES.EXITO + '20' }]}>
-                  <Icon name="wallet-outline" size={24} color={COLORES.EXITO} />
+                  <Text style={{ fontSize: 24 }}>💳</Text>
                 </View>
                 <Text style={styles.valorResumen}>{formatearMoneda(totalAportado)}</Text>
                 <Text style={styles.labelResumen}>Aportado</Text>
               </View>
-              
+
               <View style={styles.separadorResumen} />
-              
+
               <View style={styles.itemResumen}>
-                <View style={[styles.iconoResumen, { backgroundColor: 
-                  parseFloat(saldoPendiente) >= 0 ? COLORES.AMARILLO_PLATANO + '20' : COLORES.EXITO + '20' 
+                <View style={[styles.iconoResumen, {
+                  backgroundColor:
+                    parseFloat(saldoPendiente) >= 0 ? COLORES.AMARILLO_PLATANO + '20' : COLORES.EXITO + '20'
                 }]}>
-                  <Icon 
-                    name={parseFloat(saldoPendiente) >= 0 ? "alert-outline" : "checkmark-outline"} 
-                    size={24} 
-                    color={parseFloat(saldoPendiente) >= 0 ? COLORES.AMARILLO_PLATANO : COLORES.EXITO} 
-                  />
+                  <Text style={{ fontSize: 24 }}>
+                    {parseFloat(saldoPendiente) >= 0 ? '⚠️' : '✓'}
+                  </Text>
                 </View>
                 <Text style={[
                   styles.valorResumen,
@@ -675,19 +670,19 @@ export default function VistaGastos({ navigation }) {
           {datosGrafico.length > 0 && (
             <View style={styles.seccion}>
               <View style={styles.encabezadoSeccion}>
-                <Icon name="bar-chart-outline" size={24} color={COLORES.MORADO} />
+                <Text style={{ fontSize: 24, marginRight: 8 }}>📊</Text>
                 <Text style={styles.tituloSeccion}>Aportes por Familiar</Text>
-                
+
                 {esAdministrador && (
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={styles.botonConfig}
                     onPress={() => setModalConfigVisible(true)}
                   >
-                    <Icon name="settings-outline" size={20} color={COLORES.AZUL_CIELO_OSCURO} />
+                    <Text style={{ fontSize: 18 }}>⚙️</Text>
                   </TouchableOpacity>
                 )}
               </View>
-              
+
               <View style={styles.contenedorGrafico}>
                 {/* Eje Y - Montos */}
                 <View style={styles.ejeY}>
@@ -697,21 +692,21 @@ export default function VistaGastos({ navigation }) {
                     </Text>
                   ))}
                 </View>
-                
+
                 {/* Barras */}
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   <View style={styles.contenedorBarras}>
                     {datosGrafico.map((item, index) => {
                       const alturaMaxima = 200;
                       const altura = (item.aporte / 800) * alturaMaxima;
-                      
+
                       return (
                         <View key={index} style={styles.barraContainer}>
-                          <View style={[styles.barra, { 
+                          <View style={[styles.barra, {
                             height: Math.max(10, altura),
-                            backgroundColor: item.color 
+                            backgroundColor: item.color
                           }]} />
-                          
+
                           <View style={styles.etiquetaBarra}>
                             <Text style={styles.nombreBarra} numberOfLines={2}>
                               {item.nombre}. {item.apellido}
@@ -726,7 +721,7 @@ export default function VistaGastos({ navigation }) {
                   </View>
                 </ScrollView>
               </View>
-              
+
               <Text style={styles.textoAyudaGrafico}>
                 💡 Comparativa de aportes este mes. Toca configurar para ajustar porcentajes.
               </Text>
@@ -737,13 +732,13 @@ export default function VistaGastos({ navigation }) {
           {distribucionSugerida.length > 0 && (
             <View style={styles.seccion}>
               <View style={styles.encabezadoSeccion}>
-                <Icon name="calculator-outline" size={24} color={COLORES.TURQUESA} />
+                <Text style={{ fontSize: 24, marginRight: 8 }}>🧮</Text>
                 <Text style={styles.tituloSeccion}>Distribución Sugerida</Text>
                 <Text style={styles.totalSugerido}>
                   Total: {formatearMoneda(totalGastosFuturos)}
                 </Text>
               </View>
-              
+
               <View style={styles.contenedorDistribucion}>
                 <FlatList
                   data={distribucionSugerida}
@@ -758,19 +753,19 @@ export default function VistaGastos({ navigation }) {
           {/* Gastos Futuros */}
           <View style={styles.seccion}>
             <View style={styles.encabezadoSeccion}>
-              <Icon name="calendar-outline" size={24} color={COLORES.NARANJA} />
+              <Text style={{ fontSize: 24, marginRight: 8 }}>📅</Text>
               <Text style={styles.tituloSeccion}>Gastos Futuros</Text>
-              
+
               {esAdministrador && (
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.botonAgregar}
                   onPress={() => abrirModalGasto('agregar')}
                 >
-                  <Icon name="add-outline" size={22} color={COLORES.AZUL_CIELO_OSCURO} />
+                  <Text style={{ fontSize: 22 }}>➕</Text>
                 </TouchableOpacity>
               )}
             </View>
-            
+
             {gastosFuturos.length > 0 ? (
               <FlatList
                 data={gastosFuturos}
@@ -780,11 +775,11 @@ export default function VistaGastos({ navigation }) {
               />
             ) : (
               <View style={styles.sinGastos}>
-                <Icon name="calendar-outline" size={60} color={COLORES.GRIS_MEDIO} />
+                <Text style={{ fontSize: 60, marginBottom: 10 }}>📅</Text>
                 <Text style={styles.textoSinGastos}>No hay gastos futuros</Text>
                 <Text style={styles.subtextoSinGastos}>
-                  {esAdministrador 
-                    ? 'Agrega gastos programados' 
+                  {esAdministrador
+                    ? 'Agrega gastos programados'
                     : 'El administrador debe agregar gastos'}
                 </Text>
               </View>
@@ -795,38 +790,38 @@ export default function VistaGastos({ navigation }) {
           {gastosPasados.length > 0 && (
             <View style={styles.seccion}>
               <View style={styles.encabezadoSeccion}>
-                <Icon name="time-outline" size={24} color={COLORES.GRIS_OSCURO} />
+                <Text style={{ fontSize: 24, marginRight: 8 }}>🕒</Text>
                 <Text style={styles.tituloSeccion}>Gastos Recientes</Text>
               </View>
-              
+
               <View style={styles.contenedorHistorial}>
                 {gastosPasados.slice(0, 3).map((gasto, index) => {
                   const categoria = CATEGORIAS.find(c => c.id === gasto.categoria);
-                  
+
                   return (
-                    <TouchableOpacity 
-                      key={gasto.id} 
+                    <TouchableOpacity
+                      key={gasto.id}
                       style={styles.itemHistorial}
                       onPress={() => abrirModalGasto('ver', gasto)}
                     >
                       <View style={[styles.iconoHistorial, { backgroundColor: `${categoria?.color}20` }]}>
-                        <Icon name={categoria?.icono || 'help-outline'} size={16} color={categoria?.color} />
+                        <Text style={{ fontSize: 16 }}>{categoria?.icono || '📌'}</Text>
                       </View>
-                      
+
                       <View style={styles.infoHistorial}>
                         <Text style={styles.descripcionHistorial}>{gasto.descripcion}</Text>
                         <Text style={styles.fechaHistorial}>{formatearFecha(gasto.fecha)}</Text>
                       </View>
-                      
+
                       <Text style={styles.montoHistorial}>{formatearMoneda(gasto.monto)}</Text>
-                      
-                      <Icon name="chevron-forward-outline" size={18} color={COLORES.GRIS_MEDIO} />
+
+                      <Text style={{ fontSize: 16 }}>▶️</Text>
                     </TouchableOpacity>
                   );
                 })}
-                
+
                 {gastosPasados.length > 3 && (
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={styles.botonVerMas}
                     onPress={() => navigation.navigate('HistorialGastos')}
                   >
@@ -843,42 +838,42 @@ export default function VistaGastos({ navigation }) {
           {esAdministrador && (
             <View style={styles.seccion}>
               <View style={styles.contenedorAccionesRapidas}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.accionRapida}
                   onPress={() => abrirModalGasto('agregar')}
                 >
                   <View style={[styles.iconoAccion, { backgroundColor: COLORES.EXITO + '20' }]}>
-                    <Icon name="add-outline" size={24} color={COLORES.EXITO} />
+                    <Text style={{ fontSize: 24 }}>➕</Text>
                   </View>
                   <Text style={styles.textoAccionRapida}>Agregar gasto</Text>
                 </TouchableOpacity>
-                
-                <TouchableOpacity 
+
+                <TouchableOpacity
                   style={styles.accionRapida}
                   onPress={() => setModalConfigVisible(true)}
                 >
                   <View style={[styles.iconoAccion, { backgroundColor: COLORES.AZUL_CIELO + '20' }]}>
-                    <Icon name="settings-outline" size={24} color={COLORES.AZUL_CIELO} />
+                    <Text style={{ fontSize: 24 }}>⚙️</Text>
                   </View>
                   <Text style={styles.textoAccionRapida}>Configurar %</Text>
                 </TouchableOpacity>
-                
-                <TouchableOpacity 
+
+                <TouchableOpacity
                   style={styles.accionRapida}
                   onPress={() => navigation.navigate('HistorialGastos')}
                 >
                   <View style={[styles.iconoAccion, { backgroundColor: COLORES.MORADO + '20' }]}>
-                    <Icon name="time-outline" size={24} color={COLORES.MORADO} />
+                    <Text style={{ fontSize: 24 }}>🕒</Text>
                   </View>
                   <Text style={styles.textoAccionRapida}>Ver historial</Text>
                 </TouchableOpacity>
-                
-                <TouchableOpacity 
+
+                <TouchableOpacity
                   style={styles.accionRapida}
                   onPress={() => navigation.navigate('GenerarReporteGastos')}
                 >
                   <View style={[styles.iconoAccion, { backgroundColor: COLORES.TURQUESA + '20' }]}>
-                    <Icon name="document-outline" size={24} color={COLORES.TURQUESA} />
+                    <Text style={{ fontSize: 24 }}>📄</Text>
                   </View>
                   <Text style={styles.textoAccionRapida}>Generar reporte</Text>
                 </TouchableOpacity>
@@ -890,7 +885,7 @@ export default function VistaGastos({ navigation }) {
         {/* Botón flotante para agregar gasto */}
         {esAdministrador && (
           <TouchableOpacity style={styles.botonFlotante} onPress={() => abrirModalGasto('agregar')}>
-            <Icon name="add-outline" size={30} color={COLORES.BLANCO} />
+            <Text style={{ fontSize: 28, color: COLORES.BLANCO }}>➕</Text>
           </TouchableOpacity>
         )}
       </SafeAreaView>
@@ -907,10 +902,10 @@ export default function VistaGastos({ navigation }) {
             <View style={styles.modalEncabezado}>
               <Text style={styles.modalTitulo}>
                 {modalTipo === 'ver' ? 'Detalles del Gasto' :
-                 modalTipo === 'editar' ? 'Editar Gasto' : 'Nuevo Gasto'}
+                  modalTipo === 'editar' ? 'Editar Gasto' : 'Nuevo Gasto'}
               </Text>
               <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <Icon name="close-outline" size={24} color={COLORES.TEXTO_OSCURO} />
+                <Text style={{ fontSize: 20 }}>❌</Text>
               </TouchableOpacity>
             </View>
 
@@ -922,24 +917,24 @@ export default function VistaGastos({ navigation }) {
                     <Text style={styles.labelModal}>Descripción:</Text>
                     <Text style={styles.valorModal}>{gastoSeleccionado?.descripcion}</Text>
                   </View>
-                  
+
                   <View style={styles.infoItemModal}>
                     <Text style={styles.labelModal}>Monto:</Text>
                     <Text style={styles.valorModal}>{formatearMoneda(gastoSeleccionado?.monto)}</Text>
                   </View>
-                  
+
                   <View style={styles.infoItemModal}>
                     <Text style={styles.labelModal}>Fecha:</Text>
                     <Text style={styles.valorModal}>{formatearFecha(gastoSeleccionado?.fecha)}</Text>
                   </View>
-                  
+
                   <View style={styles.infoItemModal}>
                     <Text style={styles.labelModal}>Categoría:</Text>
                     <Text style={styles.valorModal}>
                       {CATEGORIAS.find(c => c.id === gastoSeleccionado?.categoria)?.nombre}
                     </Text>
                   </View>
-                  
+
                   <View style={styles.infoItemModal}>
                     <Text style={styles.labelModal}>Prioridad:</Text>
                     <View style={[
@@ -954,7 +949,7 @@ export default function VistaGastos({ navigation }) {
                       </Text>
                     </View>
                   </View>
-                  
+
                   <View style={styles.infoItemModal}>
                     <Text style={styles.labelModal}>Estado:</Text>
                     <View style={[
@@ -969,14 +964,14 @@ export default function VistaGastos({ navigation }) {
                       </Text>
                     </View>
                   </View>
-                  
+
                   {gastoSeleccionado?.notas && (
                     <View style={styles.infoItemModal}>
                       <Text style={styles.labelModal}>Notas:</Text>
                       <Text style={styles.valorModal}>{gastoSeleccionado.notas}</Text>
                     </View>
                   )}
-                  
+
                   {gastoSeleccionado?.responsable && (
                     <View style={styles.infoItemModal}>
                       <Text style={styles.labelModal}>Responsable:</Text>
@@ -991,7 +986,7 @@ export default function VistaGastos({ navigation }) {
                   <TextInput
                     style={styles.input}
                     value={formData.descripcion}
-                    onChangeText={(text) => setFormData({...formData, descripcion: text})}
+                    onChangeText={(text) => setFormData({ ...formData, descripcion: text })}
                     placeholder="Ej: Medicina para la presión, Cita con cardiólogo..."
                     placeholderTextColor={COLORES.GRIS_MEDIO}
                   />
@@ -1000,7 +995,7 @@ export default function VistaGastos({ navigation }) {
                   <TextInput
                     style={styles.input}
                     value={formData.monto}
-                    onChangeText={(text) => setFormData({...formData, monto: text})}
+                    onChangeText={(text) => setFormData({ ...formData, monto: text })}
                     placeholder="0.00"
                     keyboardType="decimal-pad"
                     placeholderTextColor={COLORES.GRIS_MEDIO}
@@ -1010,7 +1005,7 @@ export default function VistaGastos({ navigation }) {
                   <TextInput
                     style={styles.input}
                     value={formData.fecha}
-                    onChangeText={(text) => setFormData({...formData, fecha: text})}
+                    onChangeText={(text) => setFormData({ ...formData, fecha: text })}
                     placeholder="YYYY-MM-DD"
                     placeholderTextColor={COLORES.GRIS_MEDIO}
                   />
@@ -1024,13 +1019,11 @@ export default function VistaGastos({ navigation }) {
                           styles.opcionCategoria,
                           formData.categoria === cat.id && styles.opcionCategoriaSeleccionada
                         ]}
-                        onPress={() => setFormData({...formData, categoria: cat.id})}
+                        onPress={() => setFormData({ ...formData, categoria: cat.id })}
                       >
-                        <Icon 
-                          name={cat.icono} 
-                          size={18} 
-                          color={formData.categoria === cat.id ? COLORES.BLANCO : cat.color} 
-                        />
+                        <Text style={{ fontSize: 18, marginRight: 4 }}>
+                          {cat.icono}
+                        </Text>
                         <Text style={[
                           styles.textoOpcionCategoria,
                           formData.categoria === cat.id && styles.textoOpcionCategoriaSeleccionada
@@ -1050,7 +1043,7 @@ export default function VistaGastos({ navigation }) {
                           styles.opcionPrioridad,
                           formData.prioridad === pri.id && { backgroundColor: pri.color }
                         ]}
-                        onPress={() => setFormData({...formData, prioridad: pri.id})}
+                        onPress={() => setFormData({ ...formData, prioridad: pri.id })}
                       >
                         <Text style={[
                           styles.textoOpcionPrioridad,
@@ -1069,7 +1062,7 @@ export default function VistaGastos({ navigation }) {
                         styles.opcionEstado,
                         formData.estado === 'pendiente' && { backgroundColor: COLORES.AMARILLO_PLATANO }
                       ]}
-                      onPress={() => setFormData({...formData, estado: 'pendiente'})}
+                      onPress={() => setFormData({ ...formData, estado: 'pendiente' })}
                     >
                       <Text style={[
                         styles.textoOpcionEstado,
@@ -1078,13 +1071,13 @@ export default function VistaGastos({ navigation }) {
                         Pendiente
                       </Text>
                     </TouchableOpacity>
-                    
+
                     <TouchableOpacity
                       style={[
                         styles.opcionEstado,
                         formData.estado === 'pagado' && { backgroundColor: COLORES.EXITO }
                       ]}
-                      onPress={() => setFormData({...formData, estado: 'pagado'})}
+                      onPress={() => setFormData({ ...formData, estado: 'pagado' })}
                     >
                       <Text style={[
                         styles.textoOpcionEstado,
@@ -1099,13 +1092,11 @@ export default function VistaGastos({ navigation }) {
                   <View style={styles.opcionCompartido}>
                     <TouchableOpacity
                       style={styles.botonCompartido}
-                      onPress={() => setFormData({...formData, compartido: !formData.compartido})}
+                      onPress={() => setFormData({ ...formData, compartido: !formData.compartido })}
                     >
-                      <Icon 
-                        name={formData.compartido ? "checkmark-circle" : "ellipse-outline"} 
-                        size={24} 
-                        color={formData.compartido ? COLORES.EXITO : COLORES.GRIS_MEDIO} 
-                      />
+                      <Text style={{ fontSize: 24, marginRight: 6 }}>
+                        {formData.compartido ? '✅' : '⚪'}
+                      </Text>
                       <Text style={styles.textoCompartido}>
                         {formData.compartido ? 'Sí, compartir gasto' : 'No, gasto individual'}
                       </Text>
@@ -1116,7 +1107,7 @@ export default function VistaGastos({ navigation }) {
                   <TextInput
                     style={[styles.input, styles.textArea]}
                     value={formData.notas}
-                    onChangeText={(text) => setFormData({...formData, notas: text})}
+                    onChangeText={(text) => setFormData({ ...formData, notas: text })}
                     placeholder="Detalles adicionales sobre este gasto..."
                     multiline
                     numberOfLines={4}
@@ -1129,16 +1120,16 @@ export default function VistaGastos({ navigation }) {
             <View style={styles.modalBotones}>
               {modalTipo === 'ver' ? (
                 <>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={styles.botonModalSecundario}
                     onPress={() => setModalVisible(false)}
                   >
                     <Text style={styles.textoBotonModalSecundario}>Cerrar</Text>
                   </TouchableOpacity>
-                  
+
                   {esAdministrador && (
                     <>
-                      <TouchableOpacity 
+                      <TouchableOpacity
                         style={styles.botonModalPrincipal}
                         onPress={() => {
                           setModalVisible(false);
@@ -1147,9 +1138,9 @@ export default function VistaGastos({ navigation }) {
                       >
                         <Text style={styles.textoBotonModalPrincipal}>Editar</Text>
                       </TouchableOpacity>
-                      
+
                       {gastoSeleccionado?.estado !== 'pagado' && (
-                        <TouchableOpacity 
+                        <TouchableOpacity
                           style={[styles.botonModalAccion, { backgroundColor: COLORES.EXITO }]}
                           onPress={() => {
                             setModalVisible(false);
@@ -1164,15 +1155,15 @@ export default function VistaGastos({ navigation }) {
                 </>
               ) : (
                 <>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={styles.botonModalCancelar}
                     onPress={() => setModalVisible(false)}
                   >
                     <Text style={styles.textoBotonModalCancelar}>Cancelar</Text>
                   </TouchableOpacity>
-                  
+
                   {modalTipo === 'editar' && esAdministrador && (
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       style={[styles.botonModalAccion, { backgroundColor: COLORES.ERROR }]}
                       onPress={() => {
                         setModalVisible(false);
@@ -1182,8 +1173,8 @@ export default function VistaGastos({ navigation }) {
                       <Text style={styles.textoBotonModalAccion}>Eliminar</Text>
                     </TouchableOpacity>
                   )}
-                  
-                  <TouchableOpacity 
+
+                  <TouchableOpacity
                     style={[styles.botonModalAccion, { backgroundColor: COLORES.EXITO }]}
                     onPress={guardarGasto}
                   >
@@ -1210,13 +1201,13 @@ export default function VistaGastos({ navigation }) {
             <View style={styles.modalEncabezado}>
               <Text style={styles.modalTitulo}>Configurar Porcentajes</Text>
               <TouchableOpacity onPress={() => setModalConfigVisible(false)}>
-                <Icon name="close-outline" size={24} color={COLORES.TEXTO_OSCURO} />
+                <Text style={{ fontSize: 20 }}>❌</Text>
               </TouchableOpacity>
             </View>
 
             <ScrollView style={styles.modalFormulario}>
               <View style={styles.infoConfiguracion}>
-                <Icon name="calculator-outline" size={40} color={COLORES.TURQUESA} />
+                <Text style={{ fontSize: 40, marginBottom: 10 }}>🧮</Text>
                 <Text style={styles.textoInfoConfig}>
                   Distribuye el porcentaje que cada familiar aportará a los gastos compartidos
                 </Text>
@@ -1254,7 +1245,7 @@ export default function VistaGastos({ navigation }) {
                       </Text>
                     </View>
                   </View>
-                  
+
                   <View style={styles.controlPorcentaje}>
                     <TouchableOpacity
                       style={styles.botonMenos}
@@ -1263,9 +1254,9 @@ export default function VistaGastos({ navigation }) {
                         actualizarPorcentaje(familiar.id, actual - 5);
                       }}
                     >
-                      <Icon name="remove-outline" size={18} color={COLORES.GRIS_OSCURO} />
+                      <Text style={{ fontSize: 18 }}>➖</Text>
                     </TouchableOpacity>
-                    
+
                     <View style={styles.inputPorcentajeContainer}>
                       <TextInput
                         style={styles.inputPorcentaje}
@@ -1276,7 +1267,7 @@ export default function VistaGastos({ navigation }) {
                       />
                       <Text style={styles.textoPorcentaje}>%</Text>
                     </View>
-                    
+
                     <TouchableOpacity
                       style={styles.botonMas}
                       onPress={() => {
@@ -1284,10 +1275,10 @@ export default function VistaGastos({ navigation }) {
                         actualizarPorcentaje(familiar.id, actual + 5);
                       }}
                     >
-                      <Icon name="add-outline" size={18} color={COLORES.GRIS_OSCURO} />
+                      <Text style={{ fontSize: 18 }}>➕</Text>
                     </TouchableOpacity>
                   </View>
-                  
+
                   <View style={styles.montoCalculado}>
                     <Text style={styles.textoMontoCalculado}>
                       {formatearMoneda((parseFloat(calcularTotalGastosFuturos()) * parseFloat(porcentajes[familiar.id] || 0)) / 100)}
@@ -1296,29 +1287,29 @@ export default function VistaGastos({ navigation }) {
                   </View>
                 </View>
               ))}
-              
+
               <View style={styles.botonesConfig}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.botonRestablecer}
                   onPress={restablecerEquitativo}
                 >
-                  <Icon name="refresh-outline" size={18} color={COLORES.AZUL_CIELO_OSCURO} />
+                  <Text style={{ fontSize: 18, marginRight: 6 }}>🔄</Text>
                   <Text style={styles.textoBotonRestablecer}>Equitativo</Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>
 
             <View style={styles.modalBotones}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.botonModalCancelar}
                 onPress={() => setModalConfigVisible(false)}
               >
                 <Text style={styles.textoBotonModalCancelar}>Cancelar</Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.botonModalAccion, { 
-                  backgroundColor: totalPorcentaje === 100 ? COLORES.EXITO : COLORES.GRIS_MEDIO 
+
+              <TouchableOpacity
+                style={[styles.botonModalAccion, {
+                  backgroundColor: totalPorcentaje === 100 ? COLORES.EXITO : COLORES.GRIS_MEDIO
                 }]}
                 onPress={guardarPorcentajes}
                 disabled={totalPorcentaje !== 100}
@@ -1350,7 +1341,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
     fontSize: 16,
   },
-  
+
   // Encabezado
   encabezado: {
     flexDirection: 'row',
@@ -1382,13 +1373,13 @@ const styles = StyleSheet.create({
   botonRefrescar: {
     padding: 8,
   },
-  
+
   // Contenido
   contenedorScroll: {
     padding: 20,
     paddingBottom: 80,
   },
-  
+
   // Secciones
   seccion: {
     marginBottom: 25,
@@ -1411,7 +1402,7 @@ const styles = StyleSheet.create({
   botonAgregar: {
     padding: 8,
   },
-  
+
   // Resumen Financiero
   contenedorResumen: {
     flexDirection: 'row',
@@ -1452,7 +1443,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORES.GRIS_CLARO,
     marginHorizontal: 10,
   },
-  
+
   // Gráfico de Aportes
   contenedorGrafico: {
     flexDirection: 'row',
@@ -1520,7 +1511,7 @@ const styles = StyleSheet.create({
     color: COLORES.TEXTO_OSCURO,
     fontWeight: '600',
   },
-  
+
   // Distribución Sugerida
   contenedorDistribucion: {
     backgroundColor: COLORES.BLANCO,
@@ -1569,7 +1560,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
   },
-  
+
   // Tarjeta de gasto
   tarjetaGasto: {
     backgroundColor: COLORES.BLANCO,
@@ -1664,7 +1655,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginLeft: 6,
   },
-  
+
   // Sin gastos
   sinGastos: {
     backgroundColor: COLORES.BLANCO,
@@ -1685,7 +1676,7 @@ const styles = StyleSheet.create({
     color: COLORES.GRIS_MEDIO,
     textAlign: 'center',
   },
-  
+
   // Historial
   contenedorHistorial: {
     backgroundColor: COLORES.BLANCO,
@@ -1743,7 +1734,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
-  
+
   // Acciones rápidas
   contenedorAccionesRapidas: {
     flexDirection: 'row',
@@ -1777,7 +1768,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontWeight: '500',
   },
-  
+
   // Botón flotante
   botonFlotante: {
     position: 'absolute',
@@ -1795,7 +1786,7 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 8,
   },
-  
+
   // Modal
   modalFondo: {
     flex: 1,
@@ -1825,7 +1816,7 @@ const styles = StyleSheet.create({
     padding: 20,
     maxHeight: Dimensions.get('window').height * 0.6,
   },
-  
+
   // Vista información en modal
   vistaInformacion: {
     padding: 10,
@@ -1855,7 +1846,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
   },
-  
+
   // Formulario modal
   modalLabel: {
     fontSize: 14,
@@ -1877,7 +1868,7 @@ const styles = StyleSheet.create({
     minHeight: 100,
     textAlignVertical: 'top',
   },
-  
+
   // Opciones de categoría
   categoriasContainer: {
     flexDirection: 'row',
@@ -1906,7 +1897,7 @@ const styles = StyleSheet.create({
     color: COLORES.BLANCO,
     fontWeight: 'bold',
   },
-  
+
   // Opciones de prioridad
   prioridadesContainer: {
     flexDirection: 'row',
@@ -1930,7 +1921,7 @@ const styles = StyleSheet.create({
     color: COLORES.BLANCO,
     fontWeight: 'bold',
   },
-  
+
   // Opciones de estado
   estadosContainer: {
     flexDirection: 'row',
@@ -1953,7 +1944,7 @@ const styles = StyleSheet.create({
     color: COLORES.BLANCO,
     fontWeight: 'bold',
   },
-  
+
   // Opción compartido
   opcionCompartido: {
     marginBottom: 15,
@@ -1968,7 +1959,7 @@ const styles = StyleSheet.create({
     color: COLORES.TEXTO_OSCURO,
     marginLeft: 10,
   },
-  
+
   // Botones del modal
   modalBotones: {
     flexDirection: 'row',
@@ -2027,7 +2018,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORES.BLANCO,
   },
-  
+
   // Configuración de porcentajes
   infoConfiguracion: {
     alignItems: 'center',
@@ -2065,7 +2056,7 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'right',
   },
-  
+
   // Item de configuración de porcentaje
   itemConfigPorcentaje: {
     flexDirection: 'row',
@@ -2162,7 +2153,7 @@ const styles = StyleSheet.create({
     color: COLORES.GRIS_OSCURO,
     marginTop: 2,
   },
-  
+
   // Botones configuración
   botonesConfig: {
     marginTop: 20,

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
+  Alert,
   ScrollView,
   RefreshControl,
   SafeAreaView,
@@ -14,7 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { servicioAPI } from '../../servicios/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { useAuth } from '../../AppNavegacion';
 
 // Colores de CuidaMe
 const COLORES = {
@@ -38,6 +39,8 @@ export default function PantallaPrincipal({ navigation }) {
   const [usuarioInfo, setUsuarioInfo] = useState(null);
   const [adultoMayorInfo, setAdultoMayorInfo] = useState(null);
   const [medicinasHoy, setMedicinasHoy] = useState([]);
+  const auth = useAuth();
+
   const [eventosSemana, setEventosSemana] = useState([]);
   const [gastosFuturos, setGastosFuturos] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -180,6 +183,26 @@ export default function PantallaPrincipal({ navigation }) {
     navigation.navigate(destino);
   };
 
+
+  const cerrarSesion = async () => {
+    Alert.alert(
+      'Cerrar sesión',
+      '¿Estás seguro de que quieres cerrar sesión?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Cerrar sesión',
+          style: 'destructive',
+          onPress: async () => {
+            await auth.cerrarSesion();
+            navigation.replace('Login');
+          }
+        }
+      ]
+    );
+  };
+
+
   // Marcar medicina como tomada
   const marcarMedicinaTomada = async (medicinaId) => {
     try {
@@ -244,9 +267,9 @@ export default function PantallaPrincipal({ navigation }) {
           <ScrollView style={styles.listaMenu}>
             <TouchableOpacity
               style={styles.itemMenu}
-              onPress={() => navegarA('InformacionGeneral')}
+              onPress={() => navegarA('InfoAnciano')}
             >
-              <Icon name="person-outline" size={22} color={COLORES.TEXTO_OSCURO} />
+              <Text style={{ fontSize: 22, marginRight: 10 }}>👤</Text>
               <Text style={styles.textoItemMenu}>Información General</Text>
             </TouchableOpacity>
 
@@ -254,7 +277,7 @@ export default function PantallaPrincipal({ navigation }) {
               style={styles.itemMenu}
               onPress={() => navegarA('Medicinas')}
             >
-              <Icon name="medical-outline" size={22} color={COLORES.TEXTO_OSCURO} />
+              <Text style={{ fontSize: 22, marginRight: 10 }}>💊</Text>
               <Text style={styles.textoItemMenu}>Medicinas</Text>
             </TouchableOpacity>
 
@@ -262,7 +285,7 @@ export default function PantallaPrincipal({ navigation }) {
               style={styles.itemMenu}
               onPress={() => navegarA('Horario')}
             >
-              <Icon name="time-outline" size={22} color={COLORES.TEXTO_OSCURO} />
+              <Text style={{ fontSize: 22, marginRight: 10 }}>🕒</Text>
               <Text style={styles.textoItemMenu}>Horario</Text>
             </TouchableOpacity>
 
@@ -270,7 +293,7 @@ export default function PantallaPrincipal({ navigation }) {
               style={styles.itemMenu}
               onPress={() => navegarA('Calendario')}
             >
-              <Icon name="calendar-outline" size={22} color={COLORES.TEXTO_OSCURO} />
+              <Text style={{ fontSize: 22, marginRight: 10 }}>📅</Text>
               <Text style={styles.textoItemMenu}>Calendario</Text>
             </TouchableOpacity>
 
@@ -278,7 +301,7 @@ export default function PantallaPrincipal({ navigation }) {
               style={styles.itemMenu}
               onPress={() => navegarA('Gastos')}
             >
-              <Icon name="cash-outline" size={22} color={COLORES.TEXTO_OSCURO} />
+              <Text style={{ fontSize: 22, marginRight: 10 }}>💰</Text>
               <Text style={styles.textoItemMenu}>Gastos</Text>
             </TouchableOpacity>
 
@@ -286,7 +309,7 @@ export default function PantallaPrincipal({ navigation }) {
               style={styles.itemMenu}
               onPress={() => navegarA('Familia')}
             >
-              <Icon name="people-outline" size={22} color={COLORES.TEXTO_OSCURO} />
+              <Text style={{ fontSize: 22, marginRight: 10 }}>👥</Text>
               <Text style={styles.textoItemMenu}>Familia</Text>
             </TouchableOpacity>
 
@@ -294,8 +317,17 @@ export default function PantallaPrincipal({ navigation }) {
               style={styles.itemMenu}
               onPress={() => navegarA('Configuracion')}
             >
-              <Icon name="settings-outline" size={22} color={COLORES.TEXTO_OSCURO} />
+              <Text style={{ fontSize: 22, marginRight: 10 }}>⚙️</Text>
               <Text style={styles.textoItemMenu}>Configuración</Text>
+            </TouchableOpacity>
+
+
+            <TouchableOpacity
+              style={styles.itemMenu}
+              onPress={cerrarSesion}
+            >
+              <Text style={{ fontSize: 22, marginRight: 10 }}>🚪</Text>
+              <Text style={[styles.textoItemMenu, { color: COLORES.ERROR }]}>Cerrar sesión</Text>
             </TouchableOpacity>
           </ScrollView>
 
@@ -328,7 +360,7 @@ export default function PantallaPrincipal({ navigation }) {
               style={styles.botonMenu}
               onPress={() => setMenuAbierto(!menuAbierto)}
             >
-              <Icon name={menuAbierto ? "close-outline" : "menu-outline"} size={28} color={COLORES.TEXTO_OSCURO} />
+              <Text style={{ fontSize: 28 }}>{menuAbierto ? '❌' : '☰'}</Text>
             </TouchableOpacity>
 
             <View style={styles.tituloContainer}>
@@ -341,11 +373,7 @@ export default function PantallaPrincipal({ navigation }) {
               onPress={onRefresh}
               disabled={refrescando}
             >
-              <Icon
-                name="refresh-outline"
-                size={24}
-                color={refrescando ? COLORES.GRIS_OSCURO : COLORES.TEXTO_OSCURO}
-              />
+              <Text style={{ fontSize: 24, opacity: refrescando ? 0.5 : 1 }}>🔄</Text>
             </TouchableOpacity>
           </View>
 
@@ -363,7 +391,7 @@ export default function PantallaPrincipal({ navigation }) {
             {/* Información del adulto mayor */}
             <View style={styles.seccion}>
               <View style={styles.encabezadoSeccion}>
-                <Icon name="person-circle-outline" size={24} color={COLORES.AZUL_CIELO_OSCURO} />
+                <Text style={{ fontSize: 24, marginRight: 8 }}>👴</Text>
                 <Text style={styles.tituloSeccion}>
                   {adultoMayorInfo?.nombre || 'Adulto Mayor'}
                 </Text>
@@ -372,7 +400,7 @@ export default function PantallaPrincipal({ navigation }) {
               <View style={styles.contenedorTarjeta}>
                 <View style={styles.filaInfo}>
                   <View style={styles.itemInfo}>
-                    <Icon name="heart-outline" size={20} color={COLORES.GRIS_OSCURO} />
+                    <Text style={{ fontSize: 20, marginRight: 6 }}>❤️</Text>
                     <Text style={styles.labelInfo}>Salud:</Text>
                     <Text style={styles.valorInfo}>
                       {adultoMayorInfo?.estadoSalud || 'Estable'}
@@ -380,7 +408,7 @@ export default function PantallaPrincipal({ navigation }) {
                   </View>
 
                   <View style={styles.itemInfo}>
-                    <Icon name="calendar-outline" size={20} color={COLORES.GRIS_OSCURO} />
+                    <Text style={{ fontSize: 20, marginRight: 6 }}>📅</Text>
                     <Text style={styles.labelInfo}>Edad:</Text>
                     <Text style={styles.valorInfo}>
                       {adultoMayorInfo?.edad || '--'} años
@@ -390,7 +418,7 @@ export default function PantallaPrincipal({ navigation }) {
 
                 <View style={styles.filaInfo}>
                   <View style={styles.itemInfo}>
-                    <Icon name="medkit-outline" size={20} color={COLORES.GRIS_OSCURO} />
+                    <Text style={{ fontSize: 20, marginRight: 6 }}>🩺</Text>
                     <Text style={styles.labelInfo}>Condiciones:</Text>
                     <Text style={styles.valorInfo}>
                       {adultoMayorInfo?.condiciones?.length || 0}
@@ -398,7 +426,7 @@ export default function PantallaPrincipal({ navigation }) {
                   </View>
 
                   <View style={styles.itemInfo}>
-                    <Icon name="call-outline" size={20} color={COLORES.GRIS_OSCURO} />
+                    <Text style={{ fontSize: 20, marginRight: 6 }}>📞</Text>
                     <Text style={styles.labelInfo}>Médico:</Text>
                     <Text style={styles.valorInfo}>
                       {adultoMayorInfo?.medicoPrincipal || 'No asignado'}
@@ -408,7 +436,7 @@ export default function PantallaPrincipal({ navigation }) {
 
                 <TouchableOpacity
                   style={styles.botonVerDetalles}
-                  onPress={() => navegarA('InformacionGeneral')}
+                  onPress={() => navegarA('InfoAnciano')}
                 >
                   <Text style={styles.textoBotonVerDetalles}>Ver detalles completos →</Text>
                 </TouchableOpacity>
@@ -418,7 +446,7 @@ export default function PantallaPrincipal({ navigation }) {
             {/* Medicinas para hoy */}
             <View style={styles.seccion}>
               <View style={styles.encabezadoSeccion}>
-                <Icon name="medical-outline" size={24} color={COLORES.EXITO} />
+                <Text style={{ fontSize: 24, marginRight: 8 }}>💊</Text>
                 <Text style={styles.tituloSeccion}>Medicinas para hoy</Text>
                 <Text style={styles.badge}>{medicinasHoy.length}</Text>
               </View>
@@ -469,7 +497,7 @@ export default function PantallaPrincipal({ navigation }) {
             {/* Eventos esta semana */}
             <View style={styles.seccion}>
               <View style={styles.encabezadoSeccion}>
-                <Icon name="calendar-outline" size={24} color={COLORES.AMARILLO_PLATANO} />
+                <Text style={{ fontSize: 24, marginRight: 8 }}>📅</Text>
                 <Text style={styles.tituloSeccion}>Eventos esta semana</Text>
               </View>
 
@@ -512,7 +540,7 @@ export default function PantallaPrincipal({ navigation }) {
             {/* Gastos futuros */}
             <View style={styles.seccion}>
               <View style={styles.encabezadoSeccion}>
-                <Icon name="cash-outline" size={24} color={COLORES.VERDE_CLARO} />
+                <Text style={{ fontSize: 24, marginRight: 8 }}>💰</Text>
                 <Text style={styles.tituloSeccion}>Gastos próximos</Text>
                 <Text style={styles.badge}>${calcularTotalGastos().toFixed(2)}</Text>
               </View>
@@ -558,7 +586,7 @@ export default function PantallaPrincipal({ navigation }) {
                   onPress={() => navegarA('AgregarMedicina')}
                 >
                   <View style={[styles.iconoAccion, { backgroundColor: COLORES.EXITO + '20' }]}>
-                    <Icon name="add-circle-outline" size={28} color={COLORES.EXITO} />
+                    <Text style={{ fontSize: 28 }}>➕</Text>
                   </View>
                   <Text style={styles.textoAccionRapida}>Agregar medicina</Text>
                 </TouchableOpacity>
@@ -568,7 +596,7 @@ export default function PantallaPrincipal({ navigation }) {
                   onPress={() => navegarA('AgendarEvento')}
                 >
                   <View style={[styles.iconoAccion, { backgroundColor: COLORES.AMARILLO_PLATANO + '20' }]}>
-                    <Icon name="add-outline" size={28} color={COLORES.AMARILLO_PLATANO} />
+                    <Text style={{ fontSize: 28 }}>➕</Text>
                   </View>
                   <Text style={styles.textoAccionRapida}>Agendar evento</Text>
                 </TouchableOpacity>
@@ -578,7 +606,7 @@ export default function PantallaPrincipal({ navigation }) {
                   onPress={() => navegarA('RegistrarGasto')}
                 >
                   <View style={[styles.iconoAccion, { backgroundColor: COLORES.VERDE_CLARO + '20' }]}>
-                    <Icon name="add-outline" size={28} color={COLORES.VERDE_CLARO} />
+                    <Text style={{ fontSize: 28 }}>➕</Text>
                   </View>
                   <Text style={styles.textoAccionRapida}>Registrar gasto</Text>
                 </TouchableOpacity>
@@ -588,7 +616,7 @@ export default function PantallaPrincipal({ navigation }) {
                   onPress={() => navegarA('ContactarFamiliar')}
                 >
                   <View style={[styles.iconoAccion, { backgroundColor: COLORES.AZUL_CIELO + '20' }]}>
-                    <Icon name="chatbubble-outline" size={28} color={COLORES.AZUL_CIELO} />
+                    <Text style={{ fontSize: 28 }}>💬</Text>
                   </View>
                   <Text style={styles.textoAccionRapida}>Contactar familiar</Text>
                 </TouchableOpacity>

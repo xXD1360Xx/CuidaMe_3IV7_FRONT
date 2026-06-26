@@ -15,7 +15,7 @@ import {
   Dimensions
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import Icon from 'react-native-vector-icons/Ionicons';
+// Removida importación de Icon de expo-vector-icons
 import { servicioAPI } from '../../servicios/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -53,12 +53,14 @@ export default function VistaCalendario({ navigation, route }) {
   const [refrescando, setRefrescando] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalEventoVisible, setModalEventoVisible] = useState(false);
+  const [modalEditarVisible, setModalEditarVisible] = useState(false);
+
   const [diaSeleccionado, setDiaSeleccionado] = useState(null);
   const [modoSeleccionMultiple, setModoSeleccionMultiple] = useState(false);
   const [diasSeleccionados, setDiasSeleccionados] = useState([]);
   const [eventoEditando, setEventoEditando] = useState(null);
   const [usuarioRol, setUsuarioRol] = useState('');
-  
+
   // Estados para nuevo evento
   const [nuevoEvento, setNuevoEvento] = useState({
     titulo: '',
@@ -76,14 +78,14 @@ export default function VistaCalendario({ navigation, route }) {
 
   // Tipos de eventos predefinidos
   const tiposEventos = [
-    { id: 'cita_medica', nombre: 'Cita Médica', color: COLORES.EXITO, icono: 'medical-outline' },
-    { id: 'visita', nombre: 'Visita Familiar', color: COLORES.AZUL_CIELO, icono: 'people-outline' },
-    { id: 'evento_social', nombre: 'Evento Social', color: COLORES.MORADO, icono: 'wine-outline' },
-    { id: 'cuidado_familiar', nombre: 'Cuidado Familiar', color: COLORES.AMARILLO_PLATANO, icono: 'heart-outline' },
-    { id: 'terapia', nombre: 'Terapia', color: COLORES.TURQUESA, icono: 'fitness-outline' },
-    { id: 'vacaciones', nombre: 'Vacaciones', color: COLORES.NARANJA, icono: 'airplane-outline' },
-    { id: 'reunion', nombre: 'Reunión', color: COLORES.ROSADO, icono: 'chatbubble-outline' },
-    { id: 'otro', nombre: 'Otro', color: COLORES.GRIS_OSCURO, icono: 'ellipse-outline' }
+    { id: 'cita_medica', nombre: 'Cita Médica', color: COLORES.EXITO, icono: '🩺' },
+    { id: 'visita', nombre: 'Visita Familiar', color: COLORES.AZUL_CIELO, icono: '👥' },
+    { id: 'evento_social', nombre: 'Evento Social', color: COLORES.MORADO, icono: '🎉' },
+    { id: 'cuidado_familiar', nombre: 'Cuidado Familiar', color: COLORES.AMARILLO_PLATANO, icono: '❤️' },
+    { id: 'terapia', nombre: 'Terapia', color: COLORES.TURQUESA, icono: '🧘' },
+    { id: 'vacaciones', nombre: 'Vacaciones', color: COLORES.NARANJA, icono: '✈️' },
+    { id: 'reunion', nombre: 'Reunión', color: COLORES.ROSADO, icono: '💬' },
+    { id: 'otro', nombre: 'Otro', color: COLORES.GRIS_OSCURO, icono: '📌' }
   ];
 
   // Horas disponibles para eventos
@@ -100,33 +102,33 @@ export default function VistaCalendario({ navigation, route }) {
   const cargarDatos = useCallback(async () => {
     try {
       setCargando(true);
-      
+
       // Obtener usuario actual
       const usuarioData = await AsyncStorage.getItem('usuarioInfo');
       if (usuarioData) {
         const usuario = JSON.parse(usuarioData);
         setUsuarioRol(usuario.rol);
-        
+
         // Cargar familiares
         const familiaresResponse = await servicioAPI.obtenerFamiliares();
         if (familiaresResponse.exito) {
           setFamiliares(familiaresResponse.familiares || []);
-          
+
           // Asignar colores a los familiares si no los tienen
           const coloresFamiliares = [
             COLORES.AZUL_CIELO, COLORES.EXITO, COLORES.AMARILLO_PLATANO,
             COLORES.MORADO, COLORES.NARANJA, COLORES.ROSADO,
             COLORES.TURQUESA, COLORES.ROJO_CLARO
           ];
-          
+
           const familiaresConColores = familiaresResponse.familiares.map((familiar, index) => ({
             ...familiar,
             color: familiar.color || coloresFamiliares[index % coloresFamiliares.length]
           }));
-          
+
           setFamiliares(familiaresConColores);
         }
-        
+
         // Cargar eventos del mes actual
         await cargarEventosMes();
       }
@@ -144,12 +146,12 @@ export default function VistaCalendario({ navigation, route }) {
     try {
       const fechaInicio = new Date(anoActual, mesActual, 1);
       const fechaFin = new Date(anoActual, mesActual + 1, 0);
-      
+
       const response = await servicioAPI.obtenerEventosPorRango(
         fechaInicio.toISOString().split('T')[0],
         fechaFin.toISOString().split('T')[0]
       );
-      
+
       if (response.exito) {
         setEventos(response.eventos || []);
       }
@@ -190,27 +192,27 @@ export default function VistaCalendario({ navigation, route }) {
     const primerDia = new Date(anoActual, mesActual, 1);
     const ultimoDia = new Date(anoActual, mesActual + 1, 0);
     const diasEnMes = ultimoDia.getDate();
-    
+
     const primerDiaSemana = primerDia.getDay(); // 0 = Domingo, 1 = Lunes, etc.
-    
+
     const dias = [];
-    
+
     // Agregar días vacíos al principio si es necesario
     for (let i = 0; i < primerDiaSemana; i++) {
       dias.push({ dia: null, fecha: null });
     }
-    
+
     // Agregar los días del mes
     for (let i = 1; i <= diasEnMes; i++) {
       const fecha = new Date(anoActual, mesActual, i);
-      dias.push({ 
-        dia: i, 
+      dias.push({
+        dia: i,
         fecha: fecha.toISOString().split('T')[0],
         esHoy: esHoy(fecha),
         eventos: obtenerEventosDia(fecha)
       });
     }
-    
+
     return dias;
   };
 
@@ -218,8 +220,8 @@ export default function VistaCalendario({ navigation, route }) {
   const esHoy = (fecha) => {
     const hoy = new Date();
     return fecha.getDate() === hoy.getDate() &&
-           fecha.getMonth() === hoy.getMonth() &&
-           fecha.getFullYear() === hoy.getFullYear();
+      fecha.getMonth() === hoy.getMonth() &&
+      fecha.getFullYear() === hoy.getFullYear();
   };
 
   // Obtener eventos para un día específico
@@ -227,10 +229,10 @@ export default function VistaCalendario({ navigation, route }) {
     const fechaStr = fecha.toISOString().split('T')[0];
     return eventos.filter(evento => {
       const fechaEvento = new Date(evento.fecha_inicio).toISOString().split('T')[0];
-      const fechaFin = evento.fecha_fin ? 
-        new Date(evento.fecha_fin).toISOString().split('T')[0] : 
+      const fechaFin = evento.fecha_fin ?
+        new Date(evento.fecha_fin).toISOString().split('T')[0] :
         fechaEvento;
-      
+
       return fechaStr >= fechaEvento && fechaStr <= fechaFin;
     });
   };
@@ -239,10 +241,10 @@ export default function VistaCalendario({ navigation, route }) {
   const obtenerEventosParaFecha = (fechaStr) => {
     return eventos.filter(evento => {
       const fechaEvento = new Date(evento.fecha_inicio).toISOString().split('T')[0];
-      const fechaFin = evento.fecha_fin ? 
-        new Date(evento.fecha_fin).toISOString().split('T')[0] : 
+      const fechaFin = evento.fecha_fin ?
+        new Date(evento.fecha_fin).toISOString().split('T')[0] :
         fechaEvento;
-      
+
       return fechaStr >= fechaEvento && fechaStr <= fechaFin;
     });
   };
@@ -250,12 +252,12 @@ export default function VistaCalendario({ navigation, route }) {
   // Seleccionar día
   const seleccionarDia = (dia, fecha) => {
     if (!fecha) return;
-    
+
     if (modoSeleccionMultiple) {
       // Modo selección múltiple
       const fechaStr = fecha;
       const index = diasSeleccionados.indexOf(fechaStr);
-      
+
       if (index === -1) {
         setDiasSeleccionados([...diasSeleccionados, fechaStr]);
       } else {
@@ -267,7 +269,7 @@ export default function VistaCalendario({ navigation, route }) {
       // Modo normal: abrir modal para agregar evento
       setDiaSeleccionado(fecha);
       const eventosDia = obtenerEventosParaFecha(fecha);
-      
+
       // Si hay eventos, mostrar modal de evento
       if (eventosDia.length > 0) {
         setNuevoEvento({
@@ -287,9 +289,9 @@ export default function VistaCalendario({ navigation, route }) {
       } else {
         // Preparar nuevo evento para este día
         const fechaObj = new Date(fecha);
-        const horaActual = fechaObj.getHours().toString().padStart(2, '0') + 
-                          ':' + fechaObj.getMinutes().toString().padStart(2, '0');
-        
+        const horaActual = fechaObj.getHours().toString().padStart(2, '0') +
+          ':' + fechaObj.getMinutes().toString().padStart(2, '0');
+
         setNuevoEvento({
           titulo: '',
           tipo: 'cita_medica',
@@ -330,19 +332,19 @@ export default function VistaCalendario({ navigation, route }) {
       Alert.alert('Error', 'Debes seleccionar al menos un día');
       return;
     }
-    
+
     // Ordenar fechas
     const fechasOrdenadas = [...diasSeleccionados].sort();
     const fechaInicio = fechasOrdenadas[0];
     const fechaFin = fechasOrdenadas[fechasOrdenadas.length - 1];
-    
+
     setNuevoEvento({
       ...nuevoEvento,
       fecha_inicio: fechaInicio,
       fecha_fin: fechaFin,
       titulo: `Cuidado por ${fechaInicio} a ${fechaFin}`
     });
-    
+
     setModalVisible(true);
     setModoSeleccionMultiple(false);
     setDiasSeleccionados([]);
@@ -356,12 +358,12 @@ export default function VistaCalendario({ navigation, route }) {
         Alert.alert('Error', 'Debes ingresar un título para el evento');
         return;
       }
-      
+
       if (!nuevoEvento.fecha_inicio) {
         Alert.alert('Error', 'Debes seleccionar una fecha de inicio');
         return;
       }
-      
+
       // Preparar datos para enviar
       const datosEvento = {
         ...nuevoEvento,
@@ -373,16 +375,16 @@ export default function VistaCalendario({ navigation, route }) {
         duracion_horas: parseFloat(nuevoEvento.duracion),
         usuario_id: await obtenerUsuarioId()
       };
-      
+
       // Llamar a la API para guardar el evento
       const response = await servicioAPI.crearEvento(datosEvento);
-      
+
       if (response.exito) {
         Alert.alert('Éxito', 'Evento guardado correctamente');
         setModalVisible(false);
         setModalEventoVisible(false);
         onRefresh();
-        
+
         // Limpiar formulario
         setNuevoEvento({
           titulo: '',
@@ -400,7 +402,7 @@ export default function VistaCalendario({ navigation, route }) {
       } else {
         Alert.alert('Error', response.error || 'No se pudo guardar el evento');
       }
-      
+
     } catch (error) {
       console.error('Error guardando evento:', error);
       Alert.alert('Error', 'No se pudo guardar el evento');
@@ -431,7 +433,7 @@ export default function VistaCalendario({ navigation, route }) {
         Alert.alert('Error', 'Evento no encontrado');
         return;
       }
-      
+
       // Preparar datos para edición
       setNuevoEvento({
         titulo: evento.titulo,
@@ -446,10 +448,10 @@ export default function VistaCalendario({ navigation, route }) {
         recordatorio: evento.recordatorio !== undefined ? evento.recordatorio : true,
         ubicacion: evento.ubicacion || ''
       });
-      
+
       setEventoEditando(eventoId);
       setModalEditarVisible(true);
-      
+
     } catch (error) {
       console.error('Error preparando edición:', error);
       Alert.alert('Error', 'No se pudo cargar el evento para editar');
@@ -460,13 +462,13 @@ export default function VistaCalendario({ navigation, route }) {
   const guardarEventoEditado = async () => {
     try {
       if (!eventoEditando) return;
-      
+
       // Validaciones
       if (!nuevoEvento.titulo.trim()) {
         Alert.alert('Error', 'Debes ingresar un título para el evento');
         return;
       }
-      
+
       // Preparar datos para actualizar
       const datosEvento = {
         ...nuevoEvento,
@@ -477,16 +479,16 @@ export default function VistaCalendario({ navigation, route }) {
         hora_inicio: nuevoEvento.hora,
         duracion_horas: parseFloat(nuevoEvento.duracion)
       };
-      
+
       // Llamar a la API para actualizar
       const response = await servicioAPI.actualizarEvento(eventoEditando, datosEvento);
-      
+
       if (response.exito) {
         Alert.alert('Éxito', 'Evento actualizado correctamente');
         setModalEditarVisible(false);
         setEventoEditando(null);
         onRefresh();
-        
+
         // Limpiar formulario
         setNuevoEvento({
           titulo: '',
@@ -504,7 +506,7 @@ export default function VistaCalendario({ navigation, route }) {
       } else {
         Alert.alert('Error', response.error || 'No se pudo actualizar el evento');
       }
-      
+
     } catch (error) {
       console.error('Error actualizando evento:', error);
       Alert.alert('Error', 'No se pudo actualizar el evento');
@@ -580,17 +582,17 @@ export default function VistaCalendario({ navigation, route }) {
   // Obtener icono del tipo de evento
   const obtenerIconoTipoEvento = (tipoId) => {
     const tipo = tiposEventos.find(t => t.id === tipoId);
-    return tipo ? tipo.icono : 'ellipse-outline';
+    return tipo ? tipo.icono : '📌';
   };
 
   // Renderizar mini evento en el día
   const renderMiniEvento = (evento) => {
     const color = evento.color_evento || obtenerColorTipoEvento(evento.tipo_evento);
     return (
-      <View 
-        key={evento.id} 
+      <View
+        key={evento.id}
         style={[
-          styles.miniEvento, 
+          styles.miniEvento,
           { backgroundColor: color }
         ]}
       />
@@ -602,10 +604,10 @@ export default function VistaCalendario({ navigation, route }) {
     if (!item.dia) {
       return <View style={styles.diaVacio} />;
     }
-    
+
     const estaSeleccionado = diasSeleccionados.includes(item.fecha);
     const esDiaSeleccionado = diaSeleccionado === item.fecha;
-    
+
     return (
       <TouchableOpacity
         style={[
@@ -624,12 +626,12 @@ export default function VistaCalendario({ navigation, route }) {
         ]}>
           {item.dia}
         </Text>
-        
+
         {/* Mini indicadores de eventos */}
         <View style={styles.miniEventosContainer}>
           {item.eventos.slice(0, 3).map(evento => renderMiniEvento(evento))}
         </View>
-        
+
         {item.eventos.length > 3 && (
           <Text style={styles.masEventos}>+{item.eventos.length - 3}</Text>
         )}
@@ -640,7 +642,7 @@ export default function VistaCalendario({ navigation, route }) {
   // Mostrar pantalla de carga
   if (cargando) {
     return (
-      <LinearGradient 
+      <LinearGradient
         colors={[COLORES.AZUL_CIELO, COLORES.BLANCO, COLORES.AZUL_CIELO]}
         style={styles.fondo}
       >
@@ -656,59 +658,55 @@ export default function VistaCalendario({ navigation, route }) {
   const nombreMes = obtenerNombreMes();
 
   return (
-    <LinearGradient 
+    <LinearGradient
       colors={[COLORES.AZUL_CIELO, COLORES.BLANCO]}
       style={styles.fondo}
     >
       <SafeAreaView style={styles.contenedor}>
         {/* Encabezado */}
         <View style={styles.encabezado}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.botonAtras}
             onPress={() => navigation.goBack()}
           >
-            <Icon name="arrow-back-outline" size={28} color={COLORES.TEXTO_OSCURO} />
+            <Text style={{ fontSize: 24 }}>⬅️</Text>
           </TouchableOpacity>
-          
+
           <View style={styles.tituloContainer}>
             <Text style={styles.tituloPrincipal}>Calendario</Text>
             <Text style={styles.subtituloPrincipal}>{nombreMes} {anoActual}</Text>
           </View>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.botonRefrescar}
             onPress={onRefresh}
             disabled={refrescando}
           >
-            <Icon 
-              name="refresh-outline" 
-              size={24} 
-              color={refrescando ? COLORES.GRIS_OSCURO : COLORES.TEXTO_OSCURO} 
-            />
+            <Text style={{ fontSize: 22, opacity: refrescando ? 0.5 : 1 }}>🔄</Text>
           </TouchableOpacity>
         </View>
 
         {/* Controles del calendario */}
         <View style={styles.controlesCalendario}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.botonControl}
             onPress={() => cambiarMes(-1)}
           >
-            <Icon name="chevron-back-outline" size={24} color={COLORES.TEXTO_OSCURO} />
+            <Text style={{ fontSize: 20 }}>◀️</Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.botonHoy}
             onPress={irAHoy}
           >
             <Text style={styles.textoBotonHoy}>HOY</Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.botonControl}
             onPress={() => cambiarMes(1)}
           >
-            <Icon name="chevron-forward-outline" size={24} color={COLORES.TEXTO_OSCURO} />
+            <Text style={{ fontSize: 20 }}>▶️</Text>
           </TouchableOpacity>
         </View>
 
@@ -745,16 +743,16 @@ export default function VistaCalendario({ navigation, route }) {
             <Text style={styles.textoSeleccionMultiple}>
               {diasSeleccionados.length} día(s) seleccionado(s)
             </Text>
-            
+
             <View style={styles.botonesSeleccion}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.botonSeleccion, { backgroundColor: COLORES.ERROR }]}
                 onPress={cancelarSeleccionMultiple}
               >
                 <Text style={styles.textoBotonSeleccion}>Cancelar</Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={[styles.botonSeleccion, { backgroundColor: COLORES.EXITO }]}
                 onPress={crearEventoMultiplesDias}
               >
@@ -768,30 +766,30 @@ export default function VistaCalendario({ navigation, route }) {
         <View style={styles.barraAcciones}>
           {!modoSeleccionMultiple ? (
             <>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.botonAccion}
                 onPress={iniciarSeleccionMultiple}
               >
-                <Icon name="calendar-outline" size={20} color={COLORES.BLANCO} />
+                <Text style={{ fontSize: 18, marginRight: 6 }}>📅</Text>
                 <Text style={styles.textoBotonAccion}>Seleccionar Múltiples Días</Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={styles.botonAccionSecundario}
                 onPress={() => {
                   setDiaSeleccionado(new Date().toISOString().split('T')[0]);
                   setModalVisible(true);
                 }}
               >
-                <Icon name="add-outline" size={24} color={COLORES.AZUL_CIELO_OSCURO} />
+                <Text style={{ fontSize: 22 }}>➕</Text>
               </TouchableOpacity>
             </>
           ) : (
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.botonAccion, { backgroundColor: COLORES.ROJO_CLARO }]}
               onPress={cancelarSeleccionMultiple}
             >
-              <Icon name="close-outline" size={20} color={COLORES.BLANCO} />
+              <Text style={{ fontSize: 18, marginRight: 6 }}>❌</Text>
               <Text style={styles.textoBotonAccion}>Cancelar Selección</Text>
             </TouchableOpacity>
           )}
@@ -800,10 +798,10 @@ export default function VistaCalendario({ navigation, route }) {
         {/* Lista de eventos próximos */}
         <View style={styles.seccionEventos}>
           <Text style={styles.tituloSeccion}>Eventos Próximos</Text>
-          
+
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             {eventos.slice(0, 10).map(evento => (
-              <TouchableOpacity 
+              <TouchableOpacity
                 key={evento.id}
                 style={[
                   styles.tarjetaEvento,
@@ -820,12 +818,12 @@ export default function VistaCalendario({ navigation, route }) {
                     'Selecciona una acción',
                     [
                       { text: 'Cancelar', style: 'cancel' },
-                      { 
-                        text: 'Editar', 
+                      {
+                        text: 'Editar',
                         onPress: () => editarEvento(evento.id)
                       },
-                      { 
-                        text: 'Eliminar', 
+                      {
+                        text: 'Eliminar',
                         style: 'destructive',
                         onPress: () => eliminarEvento(evento.id)
                       }
@@ -834,34 +832,32 @@ export default function VistaCalendario({ navigation, route }) {
                 }}
               >
                 <View style={styles.encabezadoEvento}>
-                  <Icon 
-                    name={obtenerIconoTipoEvento(evento.tipo_evento)} 
-                    size={16} 
-                    color={evento.color_evento || obtenerColorTipoEvento(evento.tipo_evento)} 
-                  />
+                  <Text style={{ fontSize: 16, marginRight: 6 }}>
+                    {obtenerIconoTipoEvento(evento.tipo_evento)}
+                  </Text>
                   <Text style={styles.tituloEvento} numberOfLines={1}>
                     {evento.titulo}
                   </Text>
                   {/* Botón de editar rápido */}
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={styles.botonEditarRapido}
                     onPress={() => editarEvento(evento.id)}
                   >
-                    <Icon name="create-outline" size={16} color={COLORES.AZUL_CIELO_OSCURO} />
+                    <Text style={{ fontSize: 14 }}>📝</Text>
                   </TouchableOpacity>
                 </View>
-                              
+
                 <Text style={styles.fechaEvento}>
                   {formatearFecha(evento.fecha_inicio)}
                 </Text>
-                
+
                 {evento.hora_inicio && (
                   <Text style={styles.horaEvento}>
                     {formatearHora(evento.hora_inicio)}
                     {evento.duracion_horas && ` • ${evento.duracion_horas}h`}
                   </Text>
                 )}
-                
+
                 {evento.ubicacion && (
                   <Text style={styles.ubicacionEvento} numberOfLines={1}>
                     📍 {evento.ubicacion}
@@ -869,10 +865,10 @@ export default function VistaCalendario({ navigation, route }) {
                 )}
               </TouchableOpacity>
             ))}
-            
+
             {eventos.length === 0 && (
               <View style={styles.sinEventosContainer}>
-                <Icon name="calendar-outline" size={40} color={COLORES.GRIS_MEDIO} />
+                <Text style={{ fontSize: 40, marginBottom: 10 }}>📅</Text>
                 <Text style={styles.textoSinEventos}>No hay eventos próximos</Text>
                 <Text style={styles.subtextoSinEventos}>
                   Toca en un día para agregar un evento
@@ -896,22 +892,22 @@ export default function VistaCalendario({ navigation, route }) {
               <Text style={styles.modalTitulo}>
                 {diaSeleccionado ? `Evento para ${formatearFecha(diaSeleccionado)}` : 'Nuevo Evento'}
               </Text>
-              
+
               <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <Icon name="close-outline" size={24} color={COLORES.TEXTO_OSCURO} />
+                <Text style={{ fontSize: 20 }}>❌</Text>
               </TouchableOpacity>
             </View>
-            
+
             <ScrollView style={styles.modalFormulario}>
               <Text style={styles.modalLabel}>Título del evento *</Text>
               <TextInput
                 style={styles.input}
                 value={nuevoEvento.titulo}
-                onChangeText={(text) => setNuevoEvento({...nuevoEvento, titulo: text})}
+                onChangeText={(text) => setNuevoEvento({ ...nuevoEvento, titulo: text })}
                 placeholder="Ej: Cita con cardiólogo"
                 placeholderTextColor={COLORES.GRIS_MEDIO}
               />
-              
+
               <Text style={styles.modalLabel}>Tipo de evento</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tiposContainer}>
                 {tiposEventos.map(tipo => (
@@ -919,16 +915,16 @@ export default function VistaCalendario({ navigation, route }) {
                     key={tipo.id}
                     style={[
                       styles.opcionTipo,
-                      { 
+                      {
                         backgroundColor: nuevoEvento.tipo === tipo.id ? tipo.color + '40' : COLORES.GRIS_CLARO,
                         borderColor: tipo.color
                       }
                     ]}
                     onPress={() => {
-                      setNuevoEvento({...nuevoEvento, tipo: tipo.id, color: tipo.color});
+                      setNuevoEvento({ ...nuevoEvento, tipo: tipo.id, color: tipo.color });
                     }}
                   >
-                    <Icon name={tipo.icono} size={20} color={tipo.color} />
+                    <Text style={{ fontSize: 20, marginRight: 6 }}>{tipo.icono}</Text>
                     <Text style={[
                       styles.textoOpcionTipo,
                       { color: nuevoEvento.tipo === tipo.id ? tipo.color : COLORES.GRIS_OSCURO }
@@ -938,7 +934,7 @@ export default function VistaCalendario({ navigation, route }) {
                   </TouchableOpacity>
                 ))}
               </ScrollView>
-              
+
               <Text style={styles.modalLabel}>Color personalizado</Text>
               <View style={styles.coloresContainer}>
                 {[
@@ -953,11 +949,11 @@ export default function VistaCalendario({ navigation, route }) {
                       { backgroundColor: color },
                       nuevoEvento.color === color && styles.opcionColorSeleccionada
                     ]}
-                    onPress={() => setNuevoEvento({...nuevoEvento, color})}
+                    onPress={() => setNuevoEvento({ ...nuevoEvento, color })}
                   />
                 ))}
               </View>
-              
+
               <View style={styles.filaInputs}>
                 <View style={styles.inputMitad}>
                   <Text style={styles.modalLabel}>Fecha inicio</Text>
@@ -969,19 +965,19 @@ export default function VistaCalendario({ navigation, route }) {
                     placeholderTextColor={COLORES.GRIS_MEDIO}
                   />
                 </View>
-                
+
                 <View style={styles.inputMitad}>
                   <Text style={styles.modalLabel}>Fecha fin</Text>
                   <TextInput
                     style={styles.input}
                     value={nuevoEvento.fecha_fin}
-                    onChangeText={(text) => setNuevoEvento({...nuevoEvento, fecha_fin: text})}
+                    onChangeText={(text) => setNuevoEvento({ ...nuevoEvento, fecha_fin: text })}
                     placeholder="Misma que inicio"
                     placeholderTextColor={COLORES.GRIS_MEDIO}
                   />
                 </View>
               </View>
-              
+
               <View style={styles.filaInputs}>
                 <View style={styles.inputMitad}>
                   <Text style={styles.modalLabel}>Hora</Text>
@@ -997,7 +993,7 @@ export default function VistaCalendario({ navigation, route }) {
                             styles.opcionHora,
                             nuevoEvento.hora === hora && styles.opcionHoraSeleccionada
                           ]}
-                          onPress={() => setNuevoEvento({...nuevoEvento, hora})}
+                          onPress={() => setNuevoEvento({ ...nuevoEvento, hora })}
                         >
                           <Text style={[
                             styles.textoOpcionHora,
@@ -1010,7 +1006,7 @@ export default function VistaCalendario({ navigation, route }) {
                     </ScrollView>
                   </View>
                 </View>
-                
+
                 <View style={styles.inputMitad}>
                   <Text style={styles.modalLabel}>Duración (horas)</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.duracionesContainer}>
@@ -1021,7 +1017,7 @@ export default function VistaCalendario({ navigation, route }) {
                           styles.opcionDuracion,
                           nuevoEvento.duracion === duracion && styles.opcionDuracionSeleccionada
                         ]}
-                        onPress={() => setNuevoEvento({...nuevoEvento, duracion})}
+                        onPress={() => setNuevoEvento({ ...nuevoEvento, duracion })}
                       >
                         <Text style={[
                           styles.textoOpcionDuracion,
@@ -1034,7 +1030,7 @@ export default function VistaCalendario({ navigation, route }) {
                   </ScrollView>
                 </View>
               </View>
-              
+
               <Text style={styles.modalLabel}>Familiar responsable</Text>
               {familiares.length > 0 ? (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.familiaresContainer}>
@@ -1043,24 +1039,24 @@ export default function VistaCalendario({ navigation, route }) {
                       styles.opcionFamiliar,
                       !nuevoEvento.familiar_id && styles.opcionFamiliarSeleccionada
                     ]}
-                    onPress={() => setNuevoEvento({...nuevoEvento, familiar_id: null})}
+                    onPress={() => setNuevoEvento({ ...nuevoEvento, familiar_id: null })}
                   >
-                    <Icon name="person-outline" size={20} color={COLORES.GRIS_OSCURO} />
+                    <Text style={{ fontSize: 18, marginRight: 4 }}>👤</Text>
                     <Text style={styles.textoOpcionFamiliar}>Ninguno</Text>
                   </TouchableOpacity>
-                  
+
                   {familiares.map(familiar => (
                     <TouchableOpacity
                       key={familiar.id}
                       style={[
                         styles.opcionFamiliar,
                         { borderColor: familiar.color },
-                        nuevoEvento.familiar_id === familiar.id && { 
+                        nuevoEvento.familiar_id === familiar.id && {
                           backgroundColor: familiar.color + '20',
                           borderWidth: 2
                         }
                       ]}
-                      onPress={() => setNuevoEvento({...nuevoEvento, familiar_id: familiar.id})}
+                      onPress={() => setNuevoEvento({ ...nuevoEvento, familiar_id: familiar.id })}
                     >
                       <View style={[styles.avatarFamiliar, { backgroundColor: familiar.color }]}>
                         <Text style={styles.textoAvatarFamiliar}>
@@ -1074,27 +1070,27 @@ export default function VistaCalendario({ navigation, route }) {
               ) : (
                 <Text style={styles.textoNoFamiliares}>No hay familiares registrados</Text>
               )}
-              
+
               <Text style={styles.modalLabel}>Ubicación</Text>
               <TextInput
                 style={styles.input}
                 value={nuevoEvento.ubicacion}
-                onChangeText={(text) => setNuevoEvento({...nuevoEvento, ubicacion: text})}
+                onChangeText={(text) => setNuevoEvento({ ...nuevoEvento, ubicacion: text })}
                 placeholder="Ej: Hospital Central, Casa, etc."
                 placeholderTextColor={COLORES.GRIS_MEDIO}
               />
-              
+
               <Text style={styles.modalLabel}>Descripción</Text>
               <TextInput
                 style={[styles.input, styles.textArea]}
                 value={nuevoEvento.descripcion}
-                onChangeText={(text) => setNuevoEvento({...nuevoEvento, descripcion: text})}
+                onChangeText={(text) => setNuevoEvento({ ...nuevoEvento, descripcion: text })}
                 multiline
                 numberOfLines={3}
                 placeholder="Detalles adicionales del evento..."
                 placeholderTextColor={COLORES.GRIS_MEDIO}
               />
-              
+
               <View style={styles.filaSwitch}>
                 <Text style={styles.modalLabel}>Recordatorio</Text>
                 <TouchableOpacity
@@ -1102,7 +1098,7 @@ export default function VistaCalendario({ navigation, route }) {
                     styles.switch,
                     nuevoEvento.recordatorio && styles.switchActivo
                   ]}
-                  onPress={() => setNuevoEvento({...nuevoEvento, recordatorio: !nuevoEvento.recordatorio})}
+                  onPress={() => setNuevoEvento({ ...nuevoEvento, recordatorio: !nuevoEvento.recordatorio })}
                 >
                   <View style={[
                     styles.switchPunto,
@@ -1111,16 +1107,16 @@ export default function VistaCalendario({ navigation, route }) {
                 </TouchableOpacity>
               </View>
             </ScrollView>
-            
+
             <View style={styles.modalBotones}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.botonModalCancelar}
                 onPress={() => setModalVisible(false)}
               >
                 <Text style={styles.textoBotonModalCancelar}>Cancelar</Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={styles.botonModalGuardar}
                 onPress={guardarEvento}
               >
@@ -1145,15 +1141,15 @@ export default function VistaCalendario({ navigation, route }) {
           <View style={styles.modalContenido}>
             <View style={styles.modalEncabezado}>
               <Text style={styles.modalTitulo}>Editar Evento</Text>
-              
+
               <TouchableOpacity onPress={() => {
                 setModalEditarVisible(false);
                 setEventoEditando(null);
               }}>
-                <Icon name="close-outline" size={24} color={COLORES.TEXTO_OSCURO} />
+                <Text style={{ fontSize: 20 }}>❌</Text>
               </TouchableOpacity>
             </View>
-            
+
             <ScrollView style={styles.modalFormulario}>
               {/* TODO: Copia aquí TODO el contenido del formulario 
                   del modal de crear evento, pero cambia:
@@ -1161,9 +1157,9 @@ export default function VistaCalendario({ navigation, route }) {
                   2. El botón de guardar que llame a guardarEventoEditado()
               */}
             </ScrollView>
-            
+
             <View style={styles.modalBotones}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.botonModalCancelar}
                 onPress={() => {
                   setModalEditarVisible(false);
@@ -1172,8 +1168,8 @@ export default function VistaCalendario({ navigation, route }) {
               >
                 <Text style={styles.textoBotonModalCancelar}>Cancelar</Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={styles.botonModalGuardar}
                 onPress={guardarEventoEditado}
               >
@@ -1197,16 +1193,16 @@ export default function VistaCalendario({ navigation, route }) {
               <Text style={styles.modalTitulo}>
                 Eventos para {diaSeleccionado ? formatearFecha(diaSeleccionado) : 'hoy'}
               </Text>
-              
+
               <TouchableOpacity onPress={() => setModalEventoVisible(false)}>
-                <Icon name="close-outline" size={24} color={COLORES.TEXTO_OSCURO} />
+                <Text style={{ fontSize: 20 }}>❌</Text>
               </TouchableOpacity>
             </View>
-            
+
             <ScrollView style={styles.listaEventosDia}>
               {diaSeleccionado && obtenerEventosParaFecha(diaSeleccionado).length > 0 ? (
                 obtenerEventosParaFecha(diaSeleccionado).map(evento => (
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     key={evento.id}
                     style={[
                       styles.eventoDia,
@@ -1219,30 +1215,28 @@ export default function VistaCalendario({ navigation, route }) {
                     }}
                   >
                     <View style={styles.encabezadoEventoDia}>
-                      <Icon 
-                        name={obtenerIconoTipoEvento(evento.tipo_evento)} 
-                        size={20} 
-                        color={evento.color_evento || obtenerColorTipoEvento(evento.tipo_evento)} 
-                      />
+                      <Text style={{ fontSize: 20, marginRight: 8 }}>
+                        {obtenerIconoTipoEvento(evento.tipo_evento)}
+                      </Text>
                       <Text style={styles.tituloEventoDia}>{evento.titulo}</Text>
-                      
-                      <TouchableOpacity 
+
+                      <TouchableOpacity
                         style={styles.botonEliminarEvento}
                         onPress={() => eliminarEvento(evento.id)}
                       >
-                        <Icon name="trash-outline" size={18} color={COLORES.ERROR} />
+                        <Text style={{ fontSize: 16 }}>🗑️</Text>
                       </TouchableOpacity>
                     </View>
-                    
+
                     <Text style={styles.detalleEventoDia}>
                       {evento.hora_inicio && `${formatearHora(evento.hora_inicio)} • `}
                       {obtenerNombreTipoEvento(evento.tipo_evento)}
                     </Text>
-                    
+
                     {evento.descripcion && (
                       <Text style={styles.descripcionEventoDia}>{evento.descripcion}</Text>
                     )}
-                    
+
                     {evento.ubicacion && (
                       <Text style={styles.ubicacionEventoDia}>📍 {evento.ubicacion}</Text>
                     )}
@@ -1250,7 +1244,7 @@ export default function VistaCalendario({ navigation, route }) {
                 ))
               ) : (
                 <View style={styles.sinEventosDia}>
-                  <Icon name="calendar-outline" size={60} color={COLORES.GRIS_MEDIO} />
+                  <Text style={{ fontSize: 60, marginBottom: 10 }}>📅</Text>
                   <Text style={styles.textoSinEventosDia}>No hay eventos para este día</Text>
                   <Text style={styles.subtextoSinEventosDia}>
                     Toca "Agregar Evento" para crear uno nuevo
@@ -1258,15 +1252,15 @@ export default function VistaCalendario({ navigation, route }) {
                 </View>
               )}
             </ScrollView>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.botonAgregarEventoDia}
               onPress={() => {
                 setModalEventoVisible(false);
                 setModalVisible(true);
               }}
             >
-              <Icon name="add-outline" size={24} color={COLORES.BLANCO} />
+              <Text style={{ fontSize: 20, marginRight: 6 }}>➕</Text>
               <Text style={styles.textoBotonAgregarEventoDia}>Agregar Nuevo Evento</Text>
             </TouchableOpacity>
           </View>
@@ -1293,7 +1287,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
     fontSize: 16,
   },
-  
+
   // Encabezado
   encabezado: {
     flexDirection: 'row',
@@ -1325,7 +1319,7 @@ const styles = StyleSheet.create({
   botonRefrescar: {
     padding: 8,
   },
-  
+
   // Controles del calendario
   controlesCalendario: {
     flexDirection: 'row',
@@ -1351,7 +1345,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
   },
-  
+
   // Días de la semana
   diasSemanaContainer: {
     flexDirection: 'row',
@@ -1368,7 +1362,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: COLORES.GRIS_OSCURO,
   },
-  
+
   // Grid del calendario
   calendarioGrid: {
     backgroundColor: COLORES.BLANCO,
@@ -1417,7 +1411,7 @@ const styles = StyleSheet.create({
     color: COLORES.AZUL_CIELO_OSCURO,
     fontWeight: 'bold',
   },
-  
+
   // Mini eventos
   miniEventosContainer: {
     flexDirection: 'row',
@@ -1440,7 +1434,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: COLORES.GRIS_OSCURO,
   },
-  
+
   // Barra de selección múltiple
   barraSeleccionMultiple: {
     backgroundColor: COLORES.EXITO,
@@ -1468,7 +1462,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
   },
-  
+
   // Barra de acciones
   barraAcciones: {
     flexDirection: 'row',
@@ -1499,7 +1493,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: COLORES.GRIS_CLARO,
   },
-  
+
   // Sección de eventos próximos
   seccionEventos: {
     backgroundColor: COLORES.BLANCO,
@@ -1567,8 +1561,8 @@ const styles = StyleSheet.create({
   },
 
   botonEditarRapido: {
-  padding: 4,
-  marginLeft: 8,
+    padding: 4,
+    marginLeft: 8,
   },
 
   botonesEventoDia: {
@@ -1584,7 +1578,7 @@ const styles = StyleSheet.create({
   botonEliminarEvento: {
     padding: 5,
   },
-  
+
   // Modal
   modalFondo: {
     flex: 1,
@@ -1644,7 +1638,7 @@ const styles = StyleSheet.create({
   inputMitad: {
     width: '48%',
   },
-  
+
   // Tipos de eventos
   tiposContainer: {
     flexDirection: 'row',
@@ -1664,7 +1658,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 8,
   },
-  
+
   // Colores
   coloresContainer: {
     flexDirection: 'row',
@@ -1684,7 +1678,7 @@ const styles = StyleSheet.create({
     borderColor: COLORES.TEXTO_OSCURO,
     transform: [{ scale: 1.1 }],
   },
-  
+
   // Selector de hora
   selectorHora: {
     backgroundColor: COLORES.GRIS_CLARO,
@@ -1719,7 +1713,7 @@ const styles = StyleSheet.create({
     color: COLORES.BLANCO,
     fontWeight: 'bold',
   },
-  
+
   // Duración
   duracionesContainer: {
     flexDirection: 'row',
@@ -1746,7 +1740,7 @@ const styles = StyleSheet.create({
     color: COLORES.BLANCO,
     fontWeight: 'bold',
   },
-  
+
   // Familiares
   familiaresContainer: {
     flexDirection: 'row',
@@ -1791,7 +1785,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: 20,
   },
-  
+
   // Switch
   filaSwitch: {
     flexDirection: 'row',
@@ -1820,7 +1814,7 @@ const styles = StyleSheet.create({
   switchPuntoActivo: {
     alignSelf: 'flex-end',
   },
-  
+
   // Botones del modal
   modalBotones: {
     flexDirection: 'row',
@@ -1856,7 +1850,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  
+
   // Modal de eventos del día
   listaEventosDia: {
     maxHeight: 400,

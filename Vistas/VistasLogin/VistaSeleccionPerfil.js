@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
+import { servicioAPI } from '../../servicios/api';
 
 // Colores de CuidaMe
 const COLORES = {

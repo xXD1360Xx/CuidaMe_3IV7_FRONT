@@ -16,7 +16,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { servicioAPI } from '../servicios/api';
+import { servicioAPI } from '../../servicios/api';
 import { useAuth } from '../../AppNavegacion';
 
 
@@ -163,7 +163,7 @@ export default function VistaRegistro() {
         if (!validarCodigoFamiliar(codigoFamiliarAnciano)) {
           nuevosErrores.codigoAnciano = 'Código debe tener 6 caracteres (ej: ABC-123)';
         }
-        break;
+
     }
 
     setErrores(nuevosErrores);
@@ -172,6 +172,7 @@ export default function VistaRegistro() {
 
   // Manejar registro
   const manejarRegistro = async () => {
+    // Validación del formulario
     if (!validarFormulario()) {
       Alert.alert('Error', 'Por favor corrige los errores en el formulario');
       return;
@@ -198,12 +199,14 @@ export default function VistaRegistro() {
 
         case 'familiar':
           if (tieneCodigoPersonalizado) {
-            // ⚠️ Como el backend no tiene registro-con-codigo, usamos login con código personalizado
             const codigoLimpio = codigoFamiliarPersonalizado.replace(/-/g, '');
             respuesta = await servicioAPI.iniciarSesionConCodigoPersonalizado(codigoLimpio);
             if (respuesta.exito && respuesta.token) {
               await auth.iniciarSesion(respuesta.token, respuesta.usuario, respuesta.usuario.rol || 'familiar');
-              navigation.replace('Principal');
+              navigation.replace('CrearAnciano', {
+                usuarioId: respuesta.usuario.id,
+                codigoFamiliar: codigoLimpio
+              });
             } else {
               Alert.alert('Error', respuesta.error || 'Código inválido');
             }
@@ -214,19 +217,18 @@ export default function VistaRegistro() {
               nombre: nombreFamiliar.trim(),
               email: correoFamiliar.trim().toLowerCase(),
               password: contrasenaFamiliar,
-              rol: 'familiar',
+              rol: 'familiar_principal',
               parentesco: 'familiar'
             };
           }
           break;
 
         case 'adultoMayor':
-          // Similar: usar login con código personalizado
           const codigoLimpioAnciano = codigoFamiliarAnciano.replace(/-/g, '');
           respuesta = await servicioAPI.iniciarSesionConCodigoPersonalizado(codigoLimpioAnciano);
           if (respuesta.exito && respuesta.token) {
-            await auth.iniciarSesion(respuesta.token, respuesta.usuario, respuesta.usuario.rol || 'adulto_mayor');
-            navigation.replace('InfoAnciano');
+            await auth.iniciarSesion(respuesta.token, respuesta.usuario, 'adulto_mayor');
+            navigation.replace('PrincipalAnciano');
           } else {
             Alert.alert('Error', respuesta.error || 'Código inválido');
           }
@@ -234,22 +236,48 @@ export default function VistaRegistro() {
           return;
       }
 
-      // Para casos sin código personalizado, usar registro normal
+      console.log('📤 Datos enviados al registro:', JSON.stringify(datosRegistro, null, 2));
       respuesta = await servicioAPI.registrarUsuario(datosRegistro, endpoint);
+      console.log('📥 Respuesta del backend:', JSON.stringify(respuesta, null, 2));
 
       if (respuesta.exito && respuesta.token) {
         await auth.iniciarSesion(respuesta.token, respuesta.usuario, respuesta.usuario.rol || 'familiar');
-        navigation.replace('Principal');
+
+        // Verificar que el correo existe antes de navegar
+        const correoParaVerificar = datosRegistro.email;
+        if (!correoParaVerificar) {
+          Alert.alert('Error', 'No se pudo obtener el correo para verificación');
+          setCargando(false);
+          return;
+        }
+
+        navigation.replace('VerificarCorreo', {
+          correo: correoParaVerificar,
+          modo: 'verificacion',
+          tipo: 'crear_cuenta',
+          usuarioId: respuesta.usuario.id,
+          redirigirA: 'CrearAnciano',
+          datosAnciano: {
+            usuarioId: respuesta.usuario.id,
+            codigoFamiliar: codigoFamiliarPersonalizado || null
+          }
+        });
       } else {
-        Alert.alert('Error', respuesta.error || 'Error en el registro');
+        // Mostrar el error exacto del backend
+        const mensajeError = respuesta.error || 'Error desconocido en el registro';
+        Alert.alert('❌ Error al registrar', mensajeError, [
+          { text: 'Entendido', style: 'default' }
+        ]);
       }
 
     } catch (error) {
-      Alert.alert('Error', 'No se pudo completar el registro');
+      console.error('Error en registro:', error);
+      Alert.alert('❌ Error de conexión', 'No se pudo conectar con el servidor. Verifica tu conexión a internet.');
     } finally {
       setCargando(false);
     }
   };
+
   // Volver a selección de perfil
   const volverASeleccion = () => {
     navigation.goBack();
@@ -669,7 +697,7 @@ export default function VistaRegistro() {
       </SafeAreaView>
     </LinearGradient>
   );
-}
+};
 
 const styles = StyleSheet.create({
   fondo: {

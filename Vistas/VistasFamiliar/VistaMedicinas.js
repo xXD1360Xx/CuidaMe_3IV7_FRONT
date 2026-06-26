@@ -15,7 +15,7 @@ import {
   Dimensions
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { Ionicons as Icon } from '@expo/vector-icons';
 import { servicioAPI } from '../../servicios/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -49,7 +49,7 @@ export default function VistaMedicinas({ navigation, route }) {
   const [medicinaSeleccionada, setMedicinaSeleccionada] = useState(null);
   const [usuarioRol, setUsuarioRol] = useState('');
   const [filtroPeriodo, setFiltroPeriodo] = useState('hoy');
-  
+
   // Estados para nueva medicina
   const [nuevaMedicina, setNuevaMedicina] = useState({
     nombre: '',
@@ -65,10 +65,10 @@ export default function VistaMedicinas({ navigation, route }) {
 
   // Horarios predefinidos
   const horariosPredefinidos = [
-    { id: 'manana', nombre: 'Mañana', hora: '08:00', icono: 'sunny-outline', color: COLORES.AMARILLO_PLATANO },
-    { id: 'mediodia', nombre: 'Mediodía', hora: '12:00', icono: 'restaurant-outline', color: COLORES.NARANJA },
-    { id: 'tarde', nombre: 'Tarde', hora: '16:00', icono: 'partly-sunny-outline', color: COLORES.MORADO },
-    { id: 'noche', nombre: 'Noche', hora: '20:00', icono: 'moon-outline', color: COLORES.AZUL_CIELO_OSCURO }
+    { id: 'manana', nombre: 'Mañana', hora: '08:00', icono: 'sunny-outline', color: '#FFD93D' }, // Amarillo claro
+    { id: 'mediodia', nombre: 'Mediodía', hora: '12:00', icono: 'restaurant-outline', color: '#F9A825' }, // Naranja
+    { id: 'tarde', nombre: 'Tarde', hora: '16:00', icono: 'partly-sunny-outline', color: '#42A5F5' }, // Azul claro
+    { id: 'noche', nombre: 'Noche', hora: '20:00', icono: 'moon-outline', color: '#5C6BC0' } // Índigo
   ];
 
   // Frecuencias
@@ -83,19 +83,19 @@ export default function VistaMedicinas({ navigation, route }) {
   const cargarDatos = useCallback(async () => {
     try {
       setCargando(true);
-      
+
       // Obtener usuario
       const usuarioData = await AsyncStorage.getItem('usuarioInfo');
       if (usuarioData) {
         const usuario = JSON.parse(usuarioData);
         setUsuarioRol(usuario.rol);
       }
-      
+
       // Cargar todas las medicinas
       const response = await servicioAPI.obtenerTodasMedicinas();
       if (response.exito) {
         setMedicinas(response.medicinas || []);
-        
+
         // Filtrar medicinas para hoy
         const hoy = new Date().toISOString().split('T')[0];
         const medicinasHoyFiltradas = response.medicinas.filter(med => {
@@ -104,13 +104,13 @@ export default function VistaMedicinas({ navigation, route }) {
         });
         setMedicinasHoy(medicinasHoyFiltradas);
       }
-      
+
       // Cargar medicinas frecuentes
       const frecuentesResponse = await servicioAPI.obtenerMedicinasFrecuentes();
       if (frecuentesResponse.exito) {
         setMedicinasFrecuentes(frecuentesResponse.medicinas || []);
       }
-      
+
     } catch (error) {
       console.error('Error cargando medicinas:', error);
       Alert.alert('Error', 'No se pudieron cargar las medicinas');
@@ -140,7 +140,7 @@ export default function VistaMedicinas({ navigation, route }) {
 
   // Obtener medicinas por periodo
   const obtenerMedicinasPorPeriodo = () => {
-    switch(filtroPeriodo) {
+    switch (filtroPeriodo) {
       case 'hoy':
         return medicinasHoy;
       case 'semana':
@@ -156,17 +156,17 @@ export default function VistaMedicinas({ navigation, route }) {
   const seleccionarHorario = (horarioId) => {
     const horario = horariosPredefinidos.find(h => h.id === horarioId);
     if (!horario) return;
-    
+
     const nuevosHorarios = [...nuevaMedicina.horarios];
     const index = nuevosHorarios.findIndex(h => h.id === horarioId);
-    
+
     if (index === -1) {
       nuevosHorarios.push(horario);
     } else {
       nuevosHorarios.splice(index, 1);
     }
-    
-    setNuevaMedicina({...nuevaMedicina, horarios: nuevosHorarios});
+
+    setNuevaMedicina({ ...nuevaMedicina, horarios: nuevosHorarios });
   };
 
   // Abrir modal para agregar
@@ -220,12 +220,12 @@ export default function VistaMedicinas({ navigation, route }) {
         Alert.alert('Error', 'Debes ingresar el nombre de la medicina');
         return;
       }
-      
+
       if (!nuevaMedicina.dosis.trim()) {
         Alert.alert('Error', 'Debes ingresar la dosis');
         return;
       }
-      
+
       if (nuevaMedicina.horarios.length === 0) {
         Alert.alert('Error', 'Debes seleccionar al menos un horario');
         return;
@@ -239,13 +239,16 @@ export default function VistaMedicinas({ navigation, route }) {
         stock_minimo: parseInt(nuevaMedicina.stock_minimo)
       };
 
+      // Obtener el ID del usuario actual
+      const usuarioId = await servicioAPI.obtenerUsuarioActualId();
+
       let response;
       if (medicinaSeleccionada) {
         // Actualizar
-        response = await servicioAPI.actualizarMedicina(medicinaSeleccionada.id, datosMedicina);
+        response = await servicioAPI.actualizarMedicina(usuarioId, medicinaSeleccionada.id, datosMedicina);
       } else {
         // Crear nueva
-        response = await servicioAPI.crearMedicina(datosMedicina);
+        response = await servicioAPI.crearMedicina(usuarioId, datosMedicina);
       }
 
       if (response.exito) {
@@ -296,7 +299,7 @@ export default function VistaMedicinas({ navigation, route }) {
     try {
       const hoy = new Date().toISOString().split('T')[0];
       const response = await servicioAPI.marcarMedicinaTomada(medicinaId, hoy, horarioId);
-      
+
       if (response.exito) {
         Alert.alert('Éxito', 'Medicina marcada como tomada');
         onRefresh();
@@ -318,21 +321,18 @@ export default function VistaMedicinas({ navigation, route }) {
       <View style={styles.columnaDosis}>
         <Text style={styles.textoCabecera}>Dosis</Text>
       </View>
-      {horariosPredefinidos.map(horario => (
-        <TouchableOpacity
-          key={horario.id}
-          style={styles.columnaHorario}
-          onPress={() => abrirModalAgregar(horario.id)}
-        >
-          <View style={styles.horarioHeader}>
-            <Icon name={horario.icono} size={14} color={horario.color} />
-            <Text style={[styles.textoCabecera, { color: horario.color, marginLeft: 4 }]}>
-              {horario.nombre}
-            </Text>
-          </View>
-          <Text style={styles.horaCabecera}>{horario.hora}</Text>
-        </TouchableOpacity>
-      ))}
+      <View style={styles.columnaHorarios}>
+        <View style={styles.horariosGrid}>
+          {horariosPredefinidos.map(horario => (
+            <View key={horario.id} style={styles.horarioCabeceraItem}>
+              <Icon name={horario.icono} size={16} color={horario.color} />
+              <Text style={[styles.textoCabeceraHorario, { color: horario.color }]}>
+                {horario.nombre.substring(0, 3)}
+              </Text>
+            </View>
+          ))}
+        </View>
+      </View>
       <View style={styles.columnaAcciones}>
         <Text style={styles.textoCabecera}>Acciones</Text>
       </View>
@@ -348,73 +348,72 @@ export default function VistaMedicinas({ navigation, route }) {
           <Text style={styles.textoProposito} numberOfLines={1}>{item.proposito}</Text>
         )}
       </View>
-      
+
       <View style={styles.columnaDosis}>
         <Text style={styles.textoDosis}>{item.dosis}</Text>
       </View>
-      
-      {horariosPredefinidos.map(horario => {
-        const tieneEsteHorario = item.horarios?.includes(horario.id);
-        const yaTomadaHoy = item.tomada_hoy?.includes(horario.id);
-        
-        return (
-          <TouchableOpacity
-            key={horario.id}
-            style={[
-              styles.columnaHorario,
-              tieneEsteHorario && { backgroundColor: horario.color + '20' }
-            ]}
-            onPress={() => {
-              if (tieneEsteHorario) {
-                // Si ya está tomada, abrir para ver detalles
-                if (yaTomadaHoy) {
-                  Alert.alert(
-                    'Ya tomada hoy',
-                    `${item.nombre} ya fue tomada ${horario.nombre.toLowerCase()}`
-                  );
-                } else {
-                  // Marcar como tomada
-                  marcarComoTomada(item.id, horario.id);
-                }
-              } else if (esAdministrador) {
-                // Agregar este horario
-                const medicinasEdit = { ...item };
-                const nuevosHorarios = [...(medicinasEdit.horarios || []), horario.id];
-                abrirModalEditar({ ...medicinasEdit, horarios: nuevosHorarios });
-              }
-            }}
-          >
-            {tieneEsteHorario ? (
-              <View style={styles.horarioMarcado}>
-                {yaTomadaHoy ? (
-                  <Icon name="checkmark-circle" size={20} color={COLORES.EXITO} />
-                ) : (
-                  <Icon name="ellipse-outline" size={20} color={horario.color} />
+
+      <View style={styles.columnaHorarios}>
+        <View style={styles.horariosGrid}>
+          {horariosPredefinidos.map(horario => {
+            const tieneEsteHorario = item.horarios?.includes(horario.id);
+            const yaTomadaHoy = item.tomada_hoy?.includes(horario.id);
+
+            return (
+              <TouchableOpacity
+                key={horario.id}
+                style={[
+                  styles.horarioItem,
+                  tieneEsteHorario && styles.horarioItemActivo,
+                  yaTomadaHoy && styles.horarioItemCompletado,
+                ]}
+                onPress={() => {
+                  if (tieneEsteHorario) {
+                    if (yaTomadaHoy) {
+                      Alert.alert(
+                        'Ya tomada hoy',
+                        `${item.nombre} ya fue tomada ${horario.nombre.toLowerCase()}`
+                      );
+                    } else {
+                      marcarComoTomada(item.id, horario.id);
+                    }
+                  } else if (esAdministrador) {
+                    const medicinasEdit = { ...item };
+                    const nuevosHorarios = [...(medicinasEdit.horarios || []), horario.id];
+                    abrirModalEditar({ ...medicinasEdit, horarios: nuevosHorarios });
+                  }
+                }}
+              >
+                <Icon
+                  name={horario.icono}
+                  size={18}
+                  color={tieneEsteHorario ? (yaTomadaHoy ? COLORES.EXITO : horario.color) : COLORES.GRIS_MEDIO}
+                />
+                {tieneEsteHorario && yaTomadaHoy && (
+                  <View style={styles.checkmarkOverlay}>
+                    <Icon name="checkmark-circle" size={14} color={COLORES.BLANCO} />
+                  </View>
                 )}
-              </View>
-            ) : (
-              esAdministrador ? (
-                <Icon name="add-outline" size={18} color={COLORES.GRIS_MEDIO} />
-              ) : null
-            )}
-          </TouchableOpacity>
-        );
-      })}
-      
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
       <View style={styles.columnaAcciones}>
         <TouchableOpacity
           style={styles.botonAccion}
           onPress={() => abrirModalEditar(item)}
         >
-          <Icon name="create-outline" size={18} color={COLORES.AZUL_CIELO_OSCURO} />
+          <Icon name="create-outline" size={20} color={COLORES.AZUL_CIELO_OSCURO} />
         </TouchableOpacity>
-        
+
         {esAdministrador && (
           <TouchableOpacity
             style={styles.botonAccion}
             onPress={() => eliminarMedicina(item.id)}
           >
-            <Icon name="trash-outline" size={18} color={COLORES.ERROR} />
+            <Icon name="trash-outline" size={20} color={COLORES.ERROR} />
           </TouchableOpacity>
         )}
       </View>
@@ -442,14 +441,14 @@ export default function VistaMedicinas({ navigation, route }) {
           <TouchableOpacity style={styles.botonAtras} onPress={() => navigation.goBack()}>
             <Icon name="arrow-back-outline" size={28} color={COLORES.TEXTO_OSCURO} />
           </TouchableOpacity>
-          
+
           <View style={styles.tituloContainer}>
             <Text style={styles.tituloPrincipal}>Gestión de Medicinas</Text>
             <Text style={styles.subtituloPrincipal}>
               {medicinasMostrar.length} medicina(s) • {medicinasHoy.length} para hoy
             </Text>
           </View>
-          
+
           <TouchableOpacity style={styles.botonRefrescar} onPress={onRefresh} disabled={refrescando}>
             <Icon name="refresh-outline" size={24} color={refrescando ? COLORES.GRIS_OSCURO : COLORES.TEXTO_OSCURO} />
           </TouchableOpacity>
@@ -457,7 +456,7 @@ export default function VistaMedicinas({ navigation, route }) {
 
         {/* Filtros */}
         <View style={styles.filtrosContainer}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.filtroBoton, filtroPeriodo === 'hoy' && styles.filtroBotonActivo]}
             onPress={() => setFiltroPeriodo('hoy')}
           >
@@ -465,8 +464,8 @@ export default function VistaMedicinas({ navigation, route }) {
               Hoy
             </Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={[styles.filtroBoton, filtroPeriodo === 'semana' && styles.filtroBotonActivo]}
             onPress={() => setFiltroPeriodo('semana')}
           >
@@ -474,8 +473,8 @@ export default function VistaMedicinas({ navigation, route }) {
               Semana
             </Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={[styles.filtroBoton, filtroPeriodo === 'mes' && styles.filtroBotonActivo]}
             onPress={() => setFiltroPeriodo('mes')}
           >
@@ -492,7 +491,7 @@ export default function VistaMedicinas({ navigation, route }) {
           {/* Tabla de medicinas */}
           <View style={styles.tablaContainer}>
             {renderCabeceraTabla()}
-            
+
             {medicinasMostrar.length > 0 ? (
               <FlatList
                 data={medicinasMostrar}
@@ -543,17 +542,17 @@ export default function VistaMedicinas({ navigation, route }) {
               <Text style={styles.numeroResumen}>{medicinas.length}</Text>
               <Text style={styles.textoResumen}>Total</Text>
             </View>
-            
+
             <View style={styles.separadorResumen} />
-            
+
             <View style={styles.itemResumen}>
               <Icon name="today-outline" size={24} color={COLORES.AMARILLO_PLATANO} />
               <Text style={styles.numeroResumen}>{medicinasHoy.length}</Text>
               <Text style={styles.textoResumen}>Hoy</Text>
             </View>
-            
+
             <View style={styles.separadorResumen} />
-            
+
             <View style={styles.itemResumen}>
               <Icon name="warning-outline" size={24} color={COLORES.ROJO_CLARO} />
               <Text style={styles.numeroResumen}>
@@ -601,7 +600,7 @@ export default function VistaMedicinas({ navigation, route }) {
               <TextInput
                 style={styles.input}
                 value={nuevaMedicina.nombre}
-                onChangeText={(text) => setNuevaMedicina({...nuevaMedicina, nombre: text})}
+                onChangeText={(text) => setNuevaMedicina({ ...nuevaMedicina, nombre: text })}
                 placeholder="Ej: Paracetamol, Enalapril..."
                 placeholderTextColor={COLORES.GRIS_MEDIO}
               />
@@ -610,7 +609,7 @@ export default function VistaMedicinas({ navigation, route }) {
               <TextInput
                 style={styles.input}
                 value={nuevaMedicina.dosis}
-                onChangeText={(text) => setNuevaMedicina({...nuevaMedicina, dosis: text})}
+                onChangeText={(text) => setNuevaMedicina({ ...nuevaMedicina, dosis: text })}
                 placeholder="Ej: 500mg, 1 tableta, 10ml..."
                 placeholderTextColor={COLORES.GRIS_MEDIO}
               />
@@ -628,10 +627,10 @@ export default function VistaMedicinas({ navigation, route }) {
                       ]}
                       onPress={() => seleccionarHorario(horario.id)}
                     >
-                      <Icon 
-                        name={horario.icono} 
-                        size={20} 
-                        color={seleccionado ? COLORES.BLANCO : horario.color} 
+                      <Icon
+                        name={horario.icono}
+                        size={20}
+                        color={seleccionado ? COLORES.BLANCO : horario.color}
                       />
                       <Text style={[
                         styles.textoOpcionHorario,
@@ -659,12 +658,12 @@ export default function VistaMedicinas({ navigation, route }) {
                       styles.opcionFrecuencia,
                       nuevaMedicina.frecuencia === frec.id && styles.opcionFrecuenciaSeleccionada
                     ]}
-                    onPress={() => setNuevaMedicina({...nuevaMedicina, frecuencia: frec.id})}
+                    onPress={() => setNuevaMedicina({ ...nuevaMedicina, frecuencia: frec.id })}
                   >
-                    <Icon 
-                      name={frec.icono} 
-                      size={18} 
-                      color={nuevaMedicina.frecuencia === frec.id ? COLORES.BLANCO : COLORES.GRIS_OSCURO} 
+                    <Icon
+                      name={frec.icono}
+                      size={18}
+                      color={nuevaMedicina.frecuencia === frec.id ? COLORES.BLANCO : COLORES.GRIS_OSCURO}
                     />
                     <Text style={[
                       styles.textoOpcionFrecuencia,
@@ -682,7 +681,7 @@ export default function VistaMedicinas({ navigation, route }) {
                   <TextInput
                     style={styles.input}
                     value={nuevaMedicina.stock}
-                    onChangeText={(text) => setNuevaMedicina({...nuevaMedicina, stock: text})}
+                    onChangeText={(text) => setNuevaMedicina({ ...nuevaMedicina, stock: text })}
                     keyboardType="numeric"
                     placeholder="30"
                     placeholderTextColor={COLORES.GRIS_MEDIO}
@@ -694,7 +693,7 @@ export default function VistaMedicinas({ navigation, route }) {
                   <TextInput
                     style={styles.input}
                     value={nuevaMedicina.stock_minimo}
-                    onChangeText={(text) => setNuevaMedicina({...nuevaMedicina, stock_minimo: text})}
+                    onChangeText={(text) => setNuevaMedicina({ ...nuevaMedicina, stock_minimo: text })}
                     keyboardType="numeric"
                     placeholder="10"
                     placeholderTextColor={COLORES.GRIS_MEDIO}
@@ -706,7 +705,7 @@ export default function VistaMedicinas({ navigation, route }) {
               <TextInput
                 style={styles.input}
                 value={nuevaMedicina.duracion}
-                onChangeText={(text) => setNuevaMedicina({...nuevaMedicina, duracion: text})}
+                onChangeText={(text) => setNuevaMedicina({ ...nuevaMedicina, duracion: text })}
                 keyboardType="numeric"
                 placeholder="Ej: 30 (dejar vacío si es permanente)"
                 placeholderTextColor={COLORES.GRIS_MEDIO}
@@ -716,7 +715,7 @@ export default function VistaMedicinas({ navigation, route }) {
               <TextInput
                 style={styles.input}
                 value={nuevaMedicina.proposito}
-                onChangeText={(text) => setNuevaMedicina({...nuevaMedicina, proposito: text})}
+                onChangeText={(text) => setNuevaMedicina({ ...nuevaMedicina, proposito: text })}
                 placeholder="¿Para qué se toma esta medicina?"
                 placeholderTextColor={COLORES.GRIS_MEDIO}
               />
@@ -725,7 +724,7 @@ export default function VistaMedicinas({ navigation, route }) {
               <TextInput
                 style={[styles.input, styles.textArea]}
                 value={nuevaMedicina.instrucciones}
-                onChangeText={(text) => setNuevaMedicina({...nuevaMedicina, instrucciones: text})}
+                onChangeText={(text) => setNuevaMedicina({ ...nuevaMedicina, instrucciones: text })}
                 multiline
                 numberOfLines={3}
                 placeholder="Ej: Tomar con alimentos, evitar alcohol..."
@@ -734,7 +733,7 @@ export default function VistaMedicinas({ navigation, route }) {
             </ScrollView>
 
             <View style={styles.modalBotones}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.botonModalCancelar}
                 onPress={() => {
                   setModalAgregarVisible(false);
@@ -745,7 +744,7 @@ export default function VistaMedicinas({ navigation, route }) {
               </TouchableOpacity>
 
               {medicinaSeleccionada && (
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={[styles.botonModalAccion, { backgroundColor: COLORES.ERROR }]}
                   onPress={() => eliminarMedicina(medicinaSeleccionada.id)}
                 >
@@ -753,7 +752,7 @@ export default function VistaMedicinas({ navigation, route }) {
                 </TouchableOpacity>
               )}
 
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.botonModalAccion, { backgroundColor: COLORES.EXITO }]}
                 onPress={guardarMedicina}
               >
@@ -786,7 +785,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
     fontSize: 16,
   },
-  
+
   // Encabezado
   encabezado: {
     flexDirection: 'row',
@@ -818,7 +817,7 @@ const styles = StyleSheet.create({
   botonRefrescar: {
     padding: 8,
   },
-  
+
   // Filtros
   filtrosContainer: {
     flexDirection: 'row',
@@ -844,13 +843,13 @@ const styles = StyleSheet.create({
     color: COLORES.BLANCO,
     fontWeight: 'bold',
   },
-  
+
   // Contenido
   contenedorScroll: {
     padding: 15,
     paddingBottom: 80,
   },
-  
+
   // Tabla
   tablaContainer: {
     backgroundColor: COLORES.BLANCO,
@@ -863,7 +862,7 @@ const styles = StyleSheet.create({
     elevation: 3,
     marginBottom: 20,
   },
-  
+
   // Cabecera de tabla
   filaCabecera: {
     flexDirection: 'row',
@@ -887,8 +886,9 @@ const styles = StyleSheet.create({
   },
   columnaHorario: {
     flex: 1,
-    paddingHorizontal: 5,
+    paddingHorizontal: 4,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   columnaAcciones: {
     width: 70,
@@ -904,7 +904,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     opacity: 0.8,
   },
-  
+
   // Filas de medicinas
   filaMedicina: {
     flexDirection: 'row',
@@ -939,7 +939,7 @@ const styles = StyleSheet.create({
     padding: 6,
     marginHorizontal: 2,
   },
-  
+
   sinMedicinas: {
     padding: 40,
     alignItems: 'center',
@@ -1203,5 +1203,89 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: COLORES.BLANCO,
+  },
+  // Reemplaza o agrega estos estilos
+
+  columnaHorarios: {
+    flex: 2, // mayor espacio para horarios
+    paddingHorizontal: 4,
+    justifyContent: 'center',
+  },
+  horariosGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    width: '100%',
+  },
+  horarioCabeceraItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+  },
+  textoCabeceraHorario: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    marginLeft: 2,
+  },
+  horarioItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginHorizontal: 2,
+    backgroundColor: COLORES.GRIS_CLARO,
+    minHeight: 40,
+    position: 'relative',
+  },
+  horarioItemActivo: {
+    backgroundColor: COLORES.AZUL_CIELO + '30',
+    borderWidth: 1,
+    borderColor: COLORES.AZUL_CIELO_OSCURO,
+  },
+  horarioItemCompletado: {
+    backgroundColor: COLORES.EXITO + '30',
+    borderColor: COLORES.EXITO,
+  },
+  checkmarkOverlay: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: COLORES.BLANCO,
+    borderRadius: 10,
+  },
+  // Ajusta columnas
+  columnaNombre: {
+    width: 90,
+    paddingHorizontal: 4,
+  },
+  columnaDosis: {
+    width: 55,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+  },
+  columnaAcciones: {
+    width: 60,
+    paddingHorizontal: 4,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  filaCabecera: {
+    flexDirection: 'row',
+    backgroundColor: COLORES.AZUL_CIELO_OSCURO,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+  },
+  filaMedicina: {
+    flexDirection: 'row',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORES.GRIS_CLARO,
+    alignItems: 'center',
+    minHeight: 70,
   },
 }); 

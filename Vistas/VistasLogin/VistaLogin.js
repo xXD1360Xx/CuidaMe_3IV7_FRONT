@@ -17,7 +17,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { servicioAPI } from '../servicios/api';
+import { servicioAPI } from '../../servicios/api';
 import { useAuth } from '../../AppNavegacion';
 
 
@@ -177,17 +177,28 @@ export default function VistaLogin({ navigation }) {
       }
 
       if (respuesta.exito && respuesta.token) {
+        console.log('✅ Token recibido:', respuesta.token.substring(0, 20) + '...');
         // Guardar sesión usando el contexto
         await auth.iniciarSesion(respuesta.token, respuesta.usuario, respuesta.usuario.rol || 'familiar');
+
+
+        // Verificar que el token se guardó correctamente
+        const tokenGuardado = await AsyncStorage.getItem('token');
+        console.log('🔑 Token guardado en AsyncStorage:', tokenGuardado ? '✅ Sí' : '❌ No');
+        if (!tokenGuardado) {
+          // Si no se guardó, guardarlo manualmente como respaldo
+          await AsyncStorage.setItem('token', respuesta.token);
+          console.log('🔄 Token guardado manualmente');
+        }
 
         // Redirigir según perfil
         const perfil = respuesta.usuario.rol || 'familiar';
         if (perfil === 'familiar') {
           navigation.replace('Principal');
         } else if (perfil === 'adulto_mayor') {
-          navigation.replace('InfoAnciano'); // o la ruta que corresponda
+          navigation.replace('Principal'); // Princiapl Anciano será
         } else {
-          navigation.replace('Principal'); // fallback
+          navigation.replace('Principal');
         }
       } else {
         Alert.alert('Error', respuesta.error || 'Credenciales incorrectas');
@@ -223,7 +234,7 @@ export default function VistaLogin({ navigation }) {
   };
 
   const manejarRecuperarContrasena = () => {
-    navigation.navigate('MandarCorreo', { modo: 'recuperar' });
+    navigation.navigate('VerificarCorreo', { modo: 'recuperar' });
   };
 
   const manejarCrearCuenta = () => {
@@ -263,11 +274,12 @@ export default function VistaLogin({ navigation }) {
   useEffect(() => {
     const verificarSesionActiva = async () => {
       try {
+        const token = await AsyncStorage.getItem('token');
+        console.log('🔍 Token al iniciar:', token ? '✅ Existe' : '❌ No existe');
         const sesionActiva = await AsyncStorage.getItem('sesionActiva');
         const usuarioInfo = await AsyncStorage.getItem('usuarioInfo');
 
         if (sesionActiva === 'true' && usuarioInfo) {
-          const token = await AsyncStorage.getItem('token');
 
           if (token) {
             try {
@@ -571,7 +583,7 @@ export default function VistaLogin({ navigation }) {
                 ) : (
                   <>
                     <Image
-                      source={require('../recursos/img/google.png')}
+                      source={require('../../recursos/img/google.png')}
                       style={styles.iconoGoogle}
                     />
                     <Text style={styles.textoBotonGoogle}>Google</Text>

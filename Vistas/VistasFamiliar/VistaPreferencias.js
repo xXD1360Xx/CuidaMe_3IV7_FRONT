@@ -15,7 +15,7 @@ import {
   Platform
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { Ionicons as Icon } from '@expo/vector-icons';
 import { servicioAPI } from '../../servicios/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
@@ -53,20 +53,20 @@ export default function VistaPreferencias({ navigation }) {
   const [modalRenunciarVisible, setModalRenunciarVisible] = useState(false);
   const [esAdministrador, setEsAdministrador] = useState(false);
   const [hayOtroAdmin, setHayOtroAdmin] = useState(false);
-  
+
   // Estados para formularios
   const [nuevoTelefono, setNuevoTelefono] = useState({
     numero: '',
     tipo: 'personal',
     principal: false
   });
-  
+
   const [contrasenaData, setContrasenaData] = useState({
     actual: '',
     nueva: '',
     confirmar: ''
   });
-  
+
   // Estados para preferencias
   const [preferencias, setPreferencias] = useState({
     notificaciones: true,
@@ -85,7 +85,7 @@ export default function VistaPreferencias({ navigation }) {
       sesionesActivas: true
     }
   });
-  
+
   // Tipos de teléfono
   const TIPOS_TELEFONO = [
     { id: 'personal', nombre: 'Personal', icono: 'person-outline' },
@@ -93,7 +93,7 @@ export default function VistaPreferencias({ navigation }) {
     { id: 'casa', nombre: 'Casa', icono: 'home-outline' },
     { id: 'emergencia', nombre: 'Emergencia', icono: 'alert-circle-outline' }
   ];
-  
+
   // Tamaños de letra
   const TAMANOS_LETRA = [
     { id: 'pequeno', nombre: 'Pequeño', valor: 12 },
@@ -101,7 +101,7 @@ export default function VistaPreferencias({ navigation }) {
     { id: 'grande', nombre: 'Grande', valor: 16 },
     { id: 'extra_grande', nombre: 'Extra Grande', valor: 18 }
   ];
-  
+
   // Idiomas disponibles
   const IDIOMAS = [
     { id: 'es', nombre: 'Español', icono: 'flag-outline' },
@@ -112,26 +112,26 @@ export default function VistaPreferencias({ navigation }) {
   const cargarDatosUsuario = useCallback(async () => {
     try {
       setCargando(true);
-      
+
       // Obtener usuario actual
       const usuarioData = await AsyncStorage.getItem('usuarioInfo');
       if (usuarioData) {
         const usuarioInfo = JSON.parse(usuarioData);
         setUsuario(usuarioInfo);
         setEsAdministrador(usuarioInfo.rol === 'familiar_administrador');
-        
+
         // Cargar teléfonos del usuario
         const telefonosResponse = await servicioAPI.obtenerTelefonosUsuario(usuarioInfo.id);
         if (telefonosResponse.exito) {
           setTelefonos(telefonosResponse.telefonos || []);
         }
-        
+
         // Cargar preferencias del usuario
         const preferenciasResponse = await servicioAPI.obtenerPreferenciasUsuario(usuarioInfo.id);
         if (preferenciasResponse.exito) {
           setPreferencias(preferenciasResponse.preferencias || preferencias);
         }
-        
+
         // Verificar si hay otro administrador
         if (usuarioInfo.rol === 'familiar_administrador') {
           const adminsResponse = await servicioAPI.verificarOtrosAdministradores();
@@ -140,7 +140,7 @@ export default function VistaPreferencias({ navigation }) {
           }
         }
       }
-      
+
     } catch (error) {
       console.error('Error cargando preferencias:', error);
       Alert.alert('Error', 'No se pudieron cargar las preferencias');
@@ -163,14 +163,14 @@ export default function VistaPreferencias({ navigation }) {
   const actualizarInformacionUsuario = async () => {
     try {
       if (!usuario) return;
-      
+
       const datosActualizar = {
         email: usuario.email,
         // Otros datos que puedan actualizarse
       };
-      
+
       const response = await servicioAPI.actualizarUsuario(usuario.id, datosActualizar);
-      
+
       if (response.exito) {
         Alert.alert('Éxito', 'Información actualizada correctamente');
         // Actualizar AsyncStorage
@@ -178,7 +178,7 @@ export default function VistaPreferencias({ navigation }) {
       } else {
         Alert.alert('Error', response.error || 'Error actualizando información');
       }
-      
+
     } catch (error) {
       console.error('Error actualizando usuario:', error);
       Alert.alert('Error', 'No se pudo actualizar la información');
@@ -192,12 +192,12 @@ export default function VistaPreferencias({ navigation }) {
         Alert.alert('Error', 'Debes ingresar un número de teléfono');
         return;
       }
-      
+
       const response = await servicioAPI.agregarTelefono({
         ...nuevoTelefono,
         usuarioId: usuario.id
       });
-      
+
       if (response.exito) {
         Alert.alert('Éxito', 'Teléfono agregado correctamente');
         setModalTelefonoVisible(false);
@@ -206,7 +206,7 @@ export default function VistaPreferencias({ navigation }) {
       } else {
         Alert.alert('Error', response.error || 'Error agregando teléfono');
       }
-      
+
     } catch (error) {
       console.error('Error agregando teléfono:', error);
       Alert.alert('Error', 'No se pudo agregar el teléfono');
@@ -259,27 +259,27 @@ export default function VistaPreferencias({ navigation }) {
         Alert.alert('Error', 'Debes ingresar tu contraseña actual');
         return;
       }
-      
+
       if (!contrasenaData.nueva.trim()) {
         Alert.alert('Error', 'Debes ingresar una nueva contraseña');
         return;
       }
-      
+
       if (contrasenaData.nueva.length < 6) {
         Alert.alert('Error', 'La nueva contraseña debe tener al menos 6 caracteres');
         return;
       }
-      
+
       if (contrasenaData.nueva !== contrasenaData.confirmar) {
         Alert.alert('Error', 'Las contraseñas no coinciden');
         return;
       }
-      
+
       const response = await servicioAPI.cambiarContrasena({
         actual: contrasenaData.actual,
         nueva: contrasenaData.nueva
       });
-      
+
       if (response.exito) {
         Alert.alert('Éxito', 'Contraseña cambiada correctamente');
         setModalContrasenaVisible(false);
@@ -287,7 +287,7 @@ export default function VistaPreferencias({ navigation }) {
       } else {
         Alert.alert('Error', response.error || 'Error cambiando contraseña');
       }
-      
+
     } catch (error) {
       console.error('Error cambiando contraseña:', error);
       Alert.alert('Error', 'No se pudo cambiar la contraseña');
@@ -298,21 +298,21 @@ export default function VistaPreferencias({ navigation }) {
   const actualizarPreferencia = async (categoria, clave, valor) => {
     try {
       const nuevasPreferencias = { ...preferencias };
-      
+
       if (categoria) {
         nuevasPreferencias[categoria][clave] = valor;
       } else {
         nuevasPreferencias[clave] = valor;
       }
-      
+
       setPreferencias(nuevasPreferencias);
-      
+
       // Guardar en backend
       const response = await servicioAPI.actualizarPreferencias(nuevasPreferencias);
       if (!response.exito) {
         console.error('Error guardando preferencias:', response.error);
       }
-      
+
     } catch (error) {
       console.error('Error actualizando preferencia:', error);
     }
@@ -331,9 +331,9 @@ export default function VistaPreferencias({ navigation }) {
         );
         return;
       }
-      
+
       const response = await servicioAPI.renunciarAdministrador();
-      
+
       if (response.exito) {
         Alert.alert(
           'Éxito',
@@ -355,7 +355,7 @@ export default function VistaPreferencias({ navigation }) {
       } else {
         Alert.alert('Error', response.error || 'Error renunciando al rol');
       }
-      
+
     } catch (error) {
       console.error('Error renunciando administrador:', error);
       Alert.alert('Error', 'No se pudo renunciar al rol');
@@ -381,7 +381,7 @@ export default function VistaPreferencias({ navigation }) {
                 'token',
                 'rol'
               ]);
-              
+
               // Navegar a login
               navigation.replace('PantallaLogin');
             } catch (error) {
@@ -426,24 +426,24 @@ export default function VistaPreferencias({ navigation }) {
   const seleccionarFotoPerfil = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
+
       if (status !== 'granted') {
         Alert.alert('Permiso denegado', 'Necesitas permisos para acceder a la galería');
         return;
       }
-      
+
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
       });
-      
+
       if (!result.canceled) {
         // Aquí subirías la imagen al backend
         Alert.alert('Éxito', 'Foto de perfil actualizada (en desarrollo)');
       }
-      
+
     } catch (error) {
       console.error('Error seleccionando foto:', error);
       Alert.alert('Error', 'No se pudo seleccionar la foto');
@@ -471,7 +471,7 @@ export default function VistaPreferencias({ navigation }) {
           </Text>
         </View>
       </View>
-      
+
       <View style={styles.accionesTelefono}>
         {!telefono.principal && (
           <TouchableOpacity
@@ -481,7 +481,7 @@ export default function VistaPreferencias({ navigation }) {
             <Icon name="star-outline" size={18} color={COLORES.AMARILLO_PLATANO} />
           </TouchableOpacity>
         )}
-        
+
         <TouchableOpacity
           style={styles.botonAccionTelefono}
           onPress={() => eliminarTelefono(telefono.id)}
@@ -511,17 +511,17 @@ export default function VistaPreferencias({ navigation }) {
           <TouchableOpacity style={styles.botonAtras} onPress={() => navigation.goBack()}>
             <Icon name="arrow-back-outline" size={28} color={COLORES.TEXTO_OSCURO} />
           </TouchableOpacity>
-          
+
           <View style={styles.tituloContainer}>
             <Text style={styles.tituloPrincipal}>Preferencias</Text>
             <Text style={styles.subtituloPrincipal}>Configura tu cuenta y preferencias</Text>
           </View>
-          
+
           <TouchableOpacity style={styles.botonRefrescar} onPress={onRefresh} disabled={refrescando}>
-            <Icon 
-              name="refresh-outline" 
-              size={24} 
-              color={refrescando ? COLORES.GRIS_OSCURO : COLORES.TEXTO_OSCURO} 
+            <Icon
+              name="refresh-outline"
+              size={24}
+              color={refrescando ? COLORES.GRIS_OSCURO : COLORES.TEXTO_OSCURO}
             />
           </TouchableOpacity>
         </View>
@@ -540,9 +540,9 @@ export default function VistaPreferencias({ navigation }) {
           {/* Perfil del Usuario */}
           <View style={styles.seccion}>
             <Text style={styles.tituloSeccion}>Perfil</Text>
-            
+
             <View style={styles.contenedorPerfil}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.contenedorFotoPerfil}
                 onPress={seleccionarFotoPerfil}
               >
@@ -553,7 +553,7 @@ export default function VistaPreferencias({ navigation }) {
                   <Icon name="camera-outline" size={16} color={COLORES.BLANCO} />
                 </View>
               </TouchableOpacity>
-              
+
               <View style={styles.infoPerfil}>
                 <Text style={styles.nombrePerfil}>
                   {usuario?.nombre} {usuario?.apellido}
@@ -571,7 +571,7 @@ export default function VistaPreferencias({ navigation }) {
           {/* Información Personal */}
           <View style={styles.seccion}>
             <Text style={styles.tituloSeccion}>Información Personal</Text>
-            
+
             <View style={styles.contenedorInformacion}>
               {/* Nombre (no editable) */}
               <View style={styles.itemInformacion}>
@@ -583,7 +583,7 @@ export default function VistaPreferencias({ navigation }) {
                   {usuario?.nombre} {usuario?.apellido}
                 </Text>
               </View>
-              
+
               {/* Email (editable) */}
               <View style={styles.itemInformacion}>
                 <View style={styles.labelInformacion}>
@@ -593,16 +593,16 @@ export default function VistaPreferencias({ navigation }) {
                 <TextInput
                   style={styles.inputInformacion}
                   value={usuario?.email || ''}
-                  onChangeText={(text) => setUsuario({...usuario, email: text})}
+                  onChangeText={(text) => setUsuario({ ...usuario, email: text })}
                   placeholder="correo@ejemplo.com"
                   keyboardType="email-address"
                   autoCapitalize="none"
                   placeholderTextColor={COLORES.GRIS_MEDIO}
                 />
               </View>
-              
+
               {/* Botón para guardar cambios */}
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.botonGuardarCambios}
                 onPress={actualizarInformacionUsuario}
               >
@@ -615,14 +615,14 @@ export default function VistaPreferencias({ navigation }) {
           <View style={styles.seccion}>
             <View style={styles.encabezadoSeccionConBoton}>
               <Text style={styles.tituloSeccion}>Teléfonos</Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.botonAgregarTelefono}
                 onPress={() => setModalTelefonoVisible(true)}
               >
                 <Icon name="add-outline" size={20} color={COLORES.AZUL_CIELO_OSCURO} />
               </TouchableOpacity>
             </View>
-            
+
             <View style={styles.contenedorTelefonos}>
               {telefonos.length > 0 ? (
                 telefonos.map(renderTelefono)
@@ -635,9 +635,9 @@ export default function VistaPreferencias({ navigation }) {
           {/* Seguridad */}
           <View style={styles.seccion}>
             <Text style={styles.tituloSeccion}>Seguridad</Text>
-            
+
             <View style={styles.contenedorSeguridad}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.itemAccion}
                 onPress={() => setModalContrasenaVisible(true)}
               >
@@ -650,7 +650,7 @@ export default function VistaPreferencias({ navigation }) {
                 </View>
                 <Icon name="chevron-forward-outline" size={20} color={COLORES.GRIS_MEDIO} />
               </TouchableOpacity>
-              
+
               <View style={styles.itemToggle}>
                 <View style={styles.infoToggle}>
                   <Icon name="shield-checkmark-outline" size={22} color={COLORES.EXITO} />
@@ -666,7 +666,7 @@ export default function VistaPreferencias({ navigation }) {
                   thumbColor={COLORES.BLANCO}
                 />
               </View>
-              
+
               <View style={styles.itemToggle}>
                 <View style={styles.infoToggle}>
                   <Icon name="desktop-outline" size={22} color={COLORES.AZUL_CIELO} />
@@ -688,7 +688,7 @@ export default function VistaPreferencias({ navigation }) {
           {/* Notificaciones */}
           <View style={styles.seccion}>
             <Text style={styles.tituloSeccion}>Notificaciones</Text>
-            
+
             <View style={styles.contenedorNotificaciones}>
               <View style={styles.itemToggle}>
                 <View style={styles.infoToggle}>
@@ -705,7 +705,7 @@ export default function VistaPreferencias({ navigation }) {
                   thumbColor={COLORES.BLANCO}
                 />
               </View>
-              
+
               <View style={styles.itemToggle}>
                 <View style={styles.infoToggle}>
                   <Icon name="volume-high-outline" size={22} color={COLORES.MORADO} />
@@ -722,7 +722,7 @@ export default function VistaPreferencias({ navigation }) {
                   disabled={!preferencias.notificaciones}
                 />
               </View>
-              
+
               <View style={styles.itemToggle}>
                 <View style={styles.infoToggle}>
                   <Icon name="phone-portrait-outline" size={22} color={COLORES.TURQUESA} />
@@ -745,7 +745,7 @@ export default function VistaPreferencias({ navigation }) {
           {/* Apariencia */}
           <View style={styles.seccion}>
             <Text style={styles.tituloSeccion}>Apariencia</Text>
-            
+
             <View style={styles.contenedorApariencia}>
               <View style={styles.itemToggle}>
                 <View style={styles.infoToggle}>
@@ -762,7 +762,7 @@ export default function VistaPreferencias({ navigation }) {
                   thumbColor={COLORES.BLANCO}
                 />
               </View>
-              
+
               {/* Tamaño de letra */}
               <View style={styles.itemSelector}>
                 <View style={styles.infoSelector}>
@@ -798,7 +798,7 @@ export default function VistaPreferencias({ navigation }) {
                   ))}
                 </View>
               </View>
-              
+
               {/* Idioma */}
               <View style={styles.itemSelector}>
                 <View style={styles.infoSelector}>
@@ -818,10 +818,10 @@ export default function VistaPreferencias({ navigation }) {
                       ]}
                       onPress={() => actualizarPreferencia(null, 'idioma', idioma.id)}
                     >
-                      <Icon 
-                        name={idioma.icono} 
-                        size={16} 
-                        color={preferencias.idioma === idioma.id ? COLORES.BLANCO : COLORES.GRIS_OSCURO} 
+                      <Icon
+                        name={idioma.icono}
+                        size={16}
+                        color={preferencias.idioma === idioma.id ? COLORES.BLANCO : COLORES.GRIS_OSCURO}
                       />
                       <Text style={[
                         styles.textoOpcionIdioma,
@@ -839,7 +839,7 @@ export default function VistaPreferencias({ navigation }) {
           {/* Privacidad */}
           <View style={styles.seccion}>
             <Text style={styles.tituloSeccion}>Privacidad</Text>
-            
+
             <View style={styles.contenedorPrivacidad}>
               <View style={styles.itemToggle}>
                 <View style={styles.infoToggle}>
@@ -856,7 +856,7 @@ export default function VistaPreferencias({ navigation }) {
                   thumbColor={COLORES.BLANCO}
                 />
               </View>
-              
+
               <View style={styles.itemToggle}>
                 <View style={styles.infoToggle}>
                   <Icon name="call-outline" size={22} color={COLORES.AZUL_CIELO} />
@@ -872,7 +872,7 @@ export default function VistaPreferencias({ navigation }) {
                   thumbColor={COLORES.BLANCO}
                 />
               </View>
-              
+
               <View style={styles.itemToggle}>
                 <View style={styles.infoToggle}>
                   <Icon name="mail-outline" size={22} color={COLORES.ROSA} />
@@ -895,9 +895,9 @@ export default function VistaPreferencias({ navigation }) {
           {esAdministrador && (
             <View style={styles.seccion}>
               <Text style={styles.tituloSeccion}>Administración</Text>
-              
+
               <View style={styles.contenedorAdministracion}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.itemAccionEspecial}
                   onPress={() => setModalRenunciarVisible(true)}
                 >
@@ -907,8 +907,8 @@ export default function VistaPreferencias({ navigation }) {
                   <View style={styles.infoAccionEspecial}>
                     <Text style={styles.tituloAccionEspecial}>Renunciar a Administrador</Text>
                     <Text style={styles.descripcionAccionEspecial}>
-                      {hayOtroAdmin 
-                        ? 'Dejar de ser administrador del grupo familiar' 
+                      {hayOtroAdmin
+                        ? 'Dejar de ser administrador del grupo familiar'
                         : 'Necesitas designar a otro administrador primero'}
                     </Text>
                   </View>
@@ -921,9 +921,9 @@ export default function VistaPreferencias({ navigation }) {
           {/* Acciones de Cuenta */}
           <View style={styles.seccion}>
             <Text style={styles.tituloSeccion}>Cuenta</Text>
-            
+
             <View style={styles.contenedorCuenta}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.itemAccion}
                 onPress={cerrarSesion}
               >
@@ -935,8 +935,8 @@ export default function VistaPreferencias({ navigation }) {
                   <Text style={styles.descripcionAccion}>Salir de tu cuenta actual</Text>
                 </View>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={styles.itemAccion}
                 onPress={solicitarEliminarCuenta}
               >
@@ -956,7 +956,7 @@ export default function VistaPreferencias({ navigation }) {
             <View style={styles.infoApp}>
               <Text style={styles.versionApp}>CuidaMe v1.0</Text>
               <Text style={styles.copyApp}>© 2024 Todos los derechos reservados</Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.botonSoporte}
                 onPress={() => navigation.navigate('Soporte')}
               >
@@ -988,7 +988,7 @@ export default function VistaPreferencias({ navigation }) {
               <TextInput
                 style={styles.input}
                 value={nuevoTelefono.numero}
-                onChangeText={(text) => setNuevoTelefono({...nuevoTelefono, numero: text})}
+                onChangeText={(text) => setNuevoTelefono({ ...nuevoTelefono, numero: text })}
                 placeholder="Ej: 123 456 7890"
                 keyboardType="phone-pad"
                 placeholderTextColor={COLORES.GRIS_MEDIO}
@@ -1003,12 +1003,12 @@ export default function VistaPreferencias({ navigation }) {
                       styles.opcionTipoTelefono,
                       nuevoTelefono.tipo === tipo.id && styles.opcionTipoTelefonoSeleccionada
                     ]}
-                    onPress={() => setNuevoTelefono({...nuevoTelefono, tipo: tipo.id})}
+                    onPress={() => setNuevoTelefono({ ...nuevoTelefono, tipo: tipo.id })}
                   >
-                    <Icon 
-                      name={tipo.icono} 
-                      size={18} 
-                      color={nuevoTelefono.tipo === tipo.id ? COLORES.BLANCO : COLORES.GRIS_OSCURO} 
+                    <Icon
+                      name={tipo.icono}
+                      size={18}
+                      color={nuevoTelefono.tipo === tipo.id ? COLORES.BLANCO : COLORES.GRIS_OSCURO}
                     />
                     <Text style={[
                       styles.textoOpcionTipoTelefono,
@@ -1023,12 +1023,12 @@ export default function VistaPreferencias({ navigation }) {
               <View style={styles.opcionPrincipal}>
                 <TouchableOpacity
                   style={styles.botonCheckbox}
-                  onPress={() => setNuevoTelefono({...nuevoTelefono, principal: !nuevoTelefono.principal})}
+                  onPress={() => setNuevoTelefono({ ...nuevoTelefono, principal: !nuevoTelefono.principal })}
                 >
-                  <Icon 
-                    name={nuevoTelefono.principal ? "checkmark-circle" : "ellipse-outline"} 
-                    size={24} 
-                    color={nuevoTelefono.principal ? COLORES.EXITO : COLORES.GRIS_MEDIO} 
+                  <Icon
+                    name={nuevoTelefono.principal ? "checkmark-circle" : "ellipse-outline"}
+                    size={24}
+                    color={nuevoTelefono.principal ? COLORES.EXITO : COLORES.GRIS_MEDIO}
                   />
                   <Text style={styles.textoCheckbox}>Marcar como teléfono principal</Text>
                 </TouchableOpacity>
@@ -1036,14 +1036,14 @@ export default function VistaPreferencias({ navigation }) {
             </ScrollView>
 
             <View style={styles.modalBotones}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.botonModalCancelar}
                 onPress={() => setModalTelefonoVisible(false)}
               >
                 <Text style={styles.textoBotonModalCancelar}>Cancelar</Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={[styles.botonModalAccion, { backgroundColor: COLORES.EXITO }]}
                 onPress={agregarTelefono}
               >
@@ -1075,7 +1075,7 @@ export default function VistaPreferencias({ navigation }) {
               <TextInput
                 style={styles.input}
                 value={contrasenaData.actual}
-                onChangeText={(text) => setContrasenaData({...contrasenaData, actual: text})}
+                onChangeText={(text) => setContrasenaData({ ...contrasenaData, actual: text })}
                 placeholder="Ingresa tu contraseña actual"
                 secureTextEntry
                 placeholderTextColor={COLORES.GRIS_MEDIO}
@@ -1085,7 +1085,7 @@ export default function VistaPreferencias({ navigation }) {
               <TextInput
                 style={styles.input}
                 value={contrasenaData.nueva}
-                onChangeText={(text) => setContrasenaData({...contrasenaData, nueva: text})}
+                onChangeText={(text) => setContrasenaData({ ...contrasenaData, nueva: text })}
                 placeholder="Mínimo 6 caracteres"
                 secureTextEntry
                 placeholderTextColor={COLORES.GRIS_MEDIO}
@@ -1095,7 +1095,7 @@ export default function VistaPreferencias({ navigation }) {
               <TextInput
                 style={styles.input}
                 value={contrasenaData.confirmar}
-                onChangeText={(text) => setContrasenaData({...contrasenaData, confirmar: text})}
+                onChangeText={(text) => setContrasenaData({ ...contrasenaData, confirmar: text })}
                 placeholder="Repite la nueva contraseña"
                 secureTextEntry
                 placeholderTextColor={COLORES.GRIS_MEDIO}
@@ -1111,14 +1111,14 @@ export default function VistaPreferencias({ navigation }) {
             </ScrollView>
 
             <View style={styles.modalBotones}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.botonModalCancelar}
                 onPress={() => setModalContrasenaVisible(false)}
               >
                 <Text style={styles.textoBotonModalCancelar}>Cancelar</Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={[styles.botonModalAccion, { backgroundColor: COLORES.EXITO }]}
                 onPress={cambiarContrasena}
               >
@@ -1150,7 +1150,7 @@ export default function VistaPreferencias({ navigation }) {
                 <Icon name="warning-outline" size={40} color={COLORES.AMARILLO_PLATANO} />
                 <Text style={styles.tituloAdvertencia}>¡Atención!</Text>
                 <Text style={styles.textoAdvertencia}>
-                  {hayOtroAdmin 
+                  {hayOtroAdmin
                     ? 'Al renunciar al rol de administrador perderás los siguientes privilegios:'
                     : 'No puedes renunciar al rol de administrador porque eres el único administrador del grupo familiar.'}
                 </Text>
@@ -1182,7 +1182,7 @@ export default function VistaPreferencias({ navigation }) {
                   </Text>
                 </>
               ) : (
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.botonDesignarAdmin}
                   onPress={() => {
                     setModalRenunciarVisible(false);
@@ -1195,15 +1195,15 @@ export default function VistaPreferencias({ navigation }) {
             </ScrollView>
 
             <View style={styles.modalBotones}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.botonModalCancelar}
                 onPress={() => setModalRenunciarVisible(false)}
               >
                 <Text style={styles.textoBotonModalCancelar}>Cancelar</Text>
               </TouchableOpacity>
-              
+
               {hayOtroAdmin && (
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={[styles.botonModalAccion, { backgroundColor: COLORES.ERROR }]}
                   onPress={renunciarAdministrador}
                 >
@@ -1235,7 +1235,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
     fontSize: 16,
   },
-  
+
   // Encabezado
   encabezado: {
     flexDirection: 'row',
@@ -1267,13 +1267,13 @@ const styles = StyleSheet.create({
   botonRefrescar: {
     padding: 8,
   },
-  
+
   // Contenido
   contenedorScroll: {
     padding: 20,
     paddingBottom: 80,
   },
-  
+
   // Secciones
   seccion: {
     marginBottom: 25,
@@ -1293,7 +1293,7 @@ const styles = StyleSheet.create({
   botonAgregarTelefono: {
     padding: 8,
   },
-  
+
   // Perfil
   contenedorPerfil: {
     flexDirection: 'row',
@@ -1356,7 +1356,7 @@ const styles = StyleSheet.create({
     color: COLORES.AMARILLO_OSCURO,
     fontWeight: '600',
   },
-  
+
   // Información Personal
   contenedorInformacion: {
     backgroundColor: COLORES.BLANCO,
@@ -1410,7 +1410,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  
+
   // Teléfonos
   contenedorTelefonos: {
     backgroundColor: COLORES.BLANCO,
@@ -1469,7 +1469,7 @@ const styles = StyleSheet.create({
     padding: 20,
     fontStyle: 'italic',
   },
-  
+
   // Items de acción y toggle
   contenedorSeguridad: {
     backgroundColor: COLORES.BLANCO,
@@ -1531,7 +1531,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  
+
   itemAccion: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1561,7 +1561,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORES.GRIS_OSCURO,
   },
-  
+
   itemAccionEspecial: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1589,7 +1589,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORES.GRIS_OSCURO,
   },
-  
+
   itemToggle: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1617,7 +1617,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORES.GRIS_OSCURO,
   },
-  
+
   // Selectores (tamaño letra, idioma)
   itemSelector: {
     paddingVertical: 15,
@@ -1677,7 +1677,7 @@ const styles = StyleSheet.create({
     color: COLORES.BLANCO,
     fontWeight: 'bold',
   },
-  
+
   opcionesIdioma: {
     flexDirection: 'row',
   },
@@ -1705,7 +1705,7 @@ const styles = StyleSheet.create({
     color: COLORES.BLANCO,
     fontWeight: 'bold',
   },
-  
+
   // Información de la App
   infoApp: {
     alignItems: 'center',
@@ -1730,7 +1730,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
-  
+
   // Modal
   modalFondo: {
     flex: 1,
@@ -1776,7 +1776,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORES.GRIS_MEDIO,
   },
-  
+
   // Opciones tipo teléfono
   opcionesTipoTelefono: {
     flexDirection: 'row',
@@ -1807,7 +1807,7 @@ const styles = StyleSheet.create({
     color: COLORES.BLANCO,
     fontWeight: 'bold',
   },
-  
+
   // Checkbox principal
   opcionPrincipal: {
     marginBottom: 15,
@@ -1822,7 +1822,7 @@ const styles = StyleSheet.create({
     color: COLORES.TEXTO_OSCURO,
     marginLeft: 10,
   },
-  
+
   // Consejos seguridad
   consejosSeguridad: {
     backgroundColor: COLORES.GRIS_CLARO,
@@ -1841,7 +1841,7 @@ const styles = StyleSheet.create({
     color: COLORES.GRIS_OSCURO,
     marginBottom: 4,
   },
-  
+
   // Info advertencia renunciar admin
   infoAdvertencia: {
     alignItems: 'center',
@@ -1894,7 +1894,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  
+
   // Botones del modal
   modalBotones: {
     flexDirection: 'row',

@@ -16,16 +16,24 @@ import VistaPrincipal from './Vistas/VistasFamiliar/VistaPrincipal';
 import VistaFamilia from './Vistas/VistasFamiliar/VistaFamilia';
 import VistaGastos from './Vistas/VistasFamiliar/VistaGastos';
 import VistaHorario from './Vistas/VistasFamiliar/VistaHorario';
-import VistaMedicina from './Vistas/VistasFamiliar/VistaMedicina';
+import VistaMedicinas from './Vistas/VistasFamiliar/VistaMedicinas';
 import VistaPreferencias from './Vistas/VistasFamiliar/VistaPreferencias';
 import VistaInfoAnciano from './Vistas/VistasFamiliar/VistaInfoAnciano';
 import VistaCalendario from './Vistas/VistasFamiliar/VistaCalendario';
+import VistaPerfil from './Vistas/VistasFamiliar/VistaPerfil';
+// ✅ DESCOMENTADA: VistaCrearAnciano existe en VistasLogin
+import VistaCrearAnciano from './Vistas/VistasLogin/VistaCrearAnciano';
+
+// ❌ Las siguientes vistas NO EXISTEN, se mantienen comentadas
+// import VistaPerfilAnciano from './Vistas/VistasAnciano/VistaPerfilAnciano';
+// import VistaPerfilProfesional from './Vistas/VistasProfesional/VistaPerfilProfesional';
+// import VistaPrincipalAnciano from './Vistas/VistasAnciano/VistaPrincipalAnciano';
+// import VistaPrincipalProfesional from './Vistas/VistasProfesional/VistaPrincipalProfesional';
 
 const Stack = createNativeStackNavigator();
 
 // ========== CONTEXTO DE AUTENTICACIÓN ==========
 export const AuthContext = createContext();
-
 export const useAuth = () => useContext(AuthContext);
 
 // ========== PANTALLA DE CARGA ==========
@@ -42,7 +50,6 @@ export default function AppNavegacion() {
   const [usuarioInfo, setUsuarioInfo] = useState(null);
   const [tipoPerfil, setTipoPerfil] = useState(null);
 
-  // Cargar sesión al iniciar
   useEffect(() => {
     const cargarSesion = async () => {
       try {
@@ -65,7 +72,6 @@ export default function AppNavegacion() {
     cargarSesion();
   }, []);
 
-  // Funciones del contexto
   const iniciarSesion = async (token, usuario, perfil = null) => {
     await AsyncStorage.setItem('token', token);
     await AsyncStorage.setItem('usuarioInfo', JSON.stringify(usuario));
@@ -110,7 +116,6 @@ export default function AppNavegacion() {
     return <PantallaCarga />;
   }
 
-  // Determinar pantalla inicial
   const pantallaInicial = authContext.estaAutenticado ? 'Principal' : 'Login';
 
   return (
@@ -133,10 +138,20 @@ export default function AppNavegacion() {
           <Stack.Screen name="Familia" component={VistaFamilia} />
           <Stack.Screen name="Gastos" component={VistaGastos} />
           <Stack.Screen name="Horario" component={VistaHorario} />
-          <Stack.Screen name="Medicina" component={VistaMedicina} />
+          <Stack.Screen name="Medicinas" component={VistaMedicinas} />
           <Stack.Screen name="Preferencias" component={VistaPreferencias} />
           <Stack.Screen name="InfoAnciano" component={VistaInfoAnciano} />
           <Stack.Screen name="Calendario" component={VistaCalendario} />
+          <Stack.Screen name="Perfil" component={VistaPerfil} />
+
+          {/* ✅ DESCOMENTADA: Pantalla para crear/editar adulto mayor */}
+          <Stack.Screen name="CrearAnciano" component={VistaCrearAnciano} />
+
+          {/* ❌ Vistas de perfiles específicos - COMENTADAS porque no existen */}
+          {/* <Stack.Screen name="PerfilProfesional" component={VistaPerfilProfesional} /> */}
+          {/* <Stack.Screen name="PerfilAnciano" component={VistaPerfilAnciano} /> */}
+          {/* <Stack.Screen name="PrincipalAnciano" component={VistaPrincipalAnciano} /> */}
+          {/* <Stack.Screen name="PrincipalProfesional" component={VistaPrincipalProfesional} /> */}
         </Stack.Navigator>
       </NavigationContainer>
     </AuthContext.Provider>

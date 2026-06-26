@@ -3,19 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
 // ========== CONFIGURACIÓN ==========
-// URL base - Cambia según el entorno
-const obtenerURLBase = () => {
-  if (process.env.REACT_APP_API_URL) {
-    return process.env.REACT_APP_API_URL;
-  }
-  // Para desarrollo local (cambia la IP si usas emulador)
-  if (Platform.OS === 'android') {
-    return 'http://10.0.2.2:3000/api'; // Emulador Android
-  }
-  return 'http://localhost:3000/api'; // iOS o web
-};
-
-const URL_BASE_API = obtenerURLBase();
+const URL_BASE_API = 'https://p01--cuidame--hlm7fxqrj6wz.code.run/api';
 
 console.log(`🔗 [API] URL base: ${URL_BASE_API}`);
 
@@ -31,6 +19,7 @@ const obtenerToken = async () => {
 
 const obtenerHeaders = async (contenidoJSON = true) => {
   const token = await obtenerToken();
+  console.log('🔑 Token en headers:', token ? '✅ Sí' : '❌ No');
   const headers = {
     Accept: 'application/json',
   };
@@ -45,7 +34,12 @@ const obtenerHeaders = async (contenidoJSON = true) => {
 
 const peticion = async (endpoint, metodo = 'POST', datos = null, formData = false) => {
   const url = `${URL_BASE_API}${endpoint}`;
-  const headers = formData ? { Accept: 'application/json' } : await obtenerHeaders();
+  const baseHeaders = await obtenerHeaders(!formData);
+  const headers = formData
+    ? { ...baseHeaders, Accept: 'application/json' }
+    : baseHeaders;
+
+
 
   const opciones = {
     method: metodo,
@@ -61,7 +55,11 @@ const peticion = async (endpoint, metodo = 'POST', datos = null, formData = fals
   }
 
   try {
-    const respuesta = await fetch(url, opciones);
+    const respuesta = await fetch(url, {
+      method: metodo,
+      headers: headers,
+      body: datos ? JSON.stringify(datos) : undefined,
+    });
     const texto = await respuesta.text();
     try {
       const json = JSON.parse(texto);
@@ -115,9 +113,10 @@ export const servicioAPI = {
       nueva_contrasena: nueva,
     }),
 
-  verificarToken: (token) => {
+  verificarToken: async (token) => {
     // Si no se pasa token, intenta obtenerlo del almacenamiento
-    return peticion('/auth/verificar', 'POST', { token: token || null });
+    const tokenFinal = token || await obtenerToken();
+    return peticion('/auth/verificar', 'POST', { token: tokenFinal || null });
   },
 
   cerrarSesion: (usuarioId) =>

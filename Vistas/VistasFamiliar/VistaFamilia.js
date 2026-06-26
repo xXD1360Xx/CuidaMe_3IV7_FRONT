@@ -16,10 +16,9 @@ import {
   Dimensions
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import Icon from 'react-native-vector-icons/Ionicons';
 import { servicioAPI } from '../../servicios/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-const usuarioId = await servicioAPI.obtenerUsuarioActualId();
+
 
 
 // Colores de CuidaMe
@@ -98,7 +97,7 @@ export default function VistaFamilia({ navigation }) {
 
   // Cargar datos iniciales
   const cargarDatos = useCallback(async () => {
-
+    const usuarioId = await servicioAPI.obtenerUsuarioActualId();
     if (usuarioId) {
       try {
         setCargando(true);
@@ -384,17 +383,17 @@ export default function VistaFamilia({ navigation }) {
   const obtenerIconoRol = (rol) => {
     switch (rol) {
       case 'familiar_administrador':
-        return { icon: 'shield-checkmark-outline', color: COLORES.AMARILLO_PLATANO };
+        return { emoji: '👑', color: COLORES.AMARILLO_PLATANO };
       case 'adulto_mayor':
-        return { icon: 'person-outline', color: COLORES.AZUL_CIELO_OSCURO };
+        return { emoji: '👴', color: COLORES.AZUL_CIELO_OSCURO };
       case 'cuidador':
-        return { icon: 'medkit-outline', color: COLORES.EXITO };
+        return { emoji: '🤝', color: COLORES.EXITO };
       case 'medico':
-        return { icon: 'medical-outline', color: COLORES.ERROR };
+        return { emoji: '👨‍⚕️', color: COLORES.ERROR };
       case 'enfermero':
-        return { icon: 'heart-outline', color: COLORES.ROSA };
+        return { emoji: '🩺', color: COLORES.ROSA };
       default:
-        return { icon: 'people-outline', color: COLORES.AZUL_CIELO };
+        return { emoji: '👥', color: COLORES.AZUL_CIELO };
     }
   };
 
@@ -425,7 +424,7 @@ export default function VistaFamilia({ navigation }) {
       >
         <View style={styles.encabezadoTarjeta}>
           <View style={[styles.iconoRolContainer, { backgroundColor: `${iconoRol.color}20` }]}>
-            <Icon name={iconoRol.icon} size={22} color={iconoRol.color} />
+            <Text style={{ fontSize: 22 }}>{iconoRol.emoji}</Text>
           </View>
 
           <View style={styles.infoPrincipal}>
@@ -445,7 +444,7 @@ export default function VistaFamilia({ navigation }) {
                 abrirModalFamiliar('editar', item);
               }}
             >
-              <Icon name="create-outline" size={18} color={COLORES.AZUL_CIELO_OSCURO} />
+              <Text style={{ fontSize: 18 }}>📝</Text>
             </TouchableOpacity>
 
             {esAdministrador && item.rol !== 'familiar_administrador' && (
@@ -456,7 +455,7 @@ export default function VistaFamilia({ navigation }) {
                   eliminarFamiliar(item.id);
                 }}
               >
-                <Icon name="trash-outline" size={18} color={COLORES.ERROR} />
+                <Text style={{ fontSize: 18 }}>🗑️</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -464,18 +463,18 @@ export default function VistaFamilia({ navigation }) {
 
         <View style={styles.detallesTarjeta}>
           <View style={styles.detalleItem}>
-            <Icon name="call-outline" size={14} color={COLORES.GRIS_OSCURO} />
+            <Text style={{ fontSize: 14, marginRight: 4 }}>📞</Text>
             <Text style={styles.textoDetalle}>{item.telefono}</Text>
           </View>
 
           <View style={styles.detalleItem}>
-            <Icon name="mail-outline" size={14} color={COLORES.GRIS_OSCURO} />
+            <Text style={{ fontSize: 14, marginRight: 4 }}>📧</Text>
             <Text style={styles.textoDetalle}>{item.email}</Text>
           </View>
 
           {item.parentesco && (
             <View style={styles.detalleItem}>
-              <Icon name="heart-outline" size={14} color={COLORES.GRIS_OSCURO} />
+              <Text style={{ fontSize: 14, marginRight: 4 }}>❤️</Text>
               <Text style={styles.textoDetalle}>{item.parentesco}</Text>
             </View>
           )}
@@ -508,7 +507,7 @@ export default function VistaFamilia({ navigation }) {
       >
         <View style={styles.encabezadoCodigo}>
           <View style={styles.codigoPrincipal}>
-            <Icon name="key-outline" size={20} color={usado ? COLORES.GRIS_OSCURO : COLORES.MORADO} />
+            <Text style={{ fontSize: 20, marginRight: 6 }}>🔑</Text>
             <Text style={[
               styles.textoCodigo,
               usado && styles.textoCodigoUsado
@@ -524,7 +523,7 @@ export default function VistaFamilia({ navigation }) {
               copiarAlPortapapeles(item.codigo);
             }}
           >
-            <Icon name="copy-outline" size={18} color={usado ? COLORES.GRIS_OSCURO : COLORES.AZUL_CIELO_OSCURO} />
+            <Text style={{ fontSize: 18 }}>📋</Text>
           </TouchableOpacity>
         </View>
 
@@ -567,7 +566,7 @@ export default function VistaFamilia({ navigation }) {
                 eliminarCodigoPersonalizado(item.id);
               }}
             >
-              <Icon name="trash-outline" size={16} color={COLORES.ERROR} />
+              <Text style={{ fontSize: 16 }}>🗑️</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -592,7 +591,7 @@ export default function VistaFamilia({ navigation }) {
         {/* Encabezado */}
         <View style={styles.encabezado}>
           <TouchableOpacity style={styles.botonAtras} onPress={() => navigation.goBack()}>
-            <Icon name="arrow-back-outline" size={28} color={COLORES.TEXTO_OSCURO} />
+            <Text style={{ fontSize: 24 }}>⬅️</Text>
           </TouchableOpacity>
 
           <View style={styles.tituloContainer}>
@@ -605,11 +604,7 @@ export default function VistaFamilia({ navigation }) {
           </View>
 
           <TouchableOpacity style={styles.botonRefrescar} onPress={onRefresh} disabled={refrescando}>
-            <Icon
-              name="refresh-outline"
-              size={24}
-              color={refrescando ? COLORES.GRIS_OSCURO : COLORES.TEXTO_OSCURO}
-            />
+            <Text style={{ fontSize: 22, opacity: refrescando ? 0.5 : 1 }}>🔄</Text>
           </TouchableOpacity>
         </View>
 
@@ -627,7 +622,7 @@ export default function VistaFamilia({ navigation }) {
           {/* Sección de Código Familiar */}
           <View style={styles.seccion}>
             <View style={styles.encabezadoSeccion}>
-              <Icon name="key-outline" size={24} color={COLORES.AMARILLO_PLATANO} />
+              <Text style={{ fontSize: 24, marginRight: 8 }}>🔑</Text>
               <Text style={styles.tituloSeccion}>Código Familiar</Text>
             </View>
 
@@ -641,7 +636,7 @@ export default function VistaFamilia({ navigation }) {
                   <Text style={styles.codigoTexto}>
                     {formatearCodigo(codigoFamiliar) || 'No disponible'}
                   </Text>
-                  <Icon name="copy-outline" size={18} color={COLORES.AZUL_CIELO_OSCURO} />
+                  <Text style={{ fontSize: 18 }}>📋</Text>
                 </TouchableOpacity>
                 <Text style={styles.ayudaCodigo}>
                   Comparte este código con otros familiares para que se unan
@@ -653,7 +648,7 @@ export default function VistaFamilia({ navigation }) {
                   style={styles.botonRegenerar}
                   onPress={generarNuevoCodigoFamiliar}
                 >
-                  <Icon name="refresh-outline" size={18} color={COLORES.BLANCO} />
+                  <Text style={{ fontSize: 18, marginRight: 6 }}>🔄</Text>
                   <Text style={styles.textoBotonRegenerar}>Regenerar</Text>
                 </TouchableOpacity>
               )}
@@ -664,7 +659,7 @@ export default function VistaFamilia({ navigation }) {
           {codigosPersonalizados.length > 0 && (
             <View style={styles.seccion}>
               <View style={styles.encabezadoSeccion}>
-                <Icon name="sparkles-outline" size={24} color={COLORES.MORADO} />
+                <Text style={{ fontSize: 24, marginRight: 8 }}>✨</Text>
                 <Text style={styles.tituloSeccion}>Códigos Personalizados</Text>
 
                 {esAdministrador && (
@@ -672,7 +667,7 @@ export default function VistaFamilia({ navigation }) {
                     style={styles.botonAgregarSeccion}
                     onPress={abrirModalCodigoPersonalizado}
                   >
-                    <Icon name="add-outline" size={22} color={COLORES.AZUL_CIELO_OSCURO} />
+                    <Text style={{ fontSize: 22 }}>➕</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -691,7 +686,7 @@ export default function VistaFamilia({ navigation }) {
           {/* Sección de Miembros de la Familia */}
           <View style={styles.seccion}>
             <View style={styles.encabezadoSeccion}>
-              <Icon name="people-outline" size={24} color={COLORES.AZUL_CIELO_OSCURO} />
+              <Text style={{ fontSize: 24, marginRight: 8 }}>👥</Text>
               <Text style={styles.tituloSeccion}>Miembros de la Familia</Text>
 
               {esAdministrador && (
@@ -699,7 +694,7 @@ export default function VistaFamilia({ navigation }) {
                   style={styles.botonAgregarSeccion}
                   onPress={() => abrirModalFamiliar('agregar')}
                 >
-                  <Icon name="add-outline" size={22} color={COLORES.AZUL_CIELO_OSCURO} />
+                  <Text style={{ fontSize: 22 }}>➕</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -713,7 +708,7 @@ export default function VistaFamilia({ navigation }) {
               />
             ) : (
               <View style={styles.sinMiembros}>
-                <Icon name="people-outline" size={60} color={COLORES.GRIS_MEDIO} />
+                <Text style={{ fontSize: 60, marginBottom: 10 }}>👥</Text>
                 <Text style={styles.textoSinMiembros}>No hay miembros registrados</Text>
                 <Text style={styles.subtextoSinMiembros}>
                   {esAdministrador
@@ -731,7 +726,7 @@ export default function VistaFamilia({ navigation }) {
               >
                 <View style={styles.contenidoTarjetaAgregar}>
                   <View style={styles.iconoAgregarContainer}>
-                    <Icon name="add-outline" size={32} color={COLORES.AZUL_CIELO} />
+                    <Text style={{ fontSize: 32 }}>➕</Text>
                   </View>
                   <Text style={styles.textoTarjetaAgregar}>Agregar nuevo familiar</Text>
                   <Text style={styles.subtextoTarjetaAgregar}>
@@ -750,7 +745,7 @@ export default function VistaFamilia({ navigation }) {
                 onPress={abrirModalCodigoPersonalizado}
               >
                 <View style={styles.contenidoBotonPersonalizar}>
-                  <Icon name="sparkles-outline" size={24} color={COLORES.BLANCO} />
+                  <Text style={{ fontSize: 24, marginRight: 8 }}>✨</Text>
                   <Text style={styles.textoBotonPersonalizar}>
                     Personalizar Código
                   </Text>
@@ -758,7 +753,7 @@ export default function VistaFamilia({ navigation }) {
                     Crea un código con datos predefinidos
                   </Text>
                 </View>
-                <Icon name="chevron-forward-outline" size={24} color={COLORES.BLANCO} />
+                <Text style={{ fontSize: 24 }}>➡️</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -766,7 +761,7 @@ export default function VistaFamilia({ navigation }) {
           {/* Información adicional */}
           <View style={styles.seccion}>
             <View style={styles.infoAdicional}>
-              <Icon name="information-circle-outline" size={20} color={COLORES.GRIS_OSCURO} />
+              <Text style={{ fontSize: 20, marginRight: 8 }}>ℹ️</Text>
               <View style={styles.textosInfo}>
                 <Text style={styles.tituloInfo}>Cómo funciona:</Text>
                 <Text style={styles.textoInfo}>
@@ -799,7 +794,7 @@ export default function VistaFamilia({ navigation }) {
                   modalTipo === 'editar' ? 'Editar Familiar' : 'Agregar Familiar'}
               </Text>
               <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <Icon name="close-outline" size={24} color={COLORES.TEXTO_OSCURO} />
+                <Text style={{ fontSize: 24 }}>❌</Text>
               </TouchableOpacity>
             </View>
 
@@ -1060,13 +1055,13 @@ export default function VistaFamilia({ navigation }) {
             <View style={styles.modalEncabezado}>
               <Text style={styles.modalTitulo}>Personalizar Código</Text>
               <TouchableOpacity onPress={() => setModalCodigoVisible(false)}>
-                <Icon name="close-outline" size={24} color={COLORES.TEXTO_OSCURO} />
+                <Text style={{ fontSize: 24 }}>❌</Text>
               </TouchableOpacity>
             </View>
 
             <ScrollView style={styles.modalFormulario}>
               <View style={styles.infoCodigoPersonalizado}>
-                <Icon name="sparkles-outline" size={40} color={COLORES.MORADO} style={styles.iconoCodigoPersonalizado} />
+                <Text style={[styles.iconoCodigoPersonalizado, { fontSize: 40 }]}>✨</Text>
                 <Text style={styles.textoInfoCodigo}>
                   Este código incluirá la información básica del usuario. Solo podrá usarse una vez.
                 </Text>
@@ -1150,7 +1145,7 @@ export default function VistaFamilia({ navigation }) {
                 style={[styles.botonModalAccion, { backgroundColor: COLORES.MORADO }]}
                 onPress={generarCodigoPersonalizado}
               >
-                <Icon name="sparkles-outline" size={18} color={COLORES.BLANCO} style={{ marginRight: 8 }} />
+                <Text style={{ fontSize: 18, marginRight: 8 }}>✨</Text>
                 <Text style={styles.textoBotonModalAccion}>Generar Código</Text>
               </TouchableOpacity>
             </View>

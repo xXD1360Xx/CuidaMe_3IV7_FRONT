@@ -14,7 +14,6 @@ import {
   Dimensions
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import Icon from 'react-native-vector-icons/Ionicons';
 import { servicioAPI } from '../../servicios/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -67,11 +66,11 @@ export default function VistaHorario({ navigation }) {
   const [modalActividadVisible, setModalActividadVisible] = useState(false);
   const [usuarioRol, setUsuarioRol] = useState('');
   const [semanaActual, setSemanaActual] = useState(new Date());
-  
+
   // Estados para actividades
   const [actividadSeleccionada, setActividadSeleccionada] = useState(null);
   const [espacioSeleccionado, setEspacioSeleccionado] = useState({ dia: null, hora: null });
-  
+
   // Nueva actividad
   const [nuevaActividad, setNuevaActividad] = useState({
     nombre: '',
@@ -90,25 +89,25 @@ export default function VistaHorario({ navigation }) {
 
   // Actividades predefinidas
   const ACTIVIDADES_PREDEFINIDAS = [
-    { id: 'banarse', nombre: 'Bañarse', color: COLORES.TURQUESA, icono: 'water-outline', duracion: 30 },
-    { id: 'comer', nombre: 'Comer', color: COLORES.NARANJA, icono: 'restaurant-outline', duracion: 45 },
-    { id: 'caminar', nombre: 'Caminar', color: COLORES.VERDE_CLARO, icono: 'walk-outline', duracion: 30 },
-    { id: 'ejercicios', nombre: 'Ejercicios', color: COLORES.ROJO_CLARO, icono: 'fitness-outline', duracion: 30 },
-    { id: 'descanso', nombre: 'Descanso', color: COLORES.MORADO, icono: 'bed-outline', duracion: 60 },
-    { id: 'lectura', nombre: 'Lectura', color: COLORES.INDIGO, icono: 'book-outline', duracion: 45 },
-    { id: 'visita', nombre: 'Visita Familiar', color: COLORES.ROSADO, icono: 'people-outline', duracion: 60 },
-    { id: 'medicina', nombre: 'Tomar Medicina', color: COLORES.EXITO, icono: 'medical-outline', duracion: 15 }
+    { id: 'banarse', nombre: 'Bañarse', color: COLORES.TURQUESA, emoji: '🚿', duracion: 30 },
+    { id: 'comer', nombre: 'Comer', color: COLORES.NARANJA, emoji: '🍽️', duracion: 45 },
+    { id: 'caminar', nombre: 'Caminar', color: COLORES.VERDE_CLARO, emoji: '🚶', duracion: 30 },
+    { id: 'ejercicios', nombre: 'Ejercicios', color: COLORES.ROJO_CLARO, emoji: '💪', duracion: 30 },
+    { id: 'descanso', nombre: 'Descanso', color: COLORES.MORADO, emoji: '🛌', duracion: 60 },
+    { id: 'lectura', nombre: 'Lectura', color: COLORES.INDIGO, emoji: '📚', duracion: 45 },
+    { id: 'visita', nombre: 'Visita Familiar', color: COLORES.ROSADO, emoji: '👪', duracion: 60 },
+    { id: 'medicina', nombre: 'Tomar Medicina', color: COLORES.EXITO, emoji: '💊', duracion: 15 }
   ];
 
   // Tipos de actividades
   const TIPOS_ACTIVIDADES = [
-    { id: 'actividad_diaria', nombre: 'Actividad Diaria', icono: 'calendar-outline' },
-    { id: 'medicina', nombre: 'Medicina', icono: 'medical-outline' },
-    { id: 'cita_medica', nombre: 'Cita Médica', icono: 'medkit-outline' },
-    { id: 'evento', nombre: 'Evento', icono: 'calendar-outline' },
-    { id: 'terapia', nombre: 'Terapia', icono: 'fitness-outline' },
-    { id: 'recreacion', nombre: 'Recreación', icono: 'game-controller-outline' },
-    { id: 'personal', nombre: 'Cuidado Personal', icono: 'person-outline' }
+    { id: 'actividad_diaria', nombre: 'Actividad Diaria', emoji: '📅' },
+    { id: 'medicina', nombre: 'Medicina', emoji: '💊' },
+    { id: 'cita_medica', nombre: 'Cita Médica', emoji: '🩺' },
+    { id: 'evento', nombre: 'Evento', emoji: '🎉' },
+    { id: 'terapia', nombre: 'Terapia', emoji: '🧠' },
+    { id: 'recreacion', nombre: 'Recreación', emoji: '🎮' },
+    { id: 'personal', nombre: 'Cuidado Personal', emoji: '👤' }
   ];
 
   // Días de la semana
@@ -126,29 +125,29 @@ export default function VistaHorario({ navigation }) {
   const cargarDatos = useCallback(async () => {
     try {
       setCargando(true);
-      
+
       // Obtener usuario actual
       const usuarioData = await AsyncStorage.getItem('usuarioInfo');
       if (usuarioData) {
         const usuario = JSON.parse(usuarioData);
         setUsuarioRol(usuario.rol);
       }
-      
+
       // Cargar configuración
       await cargarConfiguracion();
-      
+
       // Cargar medicinas
       await cargarMedicinas();
-      
+
       // Cargar eventos de la semana
       await cargarEventosSemana();
-      
+
       // Cargar actividades fijas
       await cargarActividadesFijas();
-      
+
       // Generar horario
       generarHorario();
-      
+
     } catch (error) {
       console.error('Error cargando datos del horario:', error);
       Alert.alert('Error', 'No se pudieron cargar los datos del horario');
@@ -173,12 +172,30 @@ export default function VistaHorario({ navigation }) {
   // Cargar medicinas
   const cargarMedicinas = async () => {
     try {
-      const response = await servicioAPI.obtenerMedicinas();
+      const usuarioData = await AsyncStorage.getItem('usuarioInfo');
+      let usuarioId = null;
+      if (usuarioData) {
+        const usuario = JSON.parse(usuarioData);
+        usuarioId = usuario.id;
+      }
+
+      // Si no hay usuario, salir
+      if (!usuarioId) {
+        console.warn('⚠️ No hay usuario logueado, no se pueden cargar medicinas');
+        return;
+      }
+
+      console.log('💊 Cargando medicinas para usuario:', usuarioId);
+
+      const response = await servicioAPI.obtenerTodasMedicinas(usuarioId);
       if (response.exito) {
         setMedicinas(response.medicinas || []);
+        console.log('✅ Se cargaron', response.medicinas.length, 'medicinas');
+      } else {
+        console.log('⚠️ Respuesta no exitosa:', response.mensaje || 'Sin mensaje');
       }
     } catch (error) {
-      console.error('Error cargando medicinas:', error);
+      console.error('❌ Error cargando medicinas:', error);
     }
   };
 
@@ -187,12 +204,12 @@ export default function VistaHorario({ navigation }) {
     try {
       const inicioSemana = obtenerInicioSemana(semanaActual);
       const finSemana = obtenerFinSemana(semanaActual);
-      
+
       const response = await servicioAPI.obtenerEventosPorRango(
         inicioSemana.toISOString().split('T')[0],
         finSemana.toISOString().split('T')[0]
       );
-      
+
       if (response.exito) {
         setEventos(response.eventos || []);
       }
@@ -218,9 +235,9 @@ export default function VistaHorario({ navigation }) {
     const inicio = configuracion.horaInicio;
     const fin = configuracion.horaFin;
     const dias = DIAS_SEMANA;
-    
+
     let horarioGenerado = [];
-    
+
     // Crear matriz de horas x días
     for (let hora = inicio; hora <= fin; hora++) {
       const filaHoras = {
@@ -228,7 +245,7 @@ export default function VistaHorario({ navigation }) {
         label: formatearHora(hora),
         dias: {}
       };
-      
+
       dias.forEach(dia => {
         filaHoras.dias[dia.id] = {
           dia: dia.id,
@@ -236,29 +253,29 @@ export default function VistaHorario({ navigation }) {
           actividades: []
         };
       });
-      
+
       horarioGenerado.push(filaHoras);
     }
-    
+
     // Agregar medicinas al horario
     if (configuracion.mostrarMedicinas) {
       medicinas.forEach(medicina => {
         const horaMedicina = parseInt(medicina.hora.split(':')[0]);
         const minutos = parseInt(medicina.hora.split(':')[1]);
-        
+
         // Convertir a posición decimal
         const posicionHora = horaMedicina + (minutos / 60);
-        
+
         if (posicionHora >= inicio && posicionHora <= fin) {
           // Encontrar el bloque de hora correspondiente
           const bloqueHora = horarioGenerado.find(bloque => bloque.hora === horaMedicina);
-          
+
           if (bloqueHora) {
             // Aplicar a todos los días si es diaria
-            const diasAplicar = medicina.frecuencia === 'diaria' ? 
-              DIAS_SEMANA.map(d => d.id) : 
+            const diasAplicar = medicina.frecuencia === 'diaria' ?
+              DIAS_SEMANA.map(d => d.id) :
               obtenerDiasFrecuencia(medicina.frecuencia);
-            
+
             diasAplicar.forEach(diaId => {
               if (bloqueHora.dias[diaId]) {
                 bloqueHora.dias[diaId].actividades.push({
@@ -279,7 +296,7 @@ export default function VistaHorario({ navigation }) {
         }
       });
     }
-    
+
     // Agregar actividades fijas
     if (configuracion.mostrarActividades) {
       actividadesFijas.forEach(actividad => {
@@ -287,22 +304,22 @@ export default function VistaHorario({ navigation }) {
         const minutosInicio = parseInt(actividad.hora_inicio.split(':')[1]);
         const horaFin = parseInt(actividad.hora_fin.split(':')[0]);
         const minutosFin = parseInt(actividad.hora_fin.split(':')[1]);
-        
+
         const posicionInicio = horaInicio + (minutosInicio / 60);
         const posicionFin = horaFin + (minutosFin / 60);
-        
+
         if (posicionInicio >= inicio && posicionFin <= fin) {
           // Calcular cuántos bloques ocupa
           const bloquesOcupa = Math.ceil((posicionFin - posicionInicio) * 4); // 4 bloques por hora (15 min cada uno)
-          
+
           // Aplicar a los días especificados
           actividad.dias.forEach(diaId => {
             for (let i = 0; i < bloquesOcupa; i++) {
               const bloqueHora = horaInicio + Math.floor(i / 4);
               const minutoOffset = (i % 4) * 15;
-              
+
               const bloque = horarioGenerado.find(b => b.hora === bloqueHora);
-              
+
               if (bloque && bloque.dias[diaId]) {
                 // Solo agregar si es el primer bloque de la actividad
                 if (i === 0) {
@@ -326,30 +343,30 @@ export default function VistaHorario({ navigation }) {
         }
       });
     }
-    
+
     // Agregar eventos del calendario
     if (configuracion.mostrarEventos) {
       eventos.forEach(evento => {
         const fechaEvento = new Date(evento.fecha_inicio);
         const diaSemana = fechaEvento.getDay(); // 0-6
-        
-        if (fechaEvento >= obtenerInicioSemana(semanaActual) && 
-            fechaEvento <= obtenerFinSemana(semanaActual)) {
-          
-          const horaInicio = evento.hora_inicio ? 
+
+        if (fechaEvento >= obtenerInicioSemana(semanaActual) &&
+          fechaEvento <= obtenerFinSemana(semanaActual)) {
+
+          const horaInicio = evento.hora_inicio ?
             parseInt(evento.hora_inicio.split(':')[0]) : 9;
-          const minutosInicio = evento.hora_inicio ? 
+          const minutosInicio = evento.hora_inicio ?
             parseInt(evento.hora_inicio.split(':')[1]) : 0;
           const duracionHoras = evento.duracion_horas || 1;
-          
+
           const posicionInicio = horaInicio + (minutosInicio / 60);
-          
+
           if (posicionInicio >= inicio && posicionInicio + duracionHoras <= fin) {
             const bloqueHora = horaInicio;
             const bloquesOcupa = Math.ceil(duracionHoras * 4); // 4 bloques por hora
-            
+
             const bloque = horarioGenerado.find(b => b.hora === bloqueHora);
-            
+
             if (bloque && bloque.dias[diaSemana]) {
               bloque.dias[diaSemana].actividades.push({
                 id: `evento_${evento.id}`,
@@ -369,7 +386,7 @@ export default function VistaHorario({ navigation }) {
         }
       });
     }
-    
+
     setHorario(horarioGenerado);
   };
 
@@ -393,7 +410,7 @@ export default function VistaHorario({ navigation }) {
 
   // Obtener días según frecuencia
   const obtenerDiasFrecuencia = (frecuencia) => {
-    switch(frecuencia) {
+    switch (frecuencia) {
       case 'lunes':
         return [1];
       case 'martes':
@@ -475,10 +492,10 @@ export default function VistaHorario({ navigation }) {
   // Seleccionar espacio en el horario
   const seleccionarEspacio = (dia, hora) => {
     setEspacioSeleccionado({ dia, hora });
-    
+
     // Preparar nueva actividad con la hora seleccionada
     const fecha = obtenerFechaDelDia(dia);
-    
+
     setNuevaActividad({
       nombre: '',
       tipo: 'actividad_diaria',
@@ -493,7 +510,7 @@ export default function VistaHorario({ navigation }) {
       fecha_inicio: fecha.toISOString().split('T')[0],
       fecha_fin: null
     });
-    
+
     setModalVisible(true);
   };
 
@@ -501,7 +518,7 @@ export default function VistaHorario({ navigation }) {
   const seleccionarActividad = (actividad, dia, hora) => {
     setActividadSeleccionada(actividad);
     setEspacioSeleccionado({ dia, hora });
-    
+
     setNuevaActividad({
       nombre: actividad.nombre,
       tipo: actividad.tipo,
@@ -516,7 +533,7 @@ export default function VistaHorario({ navigation }) {
       fecha_inicio: actividad.fecha_inicio || new Date().toISOString().split('T')[0],
       fecha_fin: actividad.fecha_fin || null
     });
-    
+
     setModalVisible(true);
   };
 
@@ -525,12 +542,12 @@ export default function VistaHorario({ navigation }) {
     if (actividad.datos && actividad.datos.dias) {
       return actividad.datos.dias;
     }
-    
+
     // Intentar deducir de los datos
     if (actividad.esMedicina && actividad.datos) {
       return obtenerDiasFrecuencia(actividad.datos.frecuencia || 'diaria');
     }
-    
+
     return [espacioSeleccionado.dia];
   };
 
@@ -541,17 +558,17 @@ export default function VistaHorario({ navigation }) {
         Alert.alert('Error', 'Debes ingresar un nombre para la actividad');
         return;
       }
-      
+
       if (nuevaActividad.dias.length === 0) {
         Alert.alert('Error', 'Debes seleccionar al menos un día');
         return;
       }
-      
+
       const datosActividad = {
         ...nuevaActividad,
         duracion_minutos: parseInt(nuevaActividad.duracion_minutos) || 60
       };
-      
+
       let response;
       if (actividadSeleccionada) {
         // Actualizar actividad existente
@@ -560,7 +577,7 @@ export default function VistaHorario({ navigation }) {
         // Crear nueva actividad
         response = await servicioAPI.crearActividad(datosActividad);
       }
-      
+
       if (response.exito) {
         Alert.alert('Éxito', actividadSeleccionada ? 'Actividad actualizada' : 'Actividad creada');
         setModalVisible(false);
@@ -569,7 +586,7 @@ export default function VistaHorario({ navigation }) {
       } else {
         Alert.alert('Error', response.error || 'No se pudo guardar la actividad');
       }
-      
+
     } catch (error) {
       console.error('Error guardando actividad:', error);
       Alert.alert('Error', 'No se pudo guardar la actividad');
@@ -579,7 +596,7 @@ export default function VistaHorario({ navigation }) {
   // Eliminar actividad
   const eliminarActividad = () => {
     if (!actividadSeleccionada) return;
-    
+
     Alert.alert(
       'Eliminar Actividad',
       '¿Estás seguro de que quieres eliminar esta actividad?',
@@ -609,7 +626,7 @@ export default function VistaHorario({ navigation }) {
   // Aplicar actividad predefinida
   const aplicarActividadPredefinida = (actividadPredefinida) => {
     const fecha = obtenerFechaDelDia(espacioSeleccionado.dia);
-    
+
     setNuevaActividad({
       nombre: actividadPredefinida.nombre,
       tipo: 'actividad_diaria',
@@ -644,10 +661,10 @@ export default function VistaHorario({ navigation }) {
   const calcularEstiloActividad = (actividad, hora) => {
     const [horaInicio, minutoInicio] = actividad.hora_inicio.split(':').map(Number);
     const horaDecimalInicio = horaInicio + (minutoInicio / 60);
-    
+
     const top = (horaDecimalInicio - hora) * HORA_HEIGHT;
     const altura = (actividad.duracion_minutos / 60) * HORA_HEIGHT;
-    
+
     return {
       top: top,
       height: altura,
@@ -663,7 +680,7 @@ export default function VistaHorario({ navigation }) {
   // Renderizar actividad
   const renderActividad = (actividad, diaId, hora) => {
     const estilo = calcularEstiloActividad(actividad, hora);
-    
+
     return (
       <TouchableOpacity
         key={actividad.id}
@@ -686,21 +703,21 @@ export default function VistaHorario({ navigation }) {
     const dia = DIAS_SEMANA.find(d => d.id === diaId);
     const fecha = obtenerFechaDelDia(diaId);
     const esFin = esFinDeSemana(diaId);
-    
+
     const actividadesEnEstaHora = [];
-    
+
     // Buscar actividades que comienzan en esta hora
     const bloqueHora = horario.find(b => b.hora === hora);
     if (bloqueHora && bloqueHora.dias[diaId]) {
       actividadesEnEstaHora.push(...bloqueHora.dias[diaId].actividades);
     }
-    
+
     // También buscar actividades que comenzaron antes pero siguen en esta hora
     const actividadesEnCurso = actividadesEnEstaHora.filter(a => {
       const [horaInicio] = a.hora_inicio.split(':').map(Number);
       return horaInicio < hora;
     });
-    
+
     return (
       <TouchableOpacity
         style={[
@@ -739,38 +756,34 @@ export default function VistaHorario({ navigation }) {
         {/* Encabezado */}
         <View style={styles.encabezado}>
           <TouchableOpacity style={styles.botonAtras} onPress={() => navigation.goBack()}>
-            <Icon name="arrow-back-outline" size={28} color={COLORES.TEXTO_OSCURO} />
+            <Text style={{ fontSize: 24 }}>⬅️</Text>
           </TouchableOpacity>
-          
+
           <View style={styles.tituloContainer}>
             <Text style={styles.tituloPrincipal}>Horario Semanal</Text>
             <Text style={styles.subtituloPrincipal}>
-              {fechaInicioSemana.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} - 
+              {fechaInicioSemana.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} -
               {fechaFinSemana.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
             </Text>
           </View>
-          
+
           <TouchableOpacity style={styles.botonRefrescar} onPress={onRefresh} disabled={refrescando}>
-            <Icon 
-              name="refresh-outline" 
-              size={24} 
-              color={refrescando ? COLORES.GRIS_OSCURO : COLORES.TEXTO_OSCURO} 
-            />
+            <Text style={{ fontSize: 24, opacity: refrescando ? 0.5 : 1 }}>🔄</Text>
           </TouchableOpacity>
         </View>
 
         {/* Controles de navegación */}
         <View style={styles.controlesNavegacion}>
           <TouchableOpacity style={styles.botonControl} onPress={() => cambiarSemana(-1)}>
-            <Icon name="chevron-back-outline" size={24} color={COLORES.TEXTO_OSCURO} />
+            <Text style={{ fontSize: 24 }}>⬅️</Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity style={styles.botonHoy} onPress={irAHoy}>
             <Text style={styles.textoBotonHoy}>SEMANA ACTUAL</Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity style={styles.botonControl} onPress={() => cambiarSemana(1)}>
-            <Icon name="chevron-forward-outline" size={24} color={COLORES.TEXTO_OSCURO} />
+            <Text style={{ fontSize: 24 }}>➡️</Text>
           </TouchableOpacity>
         </View>
 
@@ -782,7 +795,7 @@ export default function VistaHorario({ navigation }) {
               style={[styles.itemLeyenda, { backgroundColor: actividad.color + '40' }]}
               onPress={() => setModalActividadVisible(true)}
             >
-              <Icon name={actividad.icono} size={14} color={actividad.color} />
+              <Text style={{ fontSize: 14, marginRight: 4 }}>{actividad.emoji}</Text>
               <Text style={[styles.textoLeyenda, { color: actividad.color }]}>
                 {actividad.nombre}
               </Text>
@@ -791,8 +804,8 @@ export default function VistaHorario({ navigation }) {
         </ScrollView>
 
         {/* Horario principal */}
-        <ScrollView 
-          horizontal 
+        <ScrollView
+          horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.horarioContainer}
         >
@@ -804,7 +817,7 @@ export default function VistaHorario({ navigation }) {
               </View>
             ))}
           </View>
-          
+
           {/* Grid de días */}
           <View style={styles.gridDias}>
             {/* Encabezados de días */}
@@ -812,7 +825,7 @@ export default function VistaHorario({ navigation }) {
               {DIAS_SEMANA.map(dia => {
                 const fecha = obtenerFechaDelDia(dia.id);
                 const esFin = esFinDeSemana(dia.id);
-                
+
                 return (
                   <View key={dia.id} style={[styles.encabezadoDia, esFin && styles.encabezadoFinDeSemana]}>
                     <Text style={[styles.textoEncabezadoDia, esFin && styles.textoEncabezadoFinDeSemana]}>
@@ -825,7 +838,7 @@ export default function VistaHorario({ navigation }) {
                 );
               })}
             </View>
-            
+
             {/* Celdas del horario */}
             <View style={styles.cuerpoHorario}>
               {horario.map((fila, horaIndex) => (
@@ -843,58 +856,57 @@ export default function VistaHorario({ navigation }) {
 
         {/* Barra de acciones */}
         <View style={styles.barraAcciones}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.botonAccionPrincipal}
             onPress={() => {
               const ahora = new Date();
               const horaActual = ahora.getHours();
               const diaActual = ahora.getDay();
-              
-              if (horaActual >= configuracion.horaInicio && horaActual <= configuracion.horaFin) {
-                seleccionarEspacio(diaActual, horaActual);
+
+              if (esAdministrador) {
+                setModalVisible(true);
               } else {
                 Alert.alert(
-                  'Hora fuera de rango',
-                  'La hora actual está fuera del horario configurado. Usa el botón de configuración para ajustar los horarios.',
-                  [{ text: 'Entendido' }]
+                  'Acceso Restringido',
+                  'Solo los administradores del grupo familiar pueden agregar actividades.'
                 );
               }
             }}
           >
-            <Icon name="add-outline" size={20} color={COLORES.BLANCO} />
+            <Text style={{ fontSize: 20 }}>➕</Text>
             <Text style={styles.textoBotonAccionPrincipal}>Agregar Actividad</Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.botonAccionSecundario}
             onPress={() => setModalConfigVisible(true)}
           >
-            <Icon name="settings-outline" size={24} color={COLORES.AZUL_CIELO_OSCURO} />
+            <Text style={{ fontSize: 24 }}>⚙️</Text>
           </TouchableOpacity>
         </View>
 
         {/* Estadísticas */}
         <View style={styles.estadisticasContainer}>
           <View style={styles.itemEstadistica}>
-            <Icon name="medical-outline" size={20} color={COLORES.EXITO} />
+            <Text style={{ fontSize: 20, marginRight: 6 }}>💊</Text>
             <Text style={styles.numeroEstadistica}>
               {medicinas.filter(m => m.frecuencia === 'diaria').length}
             </Text>
             <Text style={styles.textoEstadistica}>Medicinas diarias</Text>
           </View>
-          
+
           <View style={styles.separadorEstadistica} />
-          
+
           <View style={styles.itemEstadistica}>
-            <Icon name="calendar-outline" size={20} color={COLORES.MORADO} />
+            <Text style={{ fontSize: 20, marginRight: 6 }}>📅</Text>
             <Text style={styles.numeroEstadistica}>{actividadesFijas.length}</Text>
             <Text style={styles.textoEstadistica}>Actividades fijas</Text>
           </View>
-          
+
           <View style={styles.separadorEstadistica} />
-          
+
           <View style={styles.itemEstadistica}>
-            <Icon name="time-outline" size={20} color={COLORES.NARANJA} />
+            <Text style={{ fontSize: 20, marginRight: 6 }}>🕒</Text>
             <Text style={styles.numeroEstadistica}>{eventos.length}</Text>
             <Text style={styles.textoEstadistica}>Eventos esta semana</Text>
           </View>
@@ -921,7 +933,7 @@ export default function VistaHorario({ navigation }) {
                 setModalVisible(false);
                 setActividadSeleccionada(null);
               }}>
-                <Icon name="close-outline" size={24} color={COLORES.TEXTO_OSCURO} />
+                <Text style={{ fontSize: 24 }}>❌</Text>
               </TouchableOpacity>
             </View>
 
@@ -930,7 +942,7 @@ export default function VistaHorario({ navigation }) {
               <TextInput
                 style={styles.input}
                 value={nuevaActividad.nombre}
-                onChangeText={(text) => setNuevaActividad({...nuevaActividad, nombre: text})}
+                onChangeText={(text) => setNuevaActividad({ ...nuevaActividad, nombre: text })}
                 placeholder="Ej: Bañarse, Tomar medicina, Caminar..."
                 placeholderTextColor={COLORES.GRIS_MEDIO}
               />
@@ -946,9 +958,8 @@ export default function VistaHorario({ navigation }) {
                     ]}
                     onPress={() => aplicarActividadPredefinida(actividad)}
                   >
-                    <Icon name={actividad.icono} size={20} color={actividad.color} />
                     <Text style={[styles.textoOpcionPredefinida, { color: actividad.color }]}>
-                      {actividad.nombre}
+                      {actividad.emoji} {actividad.nombre}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -963,13 +974,11 @@ export default function VistaHorario({ navigation }) {
                       styles.opcionTipo,
                       nuevaActividad.tipo === tipo.id && { backgroundColor: COLORES.AZUL_CIELO }
                     ]}
-                    onPress={() => setNuevaActividad({...nuevaActividad, tipo: tipo.id})}
+                    onPress={() => setNuevaActividad({ ...nuevaActividad, tipo: tipo.id })}
                   >
-                    <Icon 
-                      name={tipo.icono} 
-                      size={16} 
-                      color={nuevaActividad.tipo === tipo.id ? COLORES.BLANCO : COLORES.GRIS_OSCURO} 
-                    />
+                    <Text style={{ fontSize: 16, marginRight: 6 }}>
+                      {tipo.emoji}
+                    </Text>
                     <Text style={[
                       styles.textoOpcionTipo,
                       nuevaActividad.tipo === tipo.id && styles.textoOpcionTipoSeleccionado
@@ -994,7 +1003,7 @@ export default function VistaHorario({ navigation }) {
                       { backgroundColor: color },
                       nuevaActividad.color === color && styles.opcionColorSeleccionada
                     ]}
-                    onPress={() => setNuevaActividad({...nuevaActividad, color})}
+                    onPress={() => setNuevaActividad({ ...nuevaActividad, color })}
                   />
                 ))}
               </View>
@@ -1011,14 +1020,14 @@ export default function VistaHorario({ navigation }) {
                     onPress={() => {
                       const nuevosDias = [...nuevaActividad.dias];
                       const index = nuevosDias.indexOf(dia.id);
-                      
+
                       if (index === -1) {
                         nuevosDias.push(dia.id);
                       } else {
                         nuevosDias.splice(index, 1);
                       }
-                      
-                      setNuevaActividad({...nuevaActividad, dias: nuevosDias});
+
+                      setNuevaActividad({ ...nuevaActividad, dias: nuevosDias });
                     }}
                   >
                     <Text style={[
@@ -1038,18 +1047,18 @@ export default function VistaHorario({ navigation }) {
                   <TextInput
                     style={styles.input}
                     value={nuevaActividad.hora_inicio}
-                    onChangeText={(text) => setNuevaActividad({...nuevaActividad, hora_inicio: text})}
+                    onChangeText={(text) => setNuevaActividad({ ...nuevaActividad, hora_inicio: text })}
                     placeholder="08:00"
                     placeholderTextColor={COLORES.GRIS_MEDIO}
                   />
                 </View>
-                
+
                 <View style={styles.inputMitad}>
                   <Text style={styles.subLabel}>Fin</Text>
                   <TextInput
                     style={styles.input}
                     value={nuevaActividad.hora_fin}
-                    onChangeText={(text) => setNuevaActividad({...nuevaActividad, hora_fin: text})}
+                    onChangeText={(text) => setNuevaActividad({ ...nuevaActividad, hora_fin: text })}
                     placeholder="09:00"
                     placeholderTextColor={COLORES.GRIS_MEDIO}
                   />
@@ -1060,7 +1069,7 @@ export default function VistaHorario({ navigation }) {
               <TextInput
                 style={styles.input}
                 value={nuevaActividad.duracion_minutos?.toString()}
-                onChangeText={(text) => setNuevaActividad({...nuevaActividad, duracion_minutos: text})}
+                onChangeText={(text) => setNuevaActividad({ ...nuevaActividad, duracion_minutos: text })}
                 keyboardType="numeric"
                 placeholder="60"
                 placeholderTextColor={COLORES.GRIS_MEDIO}
@@ -1070,13 +1079,11 @@ export default function VistaHorario({ navigation }) {
               <View style={styles.opcionRecurrente}>
                 <TouchableOpacity
                   style={styles.botonRecurrente}
-                  onPress={() => setNuevaActividad({...nuevaActividad, esRecurrente: !nuevaActividad.esRecurrente})}
+                  onPress={() => setNuevaActividad({ ...nuevaActividad, esRecurrente: !nuevaActividad.esRecurrente })}
                 >
-                  <Icon 
-                    name={nuevaActividad.esRecurrente ? "checkmark-circle" : "ellipse-outline"} 
-                    size={24} 
-                    color={nuevaActividad.esRecurrente ? COLORES.EXITO : COLORES.GRIS_MEDIO} 
-                  />
+                  <Text style={{ fontSize: 24, marginRight: 8 }}>
+                    {nuevaActividad.esRecurrente ? '✅' : '⚪'}
+                  </Text>
                   <Text style={styles.textoRecurrente}>
                     {nuevaActividad.esRecurrente ? 'Sí, actividad recurrente' : 'No, solo para este día'}
                   </Text>
@@ -1087,7 +1094,7 @@ export default function VistaHorario({ navigation }) {
               <TextInput
                 style={[styles.input, styles.textArea]}
                 value={nuevaActividad.descripcion}
-                onChangeText={(text) => setNuevaActividad({...nuevaActividad, descripcion: text})}
+                onChangeText={(text) => setNuevaActividad({ ...nuevaActividad, descripcion: text })}
                 multiline
                 numberOfLines={3}
                 placeholder="Detalles adicionales..."
@@ -1097,13 +1104,11 @@ export default function VistaHorario({ navigation }) {
               <View style={styles.opcionRecordatorio}>
                 <TouchableOpacity
                   style={styles.botonRecordatorio}
-                  onPress={() => setNuevaActividad({...nuevaActividad, recordatorio: !nuevaActividad.recordatorio})}
+                  onPress={() => setNuevaActividad({ ...nuevaActividad, recordatorio: !nuevaActividad.recordatorio })}
                 >
-                  <Icon 
-                    name={nuevaActividad.recordatorio ? "notifications" : "notifications-outline"} 
-                    size={24} 
-                    color={nuevaActividad.recordatorio ? COLORES.AMARILLO_PLATANO : COLORES.GRIS_MEDIO} 
-                  />
+                  <Text style={{ fontSize: 24, marginRight: 8 }}>
+                    {nuevaActividad.recordatorio ? '🔔' : '🔕'}
+                  </Text>
                   <Text style={styles.textoRecordatorio}>
                     {nuevaActividad.recordatorio ? 'Con recordatorio' : 'Sin recordatorio'}
                   </Text>
@@ -1113,15 +1118,15 @@ export default function VistaHorario({ navigation }) {
 
             <View style={styles.modalBotones}>
               {actividadSeleccionada && (
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={[styles.botonModalAccion, { backgroundColor: COLORES.ERROR }]}
                   onPress={eliminarActividad}
                 >
                   <Text style={styles.textoBotonModalAccion}>Eliminar</Text>
                 </TouchableOpacity>
               )}
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={styles.botonModalCancelar}
                 onPress={() => {
                   setModalVisible(false);
@@ -1130,8 +1135,8 @@ export default function VistaHorario({ navigation }) {
               >
                 <Text style={styles.textoBotonModalCancelar}>Cancelar</Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={[styles.botonModalAccion, { backgroundColor: COLORES.EXITO }]}
                 onPress={guardarActividad}
               >
@@ -1156,14 +1161,14 @@ export default function VistaHorario({ navigation }) {
             <View style={styles.modalEncabezado}>
               <Text style={styles.modalTitulo}>Configuración del Horario</Text>
               <TouchableOpacity onPress={() => setModalConfigVisible(false)}>
-                <Icon name="close-outline" size={24} color={COLORES.TEXTO_OSCURO} />
+                <Text style={{ fontSize: 24 }}>❌</Text>
               </TouchableOpacity>
             </View>
 
             <ScrollView style={styles.modalFormulario}>
               <View style={styles.seccionConfig}>
                 <Text style={styles.tituloSeccionConfig}>Horas de visualización</Text>
-                
+
                 <View style={styles.rangoHoras}>
                   <View style={styles.inputRango}>
                     <Text style={styles.labelRango}>Hora de inicio</Text>
@@ -1172,7 +1177,7 @@ export default function VistaHorario({ navigation }) {
                       value={configuracion.horaInicio.toString()}
                       onChangeText={(text) => {
                         const valor = parseInt(text) || 8;
-                        setConfiguracion({...configuracion, horaInicio: Math.max(0, Math.min(23, valor))});
+                        setConfiguracion({ ...configuracion, horaInicio: Math.max(0, Math.min(23, valor)) });
                       }}
                       keyboardType="numeric"
                       placeholder="8"
@@ -1180,9 +1185,9 @@ export default function VistaHorario({ navigation }) {
                     />
                     <Text style={styles.textoAyuda}>AM</Text>
                   </View>
-                  
+
                   <Text style={styles.separadorRango}>a</Text>
-                  
+
                   <View style={styles.inputRango}>
                     <Text style={styles.labelRango}>Hora de fin</Text>
                     <TextInput
@@ -1190,7 +1195,7 @@ export default function VistaHorario({ navigation }) {
                       value={configuracion.horaFin.toString()}
                       onChangeText={(text) => {
                         const valor = parseInt(text) || 22;
-                        setConfiguracion({...configuracion, horaFin: Math.max(0, Math.min(23, valor))});
+                        setConfiguracion({ ...configuracion, horaFin: Math.max(0, Math.min(23, valor)) });
                       }}
                       keyboardType="numeric"
                       placeholder="22"
@@ -1203,7 +1208,7 @@ export default function VistaHorario({ navigation }) {
 
               <View style={styles.seccionConfig}>
                 <Text style={styles.tituloSeccionConfig}>Rutina del adulto mayor</Text>
-                
+
                 <View style={styles.inputRutina}>
                   <Text style={styles.labelRutina}>Hora de despertar</Text>
                   <TextInput
@@ -1211,14 +1216,14 @@ export default function VistaHorario({ navigation }) {
                     value={configuracion.horaDespertar.toString()}
                     onChangeText={(text) => {
                       const valor = parseInt(text) || 7;
-                      setConfiguracion({...configuracion, horaDespertar: Math.max(0, Math.min(23, valor))});
+                      setConfiguracion({ ...configuracion, horaDespertar: Math.max(0, Math.min(23, valor)) });
                     }}
                     keyboardType="numeric"
                     placeholder="7"
                     placeholderTextColor={COLORES.GRIS_MEDIO}
                   />
                 </View>
-                
+
                 <View style={styles.inputRutina}>
                   <Text style={styles.labelRutina}>Hora de dormir</Text>
                   <TextInput
@@ -1226,7 +1231,7 @@ export default function VistaHorario({ navigation }) {
                     value={configuracion.horaDormir.toString()}
                     onChangeText={(text) => {
                       const valor = parseInt(text) || 22;
-                      setConfiguracion({...configuracion, horaDormir: Math.max(0, Math.min(23, valor))});
+                      setConfiguracion({ ...configuracion, horaDormir: Math.max(0, Math.min(23, valor)) });
                     }}
                     keyboardType="numeric"
                     placeholder="22"
@@ -1237,7 +1242,7 @@ export default function VistaHorario({ navigation }) {
 
               <View style={styles.seccionConfig}>
                 <Text style={styles.tituloSeccionConfig}>Mostrar en horario</Text>
-                
+
                 <View style={styles.opcionConfig}>
                   <Text style={styles.textoOpcionConfig}>Medicinas</Text>
                   <TouchableOpacity
@@ -1245,7 +1250,7 @@ export default function VistaHorario({ navigation }) {
                       styles.switch,
                       configuracion.mostrarMedicinas && styles.switchActivo
                     ]}
-                    onPress={() => setConfiguracion({...configuracion, mostrarMedicinas: !configuracion.mostrarMedicinas})}
+                    onPress={() => setConfiguracion({ ...configuracion, mostrarMedicinas: !configuracion.mostrarMedicinas })}
                   >
                     <View style={[
                       styles.switchPunto,
@@ -1253,7 +1258,7 @@ export default function VistaHorario({ navigation }) {
                     ]} />
                   </TouchableOpacity>
                 </View>
-                
+
                 <View style={styles.opcionConfig}>
                   <Text style={styles.textoOpcionConfig}>Eventos del calendario</Text>
                   <TouchableOpacity
@@ -1261,7 +1266,7 @@ export default function VistaHorario({ navigation }) {
                       styles.switch,
                       configuracion.mostrarEventos && styles.switchActivo
                     ]}
-                    onPress={() => setConfiguracion({...configuracion, mostrarEventos: !configuracion.mostrarEventos})}
+                    onPress={() => setConfiguracion({ ...configuracion, mostrarEventos: !configuracion.mostrarEventos })}
                   >
                     <View style={[
                       styles.switchPunto,
@@ -1269,7 +1274,7 @@ export default function VistaHorario({ navigation }) {
                     ]} />
                   </TouchableOpacity>
                 </View>
-                
+
                 <View style={styles.opcionConfig}>
                   <Text style={styles.textoOpcionConfig}>Actividades fijas</Text>
                   <TouchableOpacity
@@ -1277,7 +1282,7 @@ export default function VistaHorario({ navigation }) {
                       styles.switch,
                       configuracion.mostrarActividades && styles.switchActivo
                     ]}
-                    onPress={() => setConfiguracion({...configuracion, mostrarActividades: !configuracion.mostrarActividades})}
+                    onPress={() => setConfiguracion({ ...configuracion, mostrarActividades: !configuracion.mostrarActividades })}
                   >
                     <View style={[
                       styles.switchPunto,
@@ -1285,7 +1290,7 @@ export default function VistaHorario({ navigation }) {
                     ]} />
                   </TouchableOpacity>
                 </View>
-                
+
                 <View style={styles.opcionConfig}>
                   <Text style={styles.textoOpcionConfig}>Fines de semana</Text>
                   <TouchableOpacity
@@ -1293,7 +1298,7 @@ export default function VistaHorario({ navigation }) {
                       styles.switch,
                       configuracion.mostrarFines && styles.switchActivo
                     ]}
-                    onPress={() => setConfiguracion({...configuracion, mostrarFines: !configuracion.mostrarFines})}
+                    onPress={() => setConfiguracion({ ...configuracion, mostrarFines: !configuracion.mostrarFines })}
                   >
                     <View style={[
                       styles.switchPunto,
@@ -1305,14 +1310,14 @@ export default function VistaHorario({ navigation }) {
             </ScrollView>
 
             <View style={styles.modalBotones}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.botonModalCancelar}
                 onPress={() => setModalConfigVisible(false)}
               >
                 <Text style={styles.textoBotonModalCancelar}>Cancelar</Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={[styles.botonModalAccion, { backgroundColor: COLORES.EXITO }]}
                 onPress={guardarConfiguracion}
               >
@@ -1343,7 +1348,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
     fontSize: 16,
   },
-  
+
   // Encabezado
   encabezado: {
     flexDirection: 'row',
@@ -1375,7 +1380,7 @@ const styles = StyleSheet.create({
   botonRefrescar: {
     padding: 8,
   },
-  
+
   // Controles de navegación
   controlesNavegacion: {
     flexDirection: 'row',
@@ -1401,7 +1406,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
   },
-  
+
   // Leyenda
   leyendaContainer: {
     backgroundColor: COLORES.BLANCO,
@@ -1424,13 +1429,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 6,
   },
-  
+
   // Contenedor del horario
   horarioContainer: {
     flex: 1,
     backgroundColor: COLORES.BLANCO,
   },
-  
+
   // Columna de horas
   columnaHoras: {
     width: 60,
@@ -1449,7 +1454,7 @@ const styles = StyleSheet.create({
     color: COLORES.GRIS_OSCURO,
     fontWeight: '600',
   },
-  
+
   // Grid de días
   gridDias: {
     flex: 1,
@@ -1484,7 +1489,7 @@ const styles = StyleSheet.create({
   textoFechaFinDeSemana: {
     color: COLORES.AZUL_CIELO,
   },
-  
+
   // Cuerpo del horario
   cuerpoHorario: {
     backgroundColor: COLORES.BLANCO,
@@ -1500,7 +1505,7 @@ const styles = StyleSheet.create({
     borderLeftWidth: 1,
     borderLeftColor: COLORES.GRIS_CLARO,
   },
-  
+
   // Celda del horario
   celdaHorario: {
     flex: 1,
@@ -1512,7 +1517,7 @@ const styles = StyleSheet.create({
   celdaFinDeSemana: {
     backgroundColor: COLORES.GRIS_CLARO + '80',
   },
-  
+
   // Actividades
   actividad: {
     position: 'absolute',
@@ -1538,7 +1543,7 @@ const styles = StyleSheet.create({
     color: COLORES.BLANCO,
     opacity: 0.9,
   },
-  
+
   // Barra de acciones
   barraAcciones: {
     flexDirection: 'row',
@@ -1572,7 +1577,7 @@ const styles = StyleSheet.create({
     borderRadius: 25,
     backgroundColor: COLORES.GRIS_CLARO,
   },
-  
+
   // Estadísticas
   estadisticasContainer: {
     flexDirection: 'row',
@@ -1602,7 +1607,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORES.GRIS_CLARO,
     marginHorizontal: 10,
   },
-  
+
   // Modal
   modalFondo: {
     flex: 1,
@@ -1663,7 +1668,7 @@ const styles = StyleSheet.create({
     color: COLORES.GRIS_OSCURO,
     marginBottom: 5,
   },
-  
+
   // Actividades predefinidas
   actividadesPredefinidas: {
     flexDirection: 'row',
@@ -1683,7 +1688,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 6,
   },
-  
+
   // Tipos de actividades
   tiposContainer: {
     flexDirection: 'row',
@@ -1710,7 +1715,7 @@ const styles = StyleSheet.create({
     color: COLORES.BLANCO,
     fontWeight: 'bold',
   },
-  
+
   // Colores
   coloresContainer: {
     flexDirection: 'row',
@@ -1730,7 +1735,7 @@ const styles = StyleSheet.create({
     borderColor: COLORES.TEXTO_OSCURO,
     transform: [{ scale: 1.1 }],
   },
-  
+
   // Días
   diasContainer: {
     flexDirection: 'row',
@@ -1757,14 +1762,14 @@ const styles = StyleSheet.create({
     color: COLORES.BLANCO,
     fontWeight: 'bold',
   },
-  
+
   // Horario inputs
   horarioInputs: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 15,
   },
-  
+
   // Opciones recurrentes
   opcionRecurrente: {
     marginBottom: 15,
@@ -1779,7 +1784,7 @@ const styles = StyleSheet.create({
     color: COLORES.TEXTO_OSCURO,
     marginLeft: 10,
   },
-  
+
   // Recordatorio
   opcionRecordatorio: {
     marginBottom: 15,
@@ -1794,7 +1799,7 @@ const styles = StyleSheet.create({
     color: COLORES.TEXTO_OSCURO,
     marginLeft: 10,
   },
-  
+
   // Botones del modal
   modalBotones: {
     flexDirection: 'row',
@@ -1829,7 +1834,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  
+
   // Configuración
   seccionConfig: {
     marginBottom: 25,
