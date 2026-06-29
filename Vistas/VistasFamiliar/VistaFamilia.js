@@ -107,28 +107,30 @@ export default function VistaFamilia({ navigation }) {
         if (usuarioData) {
           const usuario = JSON.parse(usuarioData);
           setUsuarioActual(usuario);
-          setEsAdministrador(usuario.rol === 'familiar_admin');
+          setEsAdministrador(usuario.rol === 'familiar_admin' || usuario.rol === 'familiar_administrador');
 
-          // Obtener apellido para el título
           if (usuario.apellido) {
             setApellidoFamilia(`Familia ${usuario.apellido}`);
           }
         }
 
-        // Cargar familiares
-        const familiaresResponse = await servicioAPI.obtenerFamiliares();
+        // Cargar familiares (pasando usuarioId)
+        const familiaresResponse = await servicioAPI.obtenerFamiliares(usuarioId);
         if (familiaresResponse.exito) {
           setFamiliares(familiaresResponse.familiares || []);
         }
 
-        // Cargar código familiar
-        const codigoResponse = await servicioAPI.obtenerCodigoFamiliar();
+        // Cargar código familiar (pasando usuarioId)
+        const codigoResponse = await servicioAPI.obtenerCodigoFamiliar(usuarioId);
         if (codigoResponse.exito) {
           setCodigoFamiliar(codigoResponse.codigo || '');
+        } else {
+          console.warn('Error cargando código familiar:', codigoResponse.error);
+          setCodigoFamiliar('');
         }
 
-        // Cargar códigos personalizados
-        const codigosResponse = await servicioAPI.obtenerCodigosPersonalizados();
+        // Cargar códigos personalizados (pasando usuarioId)
+        const codigosResponse = await servicioAPI.obtenerCodigosPersonalizados(usuarioId);
         if (codigosResponse.exito) {
           setCodigosPersonalizados(codigosResponse.codigos || []);
         }
@@ -140,7 +142,6 @@ export default function VistaFamilia({ navigation }) {
         setCargando(false);
         setRefrescando(false);
       }
-
     }
   }, []);
 

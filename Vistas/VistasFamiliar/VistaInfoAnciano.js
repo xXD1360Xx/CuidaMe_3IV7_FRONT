@@ -105,14 +105,15 @@ export default function VistaInfoAnciano({ navigation }) {
     return edad;
   };
 
+  // Formatear fecha
   const formatearFecha = (fechaStr) => {
-    if (!fechaStr) return 'No especificada';
+    if (!fechaStr) return 'Fecha no disponible';
     const fecha = new Date(fechaStr);
     if (isNaN(fecha)) return 'Fecha inválida';
     return fecha.toLocaleDateString('es-ES', {
-      year: 'numeric',
-      month: 'long',
+      weekday: 'short',
       day: 'numeric',
+      month: 'short'
     });
   };
 

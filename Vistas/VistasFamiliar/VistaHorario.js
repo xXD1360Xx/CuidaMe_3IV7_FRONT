@@ -14,10 +14,10 @@ import {
   Dimensions
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons as Icon } from '@expo/vector-icons';
 import { servicioAPI } from '../../servicios/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Colores de CuidaMe
 const COLORES = {
   AZUL_CIELO: '#87CEEB',
   AZUL_CIELO_OSCURO: '#5D8AA8',
@@ -41,17 +41,21 @@ const COLORES = {
 };
 
 const { width } = Dimensions.get('window');
-const HORA_HEIGHT = 60; // Altura de cada hora
-const DIA_WIDTH = (width - 60) / 7; // Ancho de cada día
+const HORA_HEIGHT = 60;
+const DIA_WIDTH = (width - 60) / 7;
 
 export default function VistaHorario({ navigation }) {
+  // ========== ESTADOS ==========
+  const [usuarioId, setUsuarioId] = useState(null);
   const [horario, setHorario] = useState([]);
   const [medicinas, setMedicinas] = useState([]);
   const [eventos, setEventos] = useState([]);
   const [actividadesFijas, setActividadesFijas] = useState([]);
+
+  // Configuración con valores POR DEFECTO y BLINDADA
   const [configuracion, setConfiguracion] = useState({
-    horaInicio: 8, // 8:00 AM
-    horaFin: 22, // 10:00 PM
+    horaInicio: 8,
+    horaFin: 22,
     horaDespertar: 7,
     horaDormir: 22,
     mostrarFines: true,
@@ -59,35 +63,32 @@ export default function VistaHorario({ navigation }) {
     mostrarEventos: true,
     mostrarActividades: true
   });
+
   const [cargando, setCargando] = useState(true);
   const [refrescando, setRefrescando] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalConfigVisible, setModalConfigVisible] = useState(false);
-  const [modalActividadVisible, setModalActividadVisible] = useState(false);
   const [usuarioRol, setUsuarioRol] = useState('');
   const [semanaActual, setSemanaActual] = useState(new Date());
 
-  // Estados para actividades
   const [actividadSeleccionada, setActividadSeleccionada] = useState(null);
   const [espacioSeleccionado, setEspacioSeleccionado] = useState({ dia: null, hora: null });
 
-  // Nueva actividad
   const [nuevaActividad, setNuevaActividad] = useState({
     nombre: '',
     tipo: 'actividad_diaria',
     color: COLORES.AZUL_CIELO,
-    dias: [], // Array con números 0-6 (0: Domingo, 1: Lunes, ...)
+    dias: [],
     hora_inicio: '08:00',
     hora_fin: '09:00',
     duracion_minutos: 60,
     descripcion: '',
     recordatorio: true,
     esRecurrente: true,
-    fecha_inicio: new Date().toISOString().split('T')[0],
+    fecha_inicio: '',
     fecha_fin: null
   });
 
-  // Actividades predefinidas
   const ACTIVIDADES_PREDEFINIDAS = [
     { id: 'banarse', nombre: 'Bañarse', color: COLORES.TURQUESA, emoji: '🚿', duracion: 30 },
     { id: 'comer', nombre: 'Comer', color: COLORES.NARANJA, emoji: '🍽️', duracion: 45 },
@@ -99,7 +100,6 @@ export default function VistaHorario({ navigation }) {
     { id: 'medicina', nombre: 'Tomar Medicina', color: COLORES.EXITO, emoji: '💊', duracion: 15 }
   ];
 
-  // Tipos de actividades
   const TIPOS_ACTIVIDADES = [
     { id: 'actividad_diaria', nombre: 'Actividad Diaria', emoji: '📅' },
     { id: 'medicina', nombre: 'Medicina', emoji: '💊' },
@@ -110,7 +110,6 @@ export default function VistaHorario({ navigation }) {
     { id: 'personal', nombre: 'Cuidado Personal', emoji: '👤' }
   ];
 
-  // Días de la semana
   const DIAS_SEMANA = [
     { id: 0, nombre: 'Domingo', corto: 'Dom' },
     { id: 1, nombre: 'Lunes', corto: 'Lun' },
@@ -121,95 +120,82 @@ export default function VistaHorario({ navigation }) {
     { id: 6, nombre: 'Sábado', corto: 'Sáb' }
   ];
 
-  // Cargar datos iniciales
-  const cargarDatos = useCallback(async () => {
+  // ========== CARGA INICIAL ÚNICA ==========
+  useEffect(() => {
+    const init = async () => {
+      try {
+        const id = await servicioAPI.obtenerUsuarioActualId();
+        setUsuarioId(id);
+        if (id) {
+          await cargarDatosIniciales(id);
+        } else {
+          Alert.alert('Error', 'No se pudo identificar al usuario');
+          setCargando(false);
+        }
+      } catch (error) {
+        console.error('Error en init:', error);
+        setCargando(false);
+      }
+    };
+    init();
+  }, []);
+
+  // ========== FUNCIONES DE CARGA ==========
+  const cargarDatosIniciales = async (id) => {
     try {
       setCargando(true);
-
-      // Obtener usuario actual
       const usuarioData = await AsyncStorage.getItem('usuarioInfo');
       if (usuarioData) {
         const usuario = JSON.parse(usuarioData);
-        setUsuarioRol(usuario.rol);
+        setUsuarioRol(usuario.rol || '');
       }
-
-      // Cargar configuración
-      await cargarConfiguracion();
-
-      // Cargar medicinas
-      await cargarMedicinas();
-
-      // Cargar eventos de la semana
-      await cargarEventosSemana();
-
-      // Cargar actividades fijas
-      await cargarActividadesFijas();
-
-      // Generar horario
+      await cargarConfiguracion(id);
+      await cargarMedicinas(id);
+      await cargarEventosSemana(id);
+      await cargarActividadesFijas(id);
       generarHorario();
-
     } catch (error) {
-      console.error('Error cargando datos del horario:', error);
+      console.error('Error cargando datos iniciales:', error);
       Alert.alert('Error', 'No se pudieron cargar los datos del horario');
     } finally {
       setCargando(false);
-      setRefrescando(false);
     }
-  }, [semanaActual, configuracion]);
+  };
 
-  // Cargar configuración
-  const cargarConfiguracion = async () => {
+  const cargarConfiguracion = async (id) => {
     try {
-      const response = await servicioAPI.obtenerConfiguracionHorario();
-      if (response.exito) {
-        setConfiguracion(response.configuracion || configuracion);
+      const response = await servicioAPI.obtenerConfiguracionHorario(id);
+      if (response.exito && response.configuracion) {
+        setConfiguracion(prev => ({
+          ...prev,
+          ...response.configuracion
+        }));
       }
     } catch (error) {
       console.error('Error cargando configuración:', error);
     }
   };
 
-  // Cargar medicinas
-  const cargarMedicinas = async () => {
+  const cargarMedicinas = async (id) => {
     try {
-      const usuarioData = await AsyncStorage.getItem('usuarioInfo');
-      let usuarioId = null;
-      if (usuarioData) {
-        const usuario = JSON.parse(usuarioData);
-        usuarioId = usuario.id;
-      }
-
-      // Si no hay usuario, salir
-      if (!usuarioId) {
-        console.warn('⚠️ No hay usuario logueado, no se pueden cargar medicinas');
-        return;
-      }
-
-      console.log('💊 Cargando medicinas para usuario:', usuarioId);
-
-      const response = await servicioAPI.obtenerTodasMedicinas(usuarioId);
+      const response = await servicioAPI.obtenerMedicinasHoy(id);
       if (response.exito) {
         setMedicinas(response.medicinas || []);
-        console.log('✅ Se cargaron', response.medicinas.length, 'medicinas');
-      } else {
-        console.log('⚠️ Respuesta no exitosa:', response.mensaje || 'Sin mensaje');
       }
     } catch (error) {
-      console.error('❌ Error cargando medicinas:', error);
+      console.error('Error cargando medicinas:', error);
     }
   };
 
-  // Cargar eventos de la semana
-  const cargarEventosSemana = async () => {
+  const cargarEventosSemana = async (id) => {
     try {
       const inicioSemana = obtenerInicioSemana(semanaActual);
       const finSemana = obtenerFinSemana(semanaActual);
-
       const response = await servicioAPI.obtenerEventosPorRango(
+        id,
         inicioSemana.toISOString().split('T')[0],
         finSemana.toISOString().split('T')[0]
       );
-
       if (response.exito) {
         setEventos(response.eventos || []);
       }
@@ -218,10 +204,9 @@ export default function VistaHorario({ navigation }) {
     }
   };
 
-  // Cargar actividades fijas
-  const cargarActividadesFijas = async () => {
+  const cargarActividadesFijas = async (id) => {
     try {
-      const response = await servicioAPI.obtenerActividadesFijas();
+      const response = await servicioAPI.obtenerActividadesFijas(id);
       if (response.exito) {
         setActividadesFijas(response.actividades || []);
       }
@@ -230,65 +215,56 @@ export default function VistaHorario({ navigation }) {
     }
   };
 
-  // Generar horario combinado
+  // ========== RECARGA MANUAL ==========
+  const recargarSemana = async () => {
+    if (!usuarioId) return;
+    setRefrescando(true);
+    await cargarEventosSemana(usuarioId);
+    await cargarActividadesFijas(usuarioId);
+    generarHorario();
+    setRefrescando(false);
+  };
+
+  // ========== GENERAR HORARIO ==========
   const generarHorario = () => {
-    const inicio = configuracion.horaInicio;
-    const fin = configuracion.horaFin;
-    const dias = DIAS_SEMANA;
+    const inicio = configuracion.horaInicio || 8;
+    const fin = configuracion.horaFin || 22;
+    const horarioGenerado = [];
 
-    let horarioGenerado = [];
-
-    // Crear matriz de horas x días
     for (let hora = inicio; hora <= fin; hora++) {
-      const filaHoras = {
-        hora: hora,
-        label: formatearHora(hora),
-        dias: {}
-      };
-
-      dias.forEach(dia => {
-        filaHoras.dias[dia.id] = {
-          dia: dia.id,
-          hora: hora,
-          actividades: []
-        };
+      const fila = { hora, label: formatearHora(hora), dias: {} };
+      DIAS_SEMANA.forEach(dia => {
+        fila.dias[dia.id] = { dia: dia.id, hora, actividades: [] };
       });
-
-      horarioGenerado.push(filaHoras);
+      horarioGenerado.push(fila);
     }
 
-    // Agregar medicinas al horario
-    if (configuracion.mostrarMedicinas) {
-      medicinas.forEach(medicina => {
-        const horaMedicina = parseInt(medicina.hora.split(':')[0]);
-        const minutos = parseInt(medicina.hora.split(':')[1]);
-
-        // Convertir a posición decimal
-        const posicionHora = horaMedicina + (minutos / 60);
-
-        if (posicionHora >= inicio && posicionHora <= fin) {
-          // Encontrar el bloque de hora correspondiente
-          const bloqueHora = horarioGenerado.find(bloque => bloque.hora === horaMedicina);
-
-          if (bloqueHora) {
-            // Aplicar a todos los días si es diaria
-            const diasAplicar = medicina.frecuencia === 'diaria' ?
-              DIAS_SEMANA.map(d => d.id) :
-              obtenerDiasFrecuencia(medicina.frecuencia);
-
+    // ---- Medicinas ----
+    if (configuracion.mostrarMedicinas !== false) {
+      medicinas.forEach(med => {
+        if (!med.hora) return;
+        const [horaMed, minMed] = med.hora.split(':').map(Number);
+        if (isNaN(horaMed) || isNaN(minMed)) return;
+        const pos = horaMed + (minMed / 60);
+        if (pos >= inicio && pos <= fin) {
+          const bloque = horarioGenerado.find(b => b.hora === horaMed);
+          if (bloque) {
+            const diasAplicar = med.frecuencia === 'diaria'
+              ? DIAS_SEMANA.map(d => d.id)
+              : obtenerDiasFrecuencia(med.frecuencia);
             diasAplicar.forEach(diaId => {
-              if (bloqueHora.dias[diaId]) {
-                bloqueHora.dias[diaId].actividades.push({
-                  id: `medicina_${medicina.id}_${diaId}`,
+              if (bloque.dias[diaId]) {
+                bloque.dias[diaId].actividades.push({
+                  id: `medicina_${med.id}_${diaId}`,
                   tipo: 'medicina',
-                  nombre: medicina.nombre,
+                  nombre: med.nombre || 'Medicina',
                   color: COLORES.EXITO,
-                  hora_inicio: medicina.hora,
-                  hora_fin: sumarMinutos(medicina.hora, 15),
+                  hora_inicio: med.hora,
+                  hora_fin: sumarMinutos(med.hora, 15),
                   duracion_minutos: 15,
-                  descripcion: `Tomar ${medicina.dosis}`,
+                  descripcion: `Tomar ${med.dosis || ''}`,
                   esMedicina: true,
-                  datos: medicina
+                  datos: med
                 });
               }
             });
@@ -297,44 +273,36 @@ export default function VistaHorario({ navigation }) {
       });
     }
 
-    // Agregar actividades fijas
-    if (configuracion.mostrarActividades) {
-      actividadesFijas.forEach(actividad => {
-        const horaInicio = parseInt(actividad.hora_inicio.split(':')[0]);
-        const minutosInicio = parseInt(actividad.hora_inicio.split(':')[1]);
-        const horaFin = parseInt(actividad.hora_fin.split(':')[0]);
-        const minutosFin = parseInt(actividad.hora_fin.split(':')[1]);
-
-        const posicionInicio = horaInicio + (minutosInicio / 60);
-        const posicionFin = horaFin + (minutosFin / 60);
-
-        if (posicionInicio >= inicio && posicionFin <= fin) {
-          // Calcular cuántos bloques ocupa
-          const bloquesOcupa = Math.ceil((posicionFin - posicionInicio) * 4); // 4 bloques por hora (15 min cada uno)
-
-          // Aplicar a los días especificados
-          actividad.dias.forEach(diaId => {
+    // ---- Actividades fijas ----
+    if (configuracion.mostrarActividades !== false) {
+      actividadesFijas.forEach(act => {
+        if (!act.hora_inicio || !act.hora_fin) return;
+        const [hIni, mIni] = act.hora_inicio.split(':').map(Number);
+        const [hFin, mFin] = act.hora_fin.split(':').map(Number);
+        if (isNaN(hIni) || isNaN(mIni) || isNaN(hFin) || isNaN(mFin)) return;
+        const posIni = hIni + (mIni / 60);
+        const posFin = hFin + (mFin / 60);
+        if (posIni >= inicio && posFin <= fin) {
+          const bloquesOcupa = Math.ceil((posFin - posIni) * 4);
+          const dias = act.dias || [];
+          dias.forEach(diaId => {
             for (let i = 0; i < bloquesOcupa; i++) {
-              const bloqueHora = horaInicio + Math.floor(i / 4);
-              const minutoOffset = (i % 4) * 15;
-
+              const bloqueHora = hIni + Math.floor(i / 4);
               const bloque = horarioGenerado.find(b => b.hora === bloqueHora);
-
               if (bloque && bloque.dias[diaId]) {
-                // Solo agregar si es el primer bloque de la actividad
                 if (i === 0) {
                   bloque.dias[diaId].actividades.push({
-                    id: `actividad_${actividad.id}_${diaId}`,
+                    id: `actividad_${act.id}_${diaId}`,
                     tipo: 'actividad_diaria',
-                    nombre: actividad.nombre,
-                    color: actividad.color,
-                    hora_inicio: actividad.hora_inicio,
-                    hora_fin: actividad.hora_fin,
-                    duracion_minutos: actividad.duracion_minutos,
-                    descripcion: actividad.descripcion,
-                    esRecurrente: actividad.esRecurrente,
+                    nombre: act.nombre || 'Actividad',
+                    color: act.color || COLORES.AZUL_CIELO,
+                    hora_inicio: act.hora_inicio,
+                    hora_fin: act.hora_fin,
+                    duracion_minutos: act.duracion_minutos || 60,
+                    descripcion: act.descripcion || '',
+                    esRecurrente: act.esRecurrente,
                     alturaBloques: bloquesOcupa,
-                    datos: actividad
+                    datos: act
                   });
                 }
               }
@@ -344,42 +312,35 @@ export default function VistaHorario({ navigation }) {
       });
     }
 
-    // Agregar eventos del calendario
-    if (configuracion.mostrarEventos) {
-      eventos.forEach(evento => {
-        const fechaEvento = new Date(evento.fecha_inicio);
-        const diaSemana = fechaEvento.getDay(); // 0-6
-
-        if (fechaEvento >= obtenerInicioSemana(semanaActual) &&
-          fechaEvento <= obtenerFinSemana(semanaActual)) {
-
-          const horaInicio = evento.hora_inicio ?
-            parseInt(evento.hora_inicio.split(':')[0]) : 9;
-          const minutosInicio = evento.hora_inicio ?
-            parseInt(evento.hora_inicio.split(':')[1]) : 0;
-          const duracionHoras = evento.duracion_horas || 1;
-
-          const posicionInicio = horaInicio + (minutosInicio / 60);
-
-          if (posicionInicio >= inicio && posicionInicio + duracionHoras <= fin) {
-            const bloqueHora = horaInicio;
-            const bloquesOcupa = Math.ceil(duracionHoras * 4); // 4 bloques por hora
-
-            const bloque = horarioGenerado.find(b => b.hora === bloqueHora);
-
+    // ---- Eventos ----
+    if (configuracion.mostrarEventos !== false) {
+      eventos.forEach(ev => {
+        if (!ev.fecha_inicio) return;
+        const fechaEv = new Date(ev.fecha_inicio);
+        const diaSemana = fechaEv.getDay();
+        const inicioSemana = obtenerInicioSemana(semanaActual);
+        const finSemana = obtenerFinSemana(semanaActual);
+        if (fechaEv >= inicioSemana && fechaEv <= finSemana) {
+          const hIni = ev.hora_inicio ? parseInt(ev.hora_inicio.split(':')[0]) : 9;
+          const mIni = ev.hora_inicio ? parseInt(ev.hora_inicio.split(':')[1]) : 0;
+          const duracionHoras = ev.duracion_horas || 1;
+          const posIni = hIni + (mIni / 60);
+          if (posIni >= inicio && posIni + duracionHoras <= fin) {
+            const bloquesOcupa = Math.ceil(duracionHoras * 4);
+            const bloque = horarioGenerado.find(b => b.hora === hIni);
             if (bloque && bloque.dias[diaSemana]) {
               bloque.dias[diaSemana].actividades.push({
-                id: `evento_${evento.id}`,
+                id: `evento_${ev.id}`,
                 tipo: 'evento',
-                nombre: evento.titulo,
-                color: evento.color_evento || COLORES.MORADO,
-                hora_inicio: evento.hora_inicio || '09:00',
-                hora_fin: sumarHoras(evento.hora_inicio || '09:00', duracionHoras),
+                nombre: ev.titulo || 'Evento',
+                color: ev.color_evento || COLORES.MORADO,
+                hora_inicio: ev.hora_inicio || '09:00',
+                hora_fin: sumarHoras(ev.hora_inicio || '09:00', duracionHoras),
                 duracion_minutos: duracionHoras * 60,
-                descripcion: evento.descripcion,
-                ubicacion: evento.ubicacion,
+                descripcion: ev.descripcion || '',
+                ubicacion: ev.ubicacion,
                 alturaBloques: bloquesOcupa,
-                datos: evento
+                datos: ev
               });
             }
           }
@@ -390,112 +351,84 @@ export default function VistaHorario({ navigation }) {
     setHorario(horarioGenerado);
   };
 
-  // Obtener inicio de semana
+  // ========== UTILIDADES ==========
   const obtenerInicioSemana = (fecha) => {
     const inicio = new Date(fecha);
-    const diaSemana = inicio.getDay();
-    inicio.setDate(inicio.getDate() - diaSemana); // Ir al domingo
+    inicio.setDate(inicio.getDate() - inicio.getDay());
     inicio.setHours(0, 0, 0, 0);
     return inicio;
   };
 
-  // Obtener fin de semana
   const obtenerFinSemana = (fecha) => {
     const fin = new Date(fecha);
-    const diaSemana = fin.getDay();
-    fin.setDate(fin.getDate() + (6 - diaSemana)); // Ir al sábado
+    fin.setDate(fin.getDate() + (6 - fin.getDay()));
     fin.setHours(23, 59, 59, 999);
     return fin;
   };
 
-  // Obtener días según frecuencia
-  const obtenerDiasFrecuencia = (frecuencia) => {
-    switch (frecuencia) {
-      case 'lunes':
-        return [1];
-      case 'martes':
-        return [2];
-      case 'miercoles':
-        return [3];
-      case 'jueves':
-        return [4];
-      case 'viernes':
-        return [5];
-      case 'sabado':
-        return [6];
-      case 'domingo':
-        return [0];
-      case 'lunes_miercoles_viernes':
-        return [1, 3, 5];
-      case 'martes_jueves':
-        return [2, 4];
-      case 'fin_semana':
-        return [0, 6];
-      case 'laborables':
-        return [1, 2, 3, 4, 5];
-      default:
-        return [1, 2, 3, 4, 5, 6, 0]; // Todos los días
+  const obtenerDiasFrecuencia = (frec) => {
+    const map = {
+      lunes: [1],
+      martes: [2],
+      miercoles: [3],
+      jueves: [4],
+      viernes: [5],
+      sabado: [6],
+      domingo: [0],
+      lunes_miercoles_viernes: [1, 3, 5],
+      martes_jueves: [2, 4],
+      fin_semana: [0, 6],
+      laborables: [1, 2, 3, 4, 5]
+    };
+    return map[frec] || [1, 2, 3, 4, 5, 6, 0];
+  };
+
+  const formatearHora = (hora) => {
+    const ampm = hora >= 12 ? 'PM' : 'AM';
+    const h12 = hora % 12 || 12;
+    return `${h12}:00 ${ampm}`;
+  };
+
+  const sumarMinutos = (hora, minutos) => {
+    const [h, m] = hora.split(':').map(Number);
+    if (isNaN(h) || isNaN(m)) return '00:00';
+    const total = h * 60 + m + minutos;
+    return `${Math.floor(total / 60).toString().padStart(2, '0')}:${(total % 60).toString().padStart(2, '0')}`;
+  };
+
+  const sumarHoras = (hora, horas) => sumarMinutos(hora, horas * 60);
+
+  // ========== NAVEGACIÓN DE SEMANA ==========
+  const cambiarSemana = (direccion) => {
+    const nueva = new Date(semanaActual);
+    nueva.setDate(nueva.getDate() + (direccion * 7));
+    setSemanaActual(nueva);
+    recargarSemana();
+  };
+
+  const irAHoy = () => {
+    setSemanaActual(new Date());
+    recargarSemana();
+  };
+
+  // ========== CONFIGURACIÓN ==========
+  const guardarConfiguracion = async () => {
+    try {
+      const response = await servicioAPI.guardarConfiguracionHorario(usuarioId, configuracion);
+      if (response.exito) {
+        Alert.alert('Éxito', 'Configuración guardada');
+        setModalConfigVisible(false);
+        if (usuarioId) await cargarDatosIniciales(usuarioId);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo guardar la configuración');
     }
   };
 
-  // Formatear hora
-  const formatearHora = (hora) => {
-    const ampm = hora >= 12 ? 'PM' : 'AM';
-    const hora12 = hora % 12 || 12;
-    return `${hora12}:00 ${ampm}`;
-  };
-
-  // Sumar minutos a una hora
-  const sumarMinutos = (hora, minutos) => {
-    const [h, m] = hora.split(':').map(Number);
-    const totalMinutos = h * 60 + m + minutos;
-    const nuevaHora = Math.floor(totalMinutos / 60);
-    const nuevosMinutos = totalMinutos % 60;
-    return `${nuevaHora.toString().padStart(2, '0')}:${nuevosMinutos.toString().padStart(2, '0')}`;
-  };
-
-  // Sumar horas a una hora
-  const sumarHoras = (hora, horas) => {
-    return sumarMinutos(hora, horas * 60);
-  };
-
-  // Cargar datos al montar
-  useEffect(() => {
-    cargarDatos();
-  }, [semanaActual, configuracion]);
-
-  // Refrescar manualmente
-  const onRefresh = useCallback(async () => {
-    setRefrescando(true);
-    await cargarDatos();
-  }, [cargando]);
-
-  // Navegar entre semanas
-  const cambiarSemana = (direccion) => {
-    const nuevaFecha = new Date(semanaActual);
-    nuevaFecha.setDate(nuevaFecha.getDate() + (direccion * 7));
-    setSemanaActual(nuevaFecha);
-  };
-
-  // Ir a esta semana
-  const irAHoy = () => {
-    setSemanaActual(new Date());
-  };
-
-  // Obtener fecha del día en la semana actual
-  const obtenerFechaDelDia = (diaId) => {
-    const fecha = obtenerInicioSemana(semanaActual);
-    fecha.setDate(fecha.getDate() + diaId);
-    return fecha;
-  };
-
-  // Seleccionar espacio en el horario
+  // ========== MODALES DE ACTIVIDAD ==========
   const seleccionarEspacio = (dia, hora) => {
     setEspacioSeleccionado({ dia, hora });
-
-    // Preparar nueva actividad con la hora seleccionada
     const fecha = obtenerFechaDelDia(dia);
-
     setNuevaActividad({
       nombre: '',
       tipo: 'actividad_diaria',
@@ -510,96 +443,86 @@ export default function VistaHorario({ navigation }) {
       fecha_inicio: fecha.toISOString().split('T')[0],
       fecha_fin: null
     });
-
     setModalVisible(true);
   };
 
-  // Seleccionar actividad existente
   const seleccionarActividad = (actividad, dia, hora) => {
     setActividadSeleccionada(actividad);
     setEspacioSeleccionado({ dia, hora });
-
     setNuevaActividad({
-      nombre: actividad.nombre,
-      tipo: actividad.tipo,
-      color: actividad.color,
-      dias: actividad.esRecurrente ? obtenerDiasActividad(actividad) : [dia],
-      hora_inicio: actividad.hora_inicio,
-      hora_fin: actividad.hora_fin,
-      duracion_minutos: actividad.duracion_minutos,
+      nombre: actividad.nombre || '',
+      tipo: actividad.tipo || 'actividad_diaria',
+      color: actividad.color || COLORES.AZUL_CIELO,
+      dias: actividad.esRecurrente ? (actividad.datos?.dias || [dia]) : [dia],
+      hora_inicio: actividad.hora_inicio || '08:00',
+      hora_fin: actividad.hora_fin || '09:00',
+      duracion_minutos: actividad.duracion_minutos || 60,
       descripcion: actividad.descripcion || '',
       recordatorio: true,
-      esRecurrente: actividad.esRecurrente,
-      fecha_inicio: actividad.fecha_inicio || new Date().toISOString().split('T')[0],
-      fecha_fin: actividad.fecha_fin || null
+      esRecurrente: actividad.esRecurrente || false,
+      fecha_inicio: actividad.datos?.fecha_inicio || new Date().toISOString().split('T')[0],
+      fecha_fin: actividad.datos?.fecha_fin || null
     });
-
     setModalVisible(true);
   };
 
-  // Obtener días de una actividad
-  const obtenerDiasActividad = (actividad) => {
-    if (actividad.datos && actividad.datos.dias) {
-      return actividad.datos.dias;
-    }
-
-    // Intentar deducir de los datos
-    if (actividad.esMedicina && actividad.datos) {
-      return obtenerDiasFrecuencia(actividad.datos.frecuencia || 'diaria');
-    }
-
-    return [espacioSeleccionado.dia];
+  const obtenerFechaDelDia = (diaId) => {
+    const fecha = obtenerInicioSemana(semanaActual);
+    fecha.setDate(fecha.getDate() + diaId);
+    return fecha;
   };
 
-  // Guardar actividad
+  const aplicarActividadPredefinida = (actPredef) => {
+    const fecha = obtenerFechaDelDia(espacioSeleccionado.dia);
+    setNuevaActividad({
+      ...nuevaActividad,
+      nombre: actPredef.nombre,
+      color: actPredef.color,
+      duracion_minutos: actPredef.duracion,
+      descripcion: actPredef.nombre,
+      fecha_inicio: fecha.toISOString().split('T')[0]
+    });
+  };
+
   const guardarActividad = async () => {
     try {
       if (!nuevaActividad.nombre.trim()) {
-        Alert.alert('Error', 'Debes ingresar un nombre para la actividad');
+        Alert.alert('Error', 'Debes ingresar un nombre');
         return;
       }
-
       if (nuevaActividad.dias.length === 0) {
         Alert.alert('Error', 'Debes seleccionar al menos un día');
         return;
       }
-
-      const datosActividad = {
+      const datos = {
         ...nuevaActividad,
-        duracion_minutos: parseInt(nuevaActividad.duracion_minutos) || 60
+        duracion_minutos: parseInt(String(nuevaActividad.duracion_minutos)) || 60
       };
-
       let response;
       if (actividadSeleccionada) {
-        // Actualizar actividad existente
-        response = await servicioAPI.actualizarActividad(actividadSeleccionada.id, datosActividad);
+        response = await servicioAPI.actualizarActividad(usuarioId, actividadSeleccionada.id, datos);
       } else {
-        // Crear nueva actividad
-        response = await servicioAPI.crearActividad(datosActividad);
+        response = await servicioAPI.crearActividad(usuarioId, datos);
       }
-
       if (response.exito) {
         Alert.alert('Éxito', actividadSeleccionada ? 'Actividad actualizada' : 'Actividad creada');
         setModalVisible(false);
         setActividadSeleccionada(null);
-        onRefresh();
+        await recargarSemana();
       } else {
-        Alert.alert('Error', response.error || 'No se pudo guardar la actividad');
+        Alert.alert('Error', response.error || 'No se pudo guardar');
       }
-
     } catch (error) {
       console.error('Error guardando actividad:', error);
-      Alert.alert('Error', 'No se pudo guardar la actividad');
+      Alert.alert('Error', 'No se pudo guardar');
     }
   };
 
-  // Eliminar actividad
-  const eliminarActividad = () => {
+  const eliminarActividad = async () => {
     if (!actividadSeleccionada) return;
-
     Alert.alert(
       'Eliminar Actividad',
-      '¿Estás seguro de que quieres eliminar esta actividad?',
+      '¿Estás seguro?',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -607,15 +530,15 @@ export default function VistaHorario({ navigation }) {
           style: 'destructive',
           onPress: async () => {
             try {
-              const response = await servicioAPI.eliminarActividad(actividadSeleccionada.id);
+              const response = await servicioAPI.eliminarActividad(usuarioId, actividadSeleccionada.id);
               if (response.exito) {
                 Alert.alert('Éxito', 'Actividad eliminada');
                 setModalVisible(false);
                 setActividadSeleccionada(null);
-                onRefresh();
+                await recargarSemana();
               }
             } catch (error) {
-              Alert.alert('Error', 'No se pudo eliminar la actividad');
+              Alert.alert('Error', 'No se pudo eliminar');
             }
           }
         }
@@ -623,121 +546,59 @@ export default function VistaHorario({ navigation }) {
     );
   };
 
-  // Aplicar actividad predefinida
-  const aplicarActividadPredefinida = (actividadPredefinida) => {
-    const fecha = obtenerFechaDelDia(espacioSeleccionado.dia);
-
-    setNuevaActividad({
-      nombre: actividadPredefinida.nombre,
-      tipo: 'actividad_diaria',
-      color: actividadPredefinida.color,
-      dias: [espacioSeleccionado.dia],
-      hora_inicio: nuevaActividad.hora_inicio,
-      hora_fin: sumarMinutos(nuevaActividad.hora_inicio, actividadPredefinida.duracion),
-      duracion_minutos: actividadPredefinida.duracion,
-      descripcion: actividadPredefinida.nombre,
-      recordatorio: true,
-      esRecurrente: false,
-      fecha_inicio: fecha.toISOString().split('T')[0],
-      fecha_fin: null
-    });
-  };
-
-  // Guardar configuración
-  const guardarConfiguracion = async () => {
-    try {
-      const response = await servicioAPI.guardarConfiguracionHorario(configuracion);
-      if (response.exito) {
-        Alert.alert('Éxito', 'Configuración guardada');
-        setModalConfigVisible(false);
-        onRefresh();
-      }
-    } catch (error) {
-      Alert.alert('Error', 'No se pudo guardar la configuración');
-    }
-  };
-
-  // Calcular posición y altura de una actividad
-  const calcularEstiloActividad = (actividad, hora) => {
-    const [horaInicio, minutoInicio] = actividad.hora_inicio.split(':').map(Number);
-    const horaDecimalInicio = horaInicio + (minutoInicio / 60);
-
-    const top = (horaDecimalInicio - hora) * HORA_HEIGHT;
-    const altura = (actividad.duracion_minutos / 60) * HORA_HEIGHT;
-
-    return {
-      top: top,
-      height: altura,
-      backgroundColor: actividad.color
-    };
-  };
-
-  // Verificar si es fin de semana
-  const esFinDeSemana = (diaId) => {
-    return diaId === 0 || diaId === 6; // Domingo (0) o Sábado (6)
-  };
-
-  // Renderizar actividad
-  const renderActividad = (actividad, diaId, hora) => {
-    const estilo = calcularEstiloActividad(actividad, hora);
-
-    return (
-      <TouchableOpacity
-        key={actividad.id}
-        style={[styles.actividad, estilo]}
-        onPress={() => seleccionarActividad(actividad, diaId, hora)}
-        activeOpacity={0.7}
-      >
-        <Text style={styles.nombreActividad} numberOfLines={1}>
-          {actividad.nombre}
-        </Text>
-        <Text style={styles.horaActividad} numberOfLines={1}>
-          {actividad.hora_inicio} - {actividad.hora_fin}
-        </Text>
-      </TouchableOpacity>
-    );
-  };
-
-  // Renderizar celda del horario
+  // ========== RENDER DE CELDAS ==========
   const renderCeldaHorario = (diaId, hora) => {
-    const dia = DIAS_SEMANA.find(d => d.id === diaId);
-    const fecha = obtenerFechaDelDia(diaId);
-    const esFin = esFinDeSemana(diaId);
-
-    const actividadesEnEstaHora = [];
-
-    // Buscar actividades que comienzan en esta hora
+    const esFin = diaId === 0 || diaId === 6;
     const bloqueHora = horario.find(b => b.hora === hora);
-    if (bloqueHora && bloqueHora.dias[diaId]) {
-      actividadesEnEstaHora.push(...bloqueHora.dias[diaId].actividades);
-    }
-
-    // También buscar actividades que comenzaron antes pero siguen en esta hora
-    const actividadesEnCurso = actividadesEnEstaHora.filter(a => {
-      const [horaInicio] = a.hora_inicio.split(':').map(Number);
-      return horaInicio < hora;
+    const actividades = bloqueHora?.dias[diaId]?.actividades || [];
+    const actividadesEnEstaHora = actividades.filter(a => {
+      const [h] = a.hora_inicio.split(':').map(Number);
+      return h === hora;
     });
 
     return (
       <TouchableOpacity
-        style={[
-          styles.celdaHorario,
-          esFin && styles.celdaFinDeSemana
-        ]}
+        style={[styles.celdaHorario, esFin && styles.celdaFinDeSemana]}
         onPress={() => seleccionarEspacio(diaId, hora)}
         activeOpacity={0.7}
       >
-        {actividadesEnEstaHora.filter(a => {
-          const [horaInicio] = a.hora_inicio.split(':').map(Number);
-          return horaInicio === hora;
-        }).map(actividad => renderActividad(actividad, diaId, hora))}
+        {actividadesEnEstaHora.map(act => {
+          const estilo = calcularEstiloActividad(act, hora);
+          return (
+            <TouchableOpacity
+              key={act.id}
+              style={[styles.actividad, estilo]}
+              onPress={() => seleccionarActividad(act, diaId, hora)}
+            >
+              <Text style={styles.nombreActividad} numberOfLines={1}>
+                {act.nombre}
+              </Text>
+              <Text style={styles.horaActividad} numberOfLines={1}>
+                {act.hora_inicio} - {act.hora_fin}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </TouchableOpacity>
     );
   };
 
+  const calcularEstiloActividad = (act, hora) => {
+    const [hIni, mIni] = act.hora_inicio.split(':').map(Number);
+    const duracion = act.duracion_minutos || 60;
+    const top = (hIni + (mIni / 60) - hora) * HORA_HEIGHT;
+    const altura = (duracion / 60) * HORA_HEIGHT;
+    return {
+      top: Math.max(0, top),
+      height: Math.max(10, altura),
+      backgroundColor: act.color || COLORES.AZUL_CIELO
+    };
+  };
+
+  // ========== RENDER PRINCIPAL ==========
   if (cargando) {
     return (
-      <LinearGradient colors={[COLORES.AZUL_CIELO, COLORES.BLANCO, COLORES.AZUL_CIELO]} style={styles.fondo}>
+      <LinearGradient colors={[COLORES.AZUL_CIELO, COLORES.BLANCO]} style={styles.fondo}>
         <SafeAreaView style={styles.centrado}>
           <ActivityIndicator size="large" color={COLORES.AMARILLO_PLATANO} />
           <Text style={styles.textoCargando}>Cargando horario...</Text>
@@ -748,84 +609,88 @@ export default function VistaHorario({ navigation }) {
 
   const fechaInicioSemana = obtenerInicioSemana(semanaActual);
   const fechaFinSemana = obtenerFinSemana(semanaActual);
-  const esAdministrador = usuarioRol === 'familiar_administrador';
+  const esAdministrador = usuarioRol === 'familiar_administrador' || usuarioRol === 'familiar_admin';
+
+  // ========== VALORES SEGUROS PARA CONFIGURACIÓN ==========
+  const config = {
+    horaInicio: configuracion?.horaInicio ?? 8,
+    horaFin: configuracion?.horaFin ?? 22,
+    horaDespertar: configuracion?.horaDespertar ?? 7,
+    horaDormir: configuracion?.horaDormir ?? 22,
+    mostrarFines: configuracion?.mostrarFines ?? true,
+    mostrarMedicinas: configuracion?.mostrarMedicinas ?? true,
+    mostrarEventos: configuracion?.mostrarEventos ?? true,
+    mostrarActividades: configuracion?.mostrarActividades ?? true
+  };
 
   return (
     <LinearGradient colors={[COLORES.AZUL_CIELO, COLORES.BLANCO]} style={styles.fondo}>
       <SafeAreaView style={styles.contenedor}>
-        {/* Encabezado */}
+        {/* ===== ENCABEZADO ===== */}
         <View style={styles.encabezado}>
           <TouchableOpacity style={styles.botonAtras} onPress={() => navigation.goBack()}>
-            <Text style={{ fontSize: 24 }}>⬅️</Text>
+            <Icon name="arrow-back-outline" size={28} color={COLORES.TEXTO_OSCURO} />
           </TouchableOpacity>
-
           <View style={styles.tituloContainer}>
             <Text style={styles.tituloPrincipal}>Horario Semanal</Text>
             <Text style={styles.subtituloPrincipal}>
-              {fechaInicioSemana.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} -
+              {fechaInicioSemana.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} -{' '}
               {fechaFinSemana.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
             </Text>
           </View>
-
-          <TouchableOpacity style={styles.botonRefrescar} onPress={onRefresh} disabled={refrescando}>
-            <Text style={{ fontSize: 24, opacity: refrescando ? 0.5 : 1 }}>🔄</Text>
+          <TouchableOpacity style={styles.botonRefrescar} onPress={recargarSemana} disabled={refrescando}>
+            <Icon name="refresh-outline" size={24} color={refrescando ? COLORES.GRIS_OSCURO : COLORES.TEXTO_OSCURO} />
           </TouchableOpacity>
         </View>
 
-        {/* Controles de navegación */}
+        {/* ===== CONTROLES DE NAVEGACIÓN ===== */}
         <View style={styles.controlesNavegacion}>
           <TouchableOpacity style={styles.botonControl} onPress={() => cambiarSemana(-1)}>
-            <Text style={{ fontSize: 24 }}>⬅️</Text>
+            <Icon name="chevron-back-outline" size={28} color={COLORES.TEXTO_OSCURO} />
           </TouchableOpacity>
-
           <TouchableOpacity style={styles.botonHoy} onPress={irAHoy}>
             <Text style={styles.textoBotonHoy}>SEMANA ACTUAL</Text>
           </TouchableOpacity>
-
           <TouchableOpacity style={styles.botonControl} onPress={() => cambiarSemana(1)}>
-            <Text style={{ fontSize: 24 }}>➡️</Text>
+            <Icon name="chevron-forward-outline" size={28} color={COLORES.TEXTO_OSCURO} />
           </TouchableOpacity>
         </View>
 
-        {/* Leyenda de colores */}
+        {/* ===== LEYENDA ===== */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.leyendaContainer}>
-          {ACTIVIDADES_PREDEFINIDAS.map(actividad => (
+          {ACTIVIDADES_PREDEFINIDAS.map(act => (
             <TouchableOpacity
-              key={actividad.id}
-              style={[styles.itemLeyenda, { backgroundColor: actividad.color + '40' }]}
-              onPress={() => setModalActividadVisible(true)}
+              key={act.id}
+              style={[styles.itemLeyenda, { backgroundColor: act.color + '40' }]}
+              onPress={() => {
+                if (esAdministrador) {
+                  setModalVisible(true);
+                } else {
+                  Alert.alert('Acceso Restringido', 'Solo administradores pueden agregar actividades.');
+                }
+              }}
             >
-              <Text style={{ fontSize: 14, marginRight: 4 }}>{actividad.emoji}</Text>
-              <Text style={[styles.textoLeyenda, { color: actividad.color }]}>
-                {actividad.nombre}
-              </Text>
+              <Text style={{ fontSize: 14, marginRight: 4 }}>{act.emoji}</Text>
+              <Text style={[styles.textoLeyenda, { color: act.color }]}>{act.nombre}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
 
-        {/* Horario principal */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.horarioContainer}
-        >
-          {/* Columna de horas */}
+        {/* ===== HORARIO ===== */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horarioContainer}>
           <View style={styles.columnaHoras}>
-            {horario.map((fila, index) => (
-              <View key={index} style={styles.celdaHora}>
+            {horario.map((fila, idx) => (
+              <View key={idx} style={styles.celdaHora}>
                 <Text style={styles.textoHora}>{fila.label}</Text>
               </View>
             ))}
           </View>
 
-          {/* Grid de días */}
           <View style={styles.gridDias}>
-            {/* Encabezados de días */}
             <View style={styles.encabezadosDias}>
               {DIAS_SEMANA.map(dia => {
                 const fecha = obtenerFechaDelDia(dia.id);
-                const esFin = esFinDeSemana(dia.id);
-
+                const esFin = dia.id === 0 || dia.id === 6;
                 return (
                   <View key={dia.id} style={[styles.encabezadoDia, esFin && styles.encabezadoFinDeSemana]}>
                     <Text style={[styles.textoEncabezadoDia, esFin && styles.textoEncabezadoFinDeSemana]}>
@@ -839,7 +704,6 @@ export default function VistaHorario({ navigation }) {
               })}
             </View>
 
-            {/* Celdas del horario */}
             <View style={styles.cuerpoHorario}>
               {horario.map((fila, horaIndex) => (
                 <View key={horaIndex} style={styles.filaHoraria}>
@@ -854,69 +718,54 @@ export default function VistaHorario({ navigation }) {
           </View>
         </ScrollView>
 
-        {/* Barra de acciones */}
+        {/* ===== BARRA DE ACCIONES ===== */}
         <View style={styles.barraAcciones}>
           <TouchableOpacity
             style={styles.botonAccionPrincipal}
             onPress={() => {
-              const ahora = new Date();
-              const horaActual = ahora.getHours();
-              const diaActual = ahora.getDay();
-
               if (esAdministrador) {
                 setModalVisible(true);
               } else {
-                Alert.alert(
-                  'Acceso Restringido',
-                  'Solo los administradores del grupo familiar pueden agregar actividades.'
-                );
+                Alert.alert('Acceso Restringido', 'Solo administradores pueden agregar actividades.');
               }
             }}
           >
-            <Text style={{ fontSize: 20 }}>➕</Text>
+            <Icon name="add-outline" size={24} color={COLORES.BLANCO} />
             <Text style={styles.textoBotonAccionPrincipal}>Agregar Actividad</Text>
           </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.botonAccionSecundario}
-            onPress={() => setModalConfigVisible(true)}
-          >
-            <Text style={{ fontSize: 24 }}>⚙️</Text>
+          <TouchableOpacity style={styles.botonAccionSecundario} onPress={() => setModalConfigVisible(true)}>
+            <Icon name="settings-outline" size={24} color={COLORES.TEXTO_OSCURO} />
           </TouchableOpacity>
         </View>
 
-        {/* Estadísticas */}
+        {/* ===== ESTADÍSTICAS ===== */}
         <View style={styles.estadisticasContainer}>
           <View style={styles.itemEstadistica}>
-            <Text style={{ fontSize: 20, marginRight: 6 }}>💊</Text>
+            <Icon name="medkit-outline" size={20} color={COLORES.EXITO} />
             <Text style={styles.numeroEstadistica}>
               {medicinas.filter(m => m.frecuencia === 'diaria').length}
             </Text>
             <Text style={styles.textoEstadistica}>Medicinas diarias</Text>
           </View>
-
           <View style={styles.separadorEstadistica} />
-
           <View style={styles.itemEstadistica}>
-            <Text style={{ fontSize: 20, marginRight: 6 }}>📅</Text>
+            <Icon name="calendar-outline" size={20} color={COLORES.NARANJA} />
             <Text style={styles.numeroEstadistica}>{actividadesFijas.length}</Text>
             <Text style={styles.textoEstadistica}>Actividades fijas</Text>
           </View>
-
           <View style={styles.separadorEstadistica} />
-
           <View style={styles.itemEstadistica}>
-            <Text style={{ fontSize: 20, marginRight: 6 }}>🕒</Text>
+            <Icon name="time-outline" size={20} color={COLORES.MORADO} />
             <Text style={styles.numeroEstadistica}>{eventos.length}</Text>
             <Text style={styles.textoEstadistica}>Eventos esta semana</Text>
           </View>
         </View>
       </SafeAreaView>
 
-      {/* Modal para actividad */}
+      {/* ===== MODAL DE ACTIVIDAD ===== */}
       <Modal
         animationType="slide"
-        transparent={true}
+        transparent
         visible={modalVisible}
         onRequestClose={() => {
           setModalVisible(false);
@@ -929,42 +778,43 @@ export default function VistaHorario({ navigation }) {
               <Text style={styles.modalTitulo}>
                 {actividadSeleccionada ? 'Editar Actividad' : 'Nueva Actividad'}
               </Text>
-              <TouchableOpacity onPress={() => {
-                setModalVisible(false);
-                setActividadSeleccionada(null);
-              }}>
-                <Text style={{ fontSize: 24 }}>❌</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setModalVisible(false);
+                  setActividadSeleccionada(null);
+                }}
+              >
+                <Icon name="close-outline" size={24} color={COLORES.TEXTO_OSCURO} />
               </TouchableOpacity>
             </View>
 
             <ScrollView style={styles.modalFormulario}>
+              {/* Nombre */}
               <Text style={styles.modalLabel}>Nombre *</Text>
               <TextInput
                 style={styles.input}
                 value={nuevaActividad.nombre}
-                onChangeText={(text) => setNuevaActividad({ ...nuevaActividad, nombre: text })}
-                placeholder="Ej: Bañarse, Tomar medicina, Caminar..."
-                placeholderTextColor={COLORES.GRIS_MEDIO}
+                onChangeText={text => setNuevaActividad({ ...nuevaActividad, nombre: text })}
+                placeholder="Ej: Bañarse"
               />
 
+              {/* Predefinidas */}
               <Text style={styles.modalLabel}>Actividades Predefinidas</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.actividadesPredefinidas}>
-                {ACTIVIDADES_PREDEFINIDAS.map(actividad => (
+                {ACTIVIDADES_PREDEFINIDAS.map(act => (
                   <TouchableOpacity
-                    key={actividad.id}
-                    style={[
-                      styles.opcionPredefinida,
-                      { backgroundColor: actividad.color + '20', borderColor: actividad.color }
-                    ]}
-                    onPress={() => aplicarActividadPredefinida(actividad)}
+                    key={act.id}
+                    style={[styles.opcionPredefinida, { backgroundColor: act.color + '20', borderColor: act.color }]}
+                    onPress={() => aplicarActividadPredefinida(act)}
                   >
-                    <Text style={[styles.textoOpcionPredefinida, { color: actividad.color }]}>
-                      {actividad.emoji} {actividad.nombre}
+                    <Text style={[styles.textoOpcionPredefinida, { color: act.color }]}>
+                      {act.emoji} {act.nombre}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
 
+              {/* Tipo */}
               <Text style={styles.modalLabel}>Tipo</Text>
               <View style={styles.tiposContainer}>
                 {TIPOS_ACTIVIDADES.map(tipo => (
@@ -976,25 +826,32 @@ export default function VistaHorario({ navigation }) {
                     ]}
                     onPress={() => setNuevaActividad({ ...nuevaActividad, tipo: tipo.id })}
                   >
-                    <Text style={{ fontSize: 16, marginRight: 6 }}>
-                      {tipo.emoji}
-                    </Text>
-                    <Text style={[
-                      styles.textoOpcionTipo,
-                      nuevaActividad.tipo === tipo.id && styles.textoOpcionTipoSeleccionado
-                    ]}>
+                    <Text style={{ fontSize: 16, marginRight: 6 }}>{tipo.emoji}</Text>
+                    <Text
+                      style={[
+                        styles.textoOpcionTipo,
+                        nuevaActividad.tipo === tipo.id && styles.textoOpcionTipoSeleccionado
+                      ]}
+                    >
                       {tipo.nombre}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
 
+              {/* Color */}
               <Text style={styles.modalLabel}>Color</Text>
               <View style={styles.coloresContainer}>
                 {[
-                  COLORES.AZUL_CIELO, COLORES.EXITO, COLORES.AMARILLO_PLATANO,
-                  COLORES.MORADO, COLORES.NARANJA, COLORES.ROSADO,
-                  COLORES.TURQUESA, COLORES.INDIGO, COLORES.LIMA
+                  COLORES.AZUL_CIELO,
+                  COLORES.EXITO,
+                  COLORES.AMARILLO_PLATANO,
+                  COLORES.MORADO,
+                  COLORES.NARANJA,
+                  COLORES.ROSADO,
+                  COLORES.TURQUESA,
+                  COLORES.INDIGO,
+                  COLORES.LIMA
                 ].map(color => (
                   <TouchableOpacity
                     key={color}
@@ -1008,6 +865,7 @@ export default function VistaHorario({ navigation }) {
                 ))}
               </View>
 
+              {/* Días */}
               <Text style={styles.modalLabel}>Días</Text>
               <View style={styles.diasContainer}>
                 {DIAS_SEMANA.map(dia => (
@@ -1018,64 +876,58 @@ export default function VistaHorario({ navigation }) {
                       nuevaActividad.dias.includes(dia.id) && styles.opcionDiaSeleccionada
                     ]}
                     onPress={() => {
-                      const nuevosDias = [...nuevaActividad.dias];
-                      const index = nuevosDias.indexOf(dia.id);
-
-                      if (index === -1) {
-                        nuevosDias.push(dia.id);
-                      } else {
-                        nuevosDias.splice(index, 1);
-                      }
-
-                      setNuevaActividad({ ...nuevaActividad, dias: nuevosDias });
+                      const nuevos = [...nuevaActividad.dias];
+                      const idx = nuevos.indexOf(dia.id);
+                      idx === -1 ? nuevos.push(dia.id) : nuevos.splice(idx, 1);
+                      setNuevaActividad({ ...nuevaActividad, dias: nuevos });
                     }}
                   >
-                    <Text style={[
-                      styles.textoOpcionDia,
-                      nuevaActividad.dias.includes(dia.id) && styles.textoOpcionDiaSeleccionada
-                    ]}>
+                    <Text
+                      style={[
+                        styles.textoOpcionDia,
+                        nuevaActividad.dias.includes(dia.id) && styles.textoOpcionDiaSeleccionada
+                      ]}
+                    >
                       {dia.corto}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
 
-              <Text style={styles.modalLabel}>Horario</Text>
+              {/* Horario */}
               <View style={styles.horarioInputs}>
                 <View style={styles.inputMitad}>
                   <Text style={styles.subLabel}>Inicio</Text>
                   <TextInput
                     style={styles.input}
                     value={nuevaActividad.hora_inicio}
-                    onChangeText={(text) => setNuevaActividad({ ...nuevaActividad, hora_inicio: text })}
-                    placeholder="08:00"
-                    placeholderTextColor={COLORES.GRIS_MEDIO}
+                    onChangeText={text => setNuevaActividad({ ...nuevaActividad, hora_inicio: text })}
                   />
                 </View>
-
                 <View style={styles.inputMitad}>
                   <Text style={styles.subLabel}>Fin</Text>
                   <TextInput
                     style={styles.input}
                     value={nuevaActividad.hora_fin}
-                    onChangeText={(text) => setNuevaActividad({ ...nuevaActividad, hora_fin: text })}
-                    placeholder="09:00"
-                    placeholderTextColor={COLORES.GRIS_MEDIO}
+                    onChangeText={text => setNuevaActividad({ ...nuevaActividad, hora_fin: text })}
                   />
                 </View>
               </View>
 
+              {/* Duración */}
               <Text style={styles.modalLabel}>Duración (minutos)</Text>
               <TextInput
                 style={styles.input}
-                value={nuevaActividad.duracion_minutos?.toString()}
-                onChangeText={(text) => setNuevaActividad({ ...nuevaActividad, duracion_minutos: text })}
+                value={String(nuevaActividad.duracion_minutos ?? 60)}
+                onChangeText={text => {
+                  const num = parseInt(text);
+                  setNuevaActividad({ ...nuevaActividad, duracion_minutos: isNaN(num) ? 0 : num });
+                }}
                 keyboardType="numeric"
                 placeholder="60"
-                placeholderTextColor={COLORES.GRIS_MEDIO}
               />
 
-              <Text style={styles.modalLabel}>Recurrente</Text>
+              {/* Recurrente */}
               <View style={styles.opcionRecurrente}>
                 <TouchableOpacity
                   style={styles.botonRecurrente}
@@ -1085,22 +937,22 @@ export default function VistaHorario({ navigation }) {
                     {nuevaActividad.esRecurrente ? '✅' : '⚪'}
                   </Text>
                   <Text style={styles.textoRecurrente}>
-                    {nuevaActividad.esRecurrente ? 'Sí, actividad recurrente' : 'No, solo para este día'}
+                    {nuevaActividad.esRecurrente ? 'Recurrente' : 'Solo este día'}
                   </Text>
                 </TouchableOpacity>
               </View>
 
+              {/* Descripción */}
               <Text style={styles.modalLabel}>Descripción</Text>
               <TextInput
                 style={[styles.input, styles.textArea]}
                 value={nuevaActividad.descripcion}
-                onChangeText={(text) => setNuevaActividad({ ...nuevaActividad, descripcion: text })}
+                onChangeText={text => setNuevaActividad({ ...nuevaActividad, descripcion: text })}
                 multiline
                 numberOfLines={3}
-                placeholder="Detalles adicionales..."
-                placeholderTextColor={COLORES.GRIS_MEDIO}
               />
 
+              {/* Recordatorio */}
               <View style={styles.opcionRecordatorio}>
                 <TouchableOpacity
                   style={styles.botonRecordatorio}
@@ -1125,7 +977,6 @@ export default function VistaHorario({ navigation }) {
                   <Text style={styles.textoBotonModalAccion}>Eliminar</Text>
                 </TouchableOpacity>
               )}
-
               <TouchableOpacity
                 style={styles.botonModalCancelar}
                 onPress={() => {
@@ -1135,7 +986,6 @@ export default function VistaHorario({ navigation }) {
               >
                 <Text style={styles.textoBotonModalCancelar}>Cancelar</Text>
               </TouchableOpacity>
-
               <TouchableOpacity
                 style={[styles.botonModalAccion, { backgroundColor: COLORES.EXITO }]}
                 onPress={guardarActividad}
@@ -1149,178 +999,88 @@ export default function VistaHorario({ navigation }) {
         </View>
       </Modal>
 
-      {/* Modal de configuración */}
+      {/* ===== MODAL DE CONFIGURACIÓN ===== */}
       <Modal
         animationType="slide"
-        transparent={true}
+        transparent
         visible={modalConfigVisible}
         onRequestClose={() => setModalConfigVisible(false)}
       >
         <View style={styles.modalFondo}>
           <View style={styles.modalContenido}>
             <View style={styles.modalEncabezado}>
-              <Text style={styles.modalTitulo}>Configuración del Horario</Text>
+              <Text style={styles.modalTitulo}>Configuración</Text>
               <TouchableOpacity onPress={() => setModalConfigVisible(false)}>
-                <Text style={{ fontSize: 24 }}>❌</Text>
+                <Icon name="close-outline" size={24} color={COLORES.TEXTO_OSCURO} />
               </TouchableOpacity>
             </View>
 
             <ScrollView style={styles.modalFormulario}>
+              {/* Horas de visualización */}
               <View style={styles.seccionConfig}>
                 <Text style={styles.tituloSeccionConfig}>Horas de visualización</Text>
-
                 <View style={styles.rangoHoras}>
                   <View style={styles.inputRango}>
-                    <Text style={styles.labelRango}>Hora de inicio</Text>
+                    <Text style={styles.labelRango}>Inicio</Text>
                     <TextInput
                       style={styles.input}
-                      value={configuracion.horaInicio.toString()}
-                      onChangeText={(text) => {
-                        const valor = parseInt(text) || 8;
-                        setConfiguracion({ ...configuracion, horaInicio: Math.max(0, Math.min(23, valor)) });
+                      value={String(config.horaInicio)}
+                      onChangeText={text => {
+                        const num = parseInt(text);
+                        setConfiguracion({
+                          ...configuracion,
+                          horaInicio: isNaN(num) ? 8 : Math.max(0, Math.min(23, num))
+                        });
                       }}
                       keyboardType="numeric"
-                      placeholder="8"
-                      placeholderTextColor={COLORES.GRIS_MEDIO}
                     />
-                    <Text style={styles.textoAyuda}>AM</Text>
                   </View>
-
                   <Text style={styles.separadorRango}>a</Text>
-
                   <View style={styles.inputRango}>
-                    <Text style={styles.labelRango}>Hora de fin</Text>
+                    <Text style={styles.labelRango}>Fin</Text>
                     <TextInput
                       style={styles.input}
-                      value={configuracion.horaFin.toString()}
-                      onChangeText={(text) => {
-                        const valor = parseInt(text) || 22;
-                        setConfiguracion({ ...configuracion, horaFin: Math.max(0, Math.min(23, valor)) });
+                      value={String(config.horaFin)}
+                      onChangeText={text => {
+                        const num = parseInt(text);
+                        setConfiguracion({
+                          ...configuracion,
+                          horaFin: isNaN(num) ? 22 : Math.max(0, Math.min(23, num))
+                        });
                       }}
                       keyboardType="numeric"
-                      placeholder="22"
-                      placeholderTextColor={COLORES.GRIS_MEDIO}
                     />
-                    <Text style={styles.textoAyuda}>PM</Text>
                   </View>
                 </View>
               </View>
 
+              {/* Mostrar */}
               <View style={styles.seccionConfig}>
-                <Text style={styles.tituloSeccionConfig}>Rutina del adulto mayor</Text>
-
-                <View style={styles.inputRutina}>
-                  <Text style={styles.labelRutina}>Hora de despertar</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={configuracion.horaDespertar.toString()}
-                    onChangeText={(text) => {
-                      const valor = parseInt(text) || 7;
-                      setConfiguracion({ ...configuracion, horaDespertar: Math.max(0, Math.min(23, valor)) });
-                    }}
-                    keyboardType="numeric"
-                    placeholder="7"
-                    placeholderTextColor={COLORES.GRIS_MEDIO}
-                  />
-                </View>
-
-                <View style={styles.inputRutina}>
-                  <Text style={styles.labelRutina}>Hora de dormir</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={configuracion.horaDormir.toString()}
-                    onChangeText={(text) => {
-                      const valor = parseInt(text) || 22;
-                      setConfiguracion({ ...configuracion, horaDormir: Math.max(0, Math.min(23, valor)) });
-                    }}
-                    keyboardType="numeric"
-                    placeholder="22"
-                    placeholderTextColor={COLORES.GRIS_MEDIO}
-                  />
-                </View>
-              </View>
-
-              <View style={styles.seccionConfig}>
-                <Text style={styles.tituloSeccionConfig}>Mostrar en horario</Text>
-
-                <View style={styles.opcionConfig}>
-                  <Text style={styles.textoOpcionConfig}>Medicinas</Text>
-                  <TouchableOpacity
-                    style={[
-                      styles.switch,
-                      configuracion.mostrarMedicinas && styles.switchActivo
-                    ]}
-                    onPress={() => setConfiguracion({ ...configuracion, mostrarMedicinas: !configuracion.mostrarMedicinas })}
-                  >
-                    <View style={[
-                      styles.switchPunto,
-                      configuracion.mostrarMedicinas && styles.switchPuntoActivo
-                    ]} />
-                  </TouchableOpacity>
-                </View>
-
-                <View style={styles.opcionConfig}>
-                  <Text style={styles.textoOpcionConfig}>Eventos del calendario</Text>
-                  <TouchableOpacity
-                    style={[
-                      styles.switch,
-                      configuracion.mostrarEventos && styles.switchActivo
-                    ]}
-                    onPress={() => setConfiguracion({ ...configuracion, mostrarEventos: !configuracion.mostrarEventos })}
-                  >
-                    <View style={[
-                      styles.switchPunto,
-                      configuracion.mostrarEventos && styles.switchPuntoActivo
-                    ]} />
-                  </TouchableOpacity>
-                </View>
-
-                <View style={styles.opcionConfig}>
-                  <Text style={styles.textoOpcionConfig}>Actividades fijas</Text>
-                  <TouchableOpacity
-                    style={[
-                      styles.switch,
-                      configuracion.mostrarActividades && styles.switchActivo
-                    ]}
-                    onPress={() => setConfiguracion({ ...configuracion, mostrarActividades: !configuracion.mostrarActividades })}
-                  >
-                    <View style={[
-                      styles.switchPunto,
-                      configuracion.mostrarActividades && styles.switchPuntoActivo
-                    ]} />
-                  </TouchableOpacity>
-                </View>
-
-                <View style={styles.opcionConfig}>
-                  <Text style={styles.textoOpcionConfig}>Fines de semana</Text>
-                  <TouchableOpacity
-                    style={[
-                      styles.switch,
-                      configuracion.mostrarFines && styles.switchActivo
-                    ]}
-                    onPress={() => setConfiguracion({ ...configuracion, mostrarFines: !configuracion.mostrarFines })}
-                  >
-                    <View style={[
-                      styles.switchPunto,
-                      configuracion.mostrarFines && styles.switchPuntoActivo
-                    ]} />
-                  </TouchableOpacity>
-                </View>
+                <Text style={styles.tituloSeccionConfig}>Mostrar</Text>
+                {[
+                  { key: 'mostrarMedicinas', label: 'Medicinas' },
+                  { key: 'mostrarEventos', label: 'Eventos' },
+                  { key: 'mostrarActividades', label: 'Actividades' },
+                  { key: 'mostrarFines', label: 'Fines de semana' }
+                ].map(({ key, label }) => (
+                  <View key={key} style={styles.opcionConfig}>
+                    <Text style={styles.textoOpcionConfig}>{label}</Text>
+                    <TouchableOpacity
+                      style={[styles.switch, configuracion[key] && styles.switchActivo]}
+                      onPress={() => setConfiguracion({ ...configuracion, [key]: !configuracion[key] })}
+                    >
+                      <View style={[styles.switchPunto, configuracion[key] && styles.switchPuntoActivo]} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
               </View>
             </ScrollView>
 
             <View style={styles.modalBotones}>
-              <TouchableOpacity
-                style={styles.botonModalCancelar}
-                onPress={() => setModalConfigVisible(false)}
-              >
+              <TouchableOpacity style={styles.botonModalCancelar} onPress={() => setModalConfigVisible(false)}>
                 <Text style={styles.textoBotonModalCancelar}>Cancelar</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.botonModalAccion, { backgroundColor: COLORES.EXITO }]}
-                onPress={guardarConfiguracion}
-              >
+              <TouchableOpacity style={[styles.botonModalAccion, { backgroundColor: COLORES.EXITO }]} onPress={guardarConfiguracion}>
                 <Text style={styles.textoBotonModalAccion}>Guardar</Text>
               </TouchableOpacity>
             </View>
@@ -1331,25 +1091,13 @@ export default function VistaHorario({ navigation }) {
   );
 }
 
+// ==================== ESTILOS ====================
 const styles = StyleSheet.create({
-  fondo: {
-    flex: 1,
-  },
-  contenedor: {
-    flex: 1,
-  },
-  centrado: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  textoCargando: {
-    color: COLORES.TEXTO_OSCURO,
-    marginTop: 20,
-    fontSize: 16,
-  },
+  fondo: { flex: 1 },
+  contenedor: { flex: 1 },
+  centrado: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  textoCargando: { color: COLORES.TEXTO_OSCURO, marginTop: 20, fontSize: 16 },
 
-  // Encabezado
   encabezado: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1360,28 +1108,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORES.GRIS_CLARO,
   },
-  botonAtras: {
-    padding: 8,
-  },
-  tituloContainer: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  tituloPrincipal: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: COLORES.TEXTO_OSCURO,
-  },
-  subtituloPrincipal: {
-    fontSize: 14,
-    color: COLORES.GRIS_OSCURO,
-    marginTop: 2,
-  },
-  botonRefrescar: {
-    padding: 8,
-  },
+  botonAtras: { padding: 8 },
+  tituloContainer: { flex: 1, alignItems: 'center' },
+  tituloPrincipal: { fontSize: 20, fontWeight: 'bold', color: COLORES.TEXTO_OSCURO },
+  subtituloPrincipal: { fontSize: 12, color: COLORES.GRIS_OSCURO, marginTop: 2 },
+  botonRefrescar: { padding: 8 },
 
-  // Controles de navegación
   controlesNavegacion: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1389,25 +1121,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 15,
     backgroundColor: COLORES.BLANCO,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORES.GRIS_CLARO,
   },
-  botonControl: {
-    padding: 10,
-    borderRadius: 20,
-    backgroundColor: COLORES.GRIS_CLARO,
-  },
-  botonHoy: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: COLORES.AMARILLO_PLATANO,
-  },
-  textoBotonHoy: {
-    color: COLORES.TEXTO_OSCURO,
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
+  botonControl: { padding: 10, borderRadius: 20, backgroundColor: COLORES.GRIS_CLARO },
+  botonHoy: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, backgroundColor: COLORES.AMARILLO_PLATANO },
+  textoBotonHoy: { color: COLORES.TEXTO_OSCURO, fontSize: 14, fontWeight: 'bold' },
 
-  // Leyenda
   leyendaContainer: {
     backgroundColor: COLORES.BLANCO,
     paddingVertical: 10,
@@ -1424,491 +1144,98 @@ const styles = StyleSheet.create({
     marginRight: 10,
     borderWidth: 1,
   },
-  textoLeyenda: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginLeft: 6,
-  },
+  textoLeyenda: { fontSize: 12, fontWeight: '600', marginLeft: 6 },
 
-  // Contenedor del horario
-  horarioContainer: {
-    flex: 1,
-    backgroundColor: COLORES.BLANCO,
-  },
+  horarioContainer: { flex: 1, backgroundColor: COLORES.BLANCO },
+  columnaHoras: { width: 60, backgroundColor: COLORES.GRIS_CLARO },
+  celdaHora: { height: HORA_HEIGHT, justifyContent: 'flex-start', paddingTop: 8, paddingLeft: 8, borderBottomWidth: 1, borderBottomColor: COLORES.GRIS_MEDIO },
+  textoHora: { fontSize: 12, color: COLORES.GRIS_OSCURO, fontWeight: '600' },
 
-  // Columna de horas
-  columnaHoras: {
-    width: 60,
-    backgroundColor: COLORES.GRIS_CLARO,
-  },
-  celdaHora: {
-    height: HORA_HEIGHT,
-    justifyContent: 'flex-start',
-    paddingTop: 8,
-    paddingLeft: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORES.GRIS_MEDIO,
-  },
-  textoHora: {
-    fontSize: 12,
-    color: COLORES.GRIS_OSCURO,
-    fontWeight: '600',
-  },
+  gridDias: { flex: 1 },
+  encabezadosDias: { flexDirection: 'row', backgroundColor: COLORES.GRIS_CLARO },
+  encabezadoDia: { width: DIA_WIDTH, alignItems: 'center', paddingVertical: 10, borderLeftWidth: 1, borderLeftColor: COLORES.GRIS_MEDIO },
+  encabezadoFinDeSemana: { backgroundColor: COLORES.AZUL_CIELO + '20' },
+  textoEncabezadoDia: { fontSize: 14, fontWeight: 'bold', color: COLORES.TEXTO_OSCURO },
+  textoEncabezadoFinDeSemana: { color: COLORES.AZUL_CIELO_OSCURO },
+  textoFechaDia: { fontSize: 12, color: COLORES.GRIS_OSCURO, marginTop: 4 },
+  textoFechaFinDeSemana: { color: COLORES.AZUL_CIELO },
 
-  // Grid de días
-  gridDias: {
-    flex: 1,
-  },
-  encabezadosDias: {
-    flexDirection: 'row',
-    backgroundColor: COLORES.GRIS_CLARO,
-  },
-  encabezadoDia: {
-    width: DIA_WIDTH,
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderLeftWidth: 1,
-    borderLeftColor: COLORES.GRIS_MEDIO,
-  },
-  encabezadoFinDeSemana: {
-    backgroundColor: COLORES.AZUL_CIELO + '20',
-  },
-  textoEncabezadoDia: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: COLORES.TEXTO_OSCURO,
-  },
-  textoEncabezadoFinDeSemana: {
-    color: COLORES.AZUL_CIELO_OSCURO,
-  },
-  textoFechaDia: {
-    fontSize: 12,
-    color: COLORES.GRIS_OSCURO,
-    marginTop: 4,
-  },
-  textoFechaFinDeSemana: {
-    color: COLORES.AZUL_CIELO,
-  },
+  cuerpoHorario: { backgroundColor: COLORES.BLANCO },
+  filaHoraria: { flexDirection: 'row', height: HORA_HEIGHT, borderBottomWidth: 1, borderBottomColor: COLORES.GRIS_CLARO },
+  contenedorCeldaDia: { width: DIA_WIDTH, borderLeftWidth: 1, borderLeftColor: COLORES.GRIS_CLARO },
+  celdaHorario: { flex: 1, borderBottomWidth: 1, borderBottomColor: COLORES.GRIS_CLARO, position: 'relative', minHeight: HORA_HEIGHT },
+  celdaFinDeSemana: { backgroundColor: COLORES.GRIS_CLARO + '80' },
 
-  // Cuerpo del horario
-  cuerpoHorario: {
-    backgroundColor: COLORES.BLANCO,
-  },
-  filaHoraria: {
-    flexDirection: 'row',
-    height: HORA_HEIGHT,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORES.GRIS_CLARO,
-  },
-  contenedorCeldaDia: {
-    width: DIA_WIDTH,
-    borderLeftWidth: 1,
-    borderLeftColor: COLORES.GRIS_CLARO,
-  },
+  actividad: { position: 'absolute', left: 2, right: 2, borderRadius: 6, padding: 6, zIndex: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
+  nombreActividad: { fontSize: 10, fontWeight: 'bold', color: COLORES.BLANCO, marginBottom: 2 },
+  horaActividad: { fontSize: 8, color: COLORES.BLANCO, opacity: 0.9 },
 
-  // Celda del horario
-  celdaHorario: {
-    flex: 1,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORES.GRIS_CLARO,
-    position: 'relative',
-    minHeight: HORA_HEIGHT,
-  },
-  celdaFinDeSemana: {
-    backgroundColor: COLORES.GRIS_CLARO + '80',
-  },
+  barraAcciones: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 15, backgroundColor: COLORES.BLANCO, borderTopWidth: 1, borderTopColor: COLORES.GRIS_CLARO },
+  botonAccionPrincipal: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORES.AZUL_CIELO_OSCURO, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 25, flex: 1, marginRight: 15, justifyContent: 'center' },
+  textoBotonAccionPrincipal: { color: COLORES.BLANCO, fontSize: 16, fontWeight: '600', marginLeft: 8 },
+  botonAccionSecundario: { padding: 12, borderRadius: 25, backgroundColor: COLORES.GRIS_CLARO },
 
-  // Actividades
-  actividad: {
-    position: 'absolute',
-    left: 2,
-    right: 2,
-    borderRadius: 6,
-    padding: 6,
-    zIndex: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  nombreActividad: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: COLORES.BLANCO,
-    marginBottom: 2,
-  },
-  horaActividad: {
-    fontSize: 8,
-    color: COLORES.BLANCO,
-    opacity: 0.9,
-  },
+  estadisticasContainer: { flexDirection: 'row', backgroundColor: COLORES.BLANCO, padding: 20, borderTopWidth: 1, borderTopColor: COLORES.GRIS_CLARO },
+  itemEstadistica: { flex: 1, alignItems: 'center' },
+  numeroEstadistica: { fontSize: 24, fontWeight: 'bold', color: COLORES.TEXTO_OSCURO, marginTop: 8, marginBottom: 4 },
+  textoEstadistica: { fontSize: 12, color: COLORES.GRIS_OSCURO, textAlign: 'center' },
+  separadorEstadistica: { width: 1, backgroundColor: COLORES.GRIS_CLARO, marginHorizontal: 10 },
 
-  // Barra de acciones
-  barraAcciones: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    backgroundColor: COLORES.BLANCO,
-    borderTopWidth: 1,
-    borderTopColor: COLORES.GRIS_CLARO,
-  },
-  botonAccionPrincipal: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORES.AZUL_CIELO_OSCURO,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 25,
-    flex: 1,
-    marginRight: 15,
-    justifyContent: 'center',
-  },
-  textoBotonAccionPrincipal: {
-    color: COLORES.BLANCO,
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  botonAccionSecundario: {
-    padding: 12,
-    borderRadius: 25,
-    backgroundColor: COLORES.GRIS_CLARO,
-  },
+  modalFondo: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalContenido: { backgroundColor: COLORES.BLANCO, borderTopLeftRadius: 25, borderTopRightRadius: 25, padding: 25, maxHeight: '90%' },
+  modalEncabezado: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: COLORES.GRIS_CLARO },
+  modalTitulo: { fontSize: 20, fontWeight: 'bold', color: COLORES.TEXTO_OSCURO, flex: 1 },
+  modalFormulario: { maxHeight: 500 },
+  modalLabel: { fontSize: 14, fontWeight: '600', color: COLORES.TEXTO_OSCURO, marginBottom: 8, marginTop: 15 },
+  input: { backgroundColor: COLORES.GRIS_CLARO, borderRadius: 10, paddingHorizontal: 15, paddingVertical: 12, fontSize: 16, color: COLORES.TEXTO_OSCURO, borderWidth: 1, borderColor: COLORES.GRIS_MEDIO },
+  textArea: { minHeight: 80, textAlignVertical: 'top' },
+  inputMitad: { width: '48%' },
+  subLabel: { fontSize: 12, color: COLORES.GRIS_OSCURO, marginBottom: 5 },
 
-  // Estadísticas
-  estadisticasContainer: {
-    flexDirection: 'row',
-    backgroundColor: COLORES.BLANCO,
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: COLORES.GRIS_CLARO,
-  },
-  itemEstadistica: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  numeroEstadistica: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: COLORES.TEXTO_OSCURO,
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  textoEstadistica: {
-    fontSize: 12,
-    color: COLORES.GRIS_OSCURO,
-    textAlign: 'center',
-  },
-  separadorEstadistica: {
-    width: 1,
-    backgroundColor: COLORES.GRIS_CLARO,
-    marginHorizontal: 10,
-  },
+  actividadesPredefinidas: { flexDirection: 'row', marginBottom: 15 },
+  opcionPredefinida: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, marginRight: 10, borderWidth: 1 },
+  textoOpcionPredefinida: { fontSize: 12, fontWeight: '600', marginLeft: 6 },
 
-  // Modal
-  modalFondo: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContenido: {
-    backgroundColor: COLORES.BLANCO,
-    borderTopLeftRadius: 25,
-    borderTopRightRadius: 25,
-    padding: 25,
-    maxHeight: '90%',
-  },
-  modalEncabezado: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-    paddingBottom: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORES.GRIS_CLARO,
-  },
-  modalTitulo: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: COLORES.TEXTO_OSCURO,
-    flex: 1,
-  },
-  modalFormulario: {
-    maxHeight: 500,
-  },
-  modalLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORES.TEXTO_OSCURO,
-    marginBottom: 8,
-    marginTop: 15,
-  },
-  input: {
-    backgroundColor: COLORES.GRIS_CLARO,
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: COLORES.TEXTO_OSCURO,
-    borderWidth: 1,
-    borderColor: COLORES.GRIS_MEDIO,
-  },
-  textArea: {
-    minHeight: 80,
-    textAlignVertical: 'top',
-  },
-  inputMitad: {
-    width: '48%',
-  },
-  subLabel: {
-    fontSize: 12,
-    color: COLORES.GRIS_OSCURO,
-    marginBottom: 5,
-  },
+  tiposContainer: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 15 },
+  opcionTipo: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, marginRight: 10, marginBottom: 10, borderWidth: 1, borderColor: COLORES.GRIS_MEDIO },
+  textoOpcionTipo: { fontSize: 12, color: COLORES.GRIS_OSCURO, marginLeft: 6 },
+  textoOpcionTipoSeleccionado: { color: COLORES.BLANCO, fontWeight: 'bold' },
 
-  // Actividades predefinidas
-  actividadesPredefinidas: {
-    flexDirection: 'row',
-    marginBottom: 15,
-  },
-  opcionPredefinida: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-    marginRight: 10,
-    borderWidth: 1,
-  },
-  textoOpcionPredefinida: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginLeft: 6,
-  },
+  coloresContainer: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 15 },
+  opcionColor: { width: 30, height: 30, borderRadius: 15, marginRight: 10, marginBottom: 10, borderWidth: 2, borderColor: 'transparent' },
+  opcionColorSeleccionada: { borderColor: COLORES.TEXTO_OSCURO, transform: [{ scale: 1.1 }] },
 
-  // Tipos de actividades
-  tiposContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 15,
-  },
-  opcionTipo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-    marginRight: 10,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: COLORES.GRIS_MEDIO,
-  },
-  textoOpcionTipo: {
-    fontSize: 12,
-    color: COLORES.GRIS_OSCURO,
-    marginLeft: 6,
-  },
-  textoOpcionTipoSeleccionado: {
-    color: COLORES.BLANCO,
-    fontWeight: 'bold',
-  },
+  diasContainer: { flexDirection: 'row', marginBottom: 15 },
+  opcionDia: { flex: 1, paddingVertical: 10, marginHorizontal: 2, borderRadius: 8, borderWidth: 1, borderColor: COLORES.GRIS_MEDIO, alignItems: 'center' },
+  opcionDiaSeleccionada: { backgroundColor: COLORES.AZUL_CIELO, borderColor: COLORES.AZUL_CIELO_OSCURO },
+  textoOpcionDia: { fontSize: 12, color: COLORES.GRIS_OSCURO },
+  textoOpcionDiaSeleccionada: { color: COLORES.BLANCO, fontWeight: 'bold' },
 
-  // Colores
-  coloresContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 15,
-  },
-  opcionColor: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    marginRight: 10,
-    marginBottom: 10,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  opcionColorSeleccionada: {
-    borderColor: COLORES.TEXTO_OSCURO,
-    transform: [{ scale: 1.1 }],
-  },
+  horarioInputs: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
+  opcionRecurrente: { marginBottom: 15 },
+  botonRecurrente: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
+  textoRecurrente: { fontSize: 14, color: COLORES.TEXTO_OSCURO, marginLeft: 10 },
 
-  // Días
-  diasContainer: {
-    flexDirection: 'row',
-    marginBottom: 15,
-  },
-  opcionDia: {
-    flex: 1,
-    paddingVertical: 10,
-    marginHorizontal: 2,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: COLORES.GRIS_MEDIO,
-    alignItems: 'center',
-  },
-  opcionDiaSeleccionada: {
-    backgroundColor: COLORES.AZUL_CIELO,
-    borderColor: COLORES.AZUL_CIELO_OSCURO,
-  },
-  textoOpcionDia: {
-    fontSize: 12,
-    color: COLORES.GRIS_OSCURO,
-  },
-  textoOpcionDiaSeleccionada: {
-    color: COLORES.BLANCO,
-    fontWeight: 'bold',
-  },
+  opcionRecordatorio: { marginBottom: 15 },
+  botonRecordatorio: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
+  textoRecordatorio: { fontSize: 14, color: COLORES.TEXTO_OSCURO, marginLeft: 10 },
 
-  // Horario inputs
-  horarioInputs: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 15,
-  },
+  modalBotones: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 20, paddingTop: 20, borderTopWidth: 1, borderTopColor: COLORES.GRIS_CLARO },
+  botonModalCancelar: { flex: 1, paddingVertical: 14, marginRight: 10, borderRadius: 10, backgroundColor: COLORES.GRIS_CLARO, alignItems: 'center' },
+  textoBotonModalCancelar: { color: COLORES.TEXTO_OSCURO, fontSize: 16, fontWeight: '600' },
+  botonModalAccion: { flex: 1, paddingVertical: 14, marginLeft: 10, borderRadius: 10, alignItems: 'center' },
+  textoBotonModalAccion: { color: COLORES.BLANCO, fontSize: 16, fontWeight: '600' },
 
-  // Opciones recurrentes
-  opcionRecurrente: {
-    marginBottom: 15,
-  },
-  botonRecurrente: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-  },
-  textoRecurrente: {
-    fontSize: 14,
-    color: COLORES.TEXTO_OSCURO,
-    marginLeft: 10,
-  },
-
-  // Recordatorio
-  opcionRecordatorio: {
-    marginBottom: 15,
-  },
-  botonRecordatorio: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-  },
-  textoRecordatorio: {
-    fontSize: 14,
-    color: COLORES.TEXTO_OSCURO,
-    marginLeft: 10,
-  },
-
-  // Botones del modal
-  modalBotones: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 20,
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: COLORES.GRIS_CLARO,
-  },
-  botonModalCancelar: {
-    flex: 1,
-    paddingVertical: 14,
-    marginRight: 10,
-    borderRadius: 10,
-    backgroundColor: COLORES.GRIS_CLARO,
-    alignItems: 'center',
-  },
-  textoBotonModalCancelar: {
-    color: COLORES.TEXTO_OSCURO,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  botonModalAccion: {
-    flex: 1,
-    paddingVertical: 14,
-    marginLeft: 10,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  textoBotonModalAccion: {
-    color: COLORES.BLANCO,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-
-  // Configuración
-  seccionConfig: {
-    marginBottom: 25,
-  },
-  tituloSeccionConfig: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORES.TEXTO_OSCURO,
-    marginBottom: 15,
-  },
-  rangoHoras: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  inputRango: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  labelRango: {
-    fontSize: 14,
-    color: COLORES.GRIS_OSCURO,
-    marginBottom: 8,
-  },
-  separadorRango: {
-    fontSize: 16,
-    color: COLORES.GRIS_OSCURO,
-    marginHorizontal: 15,
-  },
-  textoAyuda: {
-    fontSize: 12,
-    color: COLORES.GRIS_OSCURO,
-    marginTop: 5,
-    fontStyle: 'italic',
-  },
-  inputRutina: {
-    marginBottom: 15,
-  },
-  labelRutina: {
-    fontSize: 14,
-    color: COLORES.GRIS_OSCURO,
-    marginBottom: 8,
-  },
-  opcionConfig: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORES.GRIS_CLARO,
-  },
-  textoOpcionConfig: {
-    fontSize: 15,
-    color: COLORES.TEXTO_OSCURO,
-  },
-  switch: {
-    width: 50,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: COLORES.GRIS_MEDIO,
-    justifyContent: 'center',
-    paddingHorizontal: 2,
-  },
-  switchActivo: {
-    backgroundColor: COLORES.EXITO,
-  },
-  switchPunto: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: COLORES.BLANCO,
-    alignSelf: 'flex-start',
-  },
-  switchPuntoActivo: {
-    alignSelf: 'flex-end',
-  },
+  seccionConfig: { marginBottom: 25 },
+  tituloSeccionConfig: { fontSize: 16, fontWeight: 'bold', color: COLORES.TEXTO_OSCURO, marginBottom: 15 },
+  rangoHoras: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  inputRango: { flex: 1, alignItems: 'center' },
+  labelRango: { fontSize: 14, color: COLORES.GRIS_OSCURO, marginBottom: 8 },
+  separadorRango: { fontSize: 16, color: COLORES.GRIS_OSCURO, marginHorizontal: 15 },
+  opcionConfig: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: COLORES.GRIS_CLARO },
+  textoOpcionConfig: { fontSize: 15, color: COLORES.TEXTO_OSCURO },
+  switch: { width: 50, height: 28, borderRadius: 14, backgroundColor: COLORES.GRIS_MEDIO, justifyContent: 'center', paddingHorizontal: 2 },
+  switchActivo: { backgroundColor: COLORES.EXITO },
+  switchPunto: { width: 24, height: 24, borderRadius: 12, backgroundColor: COLORES.BLANCO, alignSelf: 'flex-start' },
+  switchPuntoActivo: { alignSelf: 'flex-end' },
 });

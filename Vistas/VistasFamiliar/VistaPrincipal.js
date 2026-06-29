@@ -219,8 +219,11 @@ export default function PantallaPrincipal({ navigation }) {
   };
 
   // Formatear fecha
+  // Formatear fecha
   const formatearFecha = (fechaStr) => {
+    if (!fechaStr) return 'Fecha no disponible';
     const fecha = new Date(fechaStr);
+    if (isNaN(fecha)) return 'Fecha inválida';
     return fecha.toLocaleDateString('es-ES', {
       weekday: 'short',
       day: 'numeric',
@@ -230,8 +233,10 @@ export default function PantallaPrincipal({ navigation }) {
 
   // Formatear hora
   const formatearHora = (horaStr) => {
-    const [horas, minutos] = horaStr.split(':');
-    return `${horas}:${minutos}`;
+    if (!horaStr) return '';
+    const partes = horaStr.split(':');
+    if (partes.length < 2) return '';
+    return `${partes[0]}:${partes[1]}`;
   };
 
   // Calcular total de gastos futuros
@@ -519,7 +524,7 @@ export default function PantallaPrincipal({ navigation }) {
                       <View style={styles.infoEvento}>
                         <Text style={styles.nombreEvento}>{evento.titulo}</Text>
                         <Text style={styles.detalleEvento}>
-                          {formatearFecha(evento.fecha)} • {formatearHora(evento.hora)}
+                          {formatearFecha(evento.fecha_inicio)} • {formatearHora(evento.hora_inicio)}
                         </Text>
                       </View>
                     </View>
@@ -554,7 +559,7 @@ export default function PantallaPrincipal({ navigation }) {
                       <View style={styles.infoGasto}>
                         <Text style={styles.descripcionGasto}>{gasto.descripcion}</Text>
                         <Text style={styles.fechaGasto}>
-                          {formatearFecha(gasto.fecha_vencimiento)}
+                          {formatearFecha(gasto.fecha)}
                         </Text>
                       </View>
 

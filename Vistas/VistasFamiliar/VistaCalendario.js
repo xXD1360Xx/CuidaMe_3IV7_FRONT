@@ -15,7 +15,6 @@ import {
   Dimensions
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-// Removida importación de Icon de expo-vector-icons
 import { servicioAPI } from '../../servicios/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -60,6 +59,7 @@ export default function VistaCalendario({ navigation, route }) {
   const [diasSeleccionados, setDiasSeleccionados] = useState([]);
   const [eventoEditando, setEventoEditando] = useState(null);
   const [usuarioRol, setUsuarioRol] = useState('');
+  const [usuarioId, setUsuarioId] = useState(null);
 
   // Estados para nuevo evento
   const [nuevoEvento, setNuevoEvento] = useState({
@@ -98,78 +98,83 @@ export default function VistaCalendario({ navigation, route }) {
   // Duraciones disponibles (horas)
   const duracionesDisponibles = ['0.5', '1', '1.5', '2', '2.5', '3', '4', '6', '8'];
 
-  // Cargar datos iniciales
-  const cargarDatos = useCallback(async () => {
+  // Obtener ID del usuario actual al montar
+  useEffect(() => {
+    const obtenerUsuario = async () => {
+      const id = await servicioAPI.obtenerUsuarioActualId();
+      if (id) {
+        setUsuarioId(id);
+        // También obtener rol
+        const usuarioData = await AsyncStorage.getItem('usuarioInfo');
+        if (usuarioData) {
+          const usuario = JSON.parse(usuarioData);
+          setUsuarioRol(usuario.rol);
+        }
+        // Cargar datos iniciales
+        cargarDatos(id);
+      } else {
+        Alert.alert('Error', 'No se pudo identificar al usuario');
+        setCargando(false);
+      }
+    };
+    obtenerUsuario();
+  }, []);
+
+  // Cargar datos cuando cambia el mes/año
+  useEffect(() => {
+    if (usuarioId) {
+      cargarDatos(usuarioId);
+    }
+  }, [mesActual, anoActual]);
+
+  const cargarDatos = async (idUsuario) => {
     try {
       setCargando(true);
-
-      // Obtener usuario actual
-      const usuarioData = await AsyncStorage.getItem('usuarioInfo');
-      if (usuarioData) {
-        const usuario = JSON.parse(usuarioData);
-        setUsuarioRol(usuario.rol);
-
-        // Cargar familiares
-        const familiaresResponse = await servicioAPI.obtenerFamiliares();
-        if (familiaresResponse.exito) {
-          setFamiliares(familiaresResponse.familiares || []);
-
-          // Asignar colores a los familiares si no los tienen
-          const coloresFamiliares = [
-            COLORES.AZUL_CIELO, COLORES.EXITO, COLORES.AMARILLO_PLATANO,
-            COLORES.MORADO, COLORES.NARANJA, COLORES.ROSADO,
-            COLORES.TURQUESA, COLORES.ROJO_CLARO
-          ];
-
-          const familiaresConColores = familiaresResponse.familiares.map((familiar, index) => ({
-            ...familiar,
-            color: familiar.color || coloresFamiliares[index % coloresFamiliares.length]
-          }));
-
-          setFamiliares(familiaresConColores);
-        }
-
-        // Cargar eventos del mes actual
-        await cargarEventosMes();
+      // Cargar familiares
+      const familiaresResponse = await servicioAPI.obtenerFamiliares(idUsuario);
+      if (familiaresResponse.exito) {
+        setFamiliares(familiaresResponse.familiares || []);
       }
+
+      // Cargar eventos del mes
+      await cargarEventosMes(idUsuario);
     } catch (error) {
-      console.error('Error cargando datos:', error);
-      Alert.alert('Error', 'No se pudieron cargar los datos del calendario');
+      console.error('Error cargando datos del calendario:', error);
+      Alert.alert('Error', 'No se pudieron cargar los datos');
     } finally {
       setCargando(false);
       setRefrescando(false);
     }
-  }, [mesActual, anoActual]);
+  };
 
-  // Cargar eventos del mes
-  const cargarEventosMes = async () => {
+  const cargarEventosMes = async (idUsuario) => {
     try {
       const fechaInicio = new Date(anoActual, mesActual, 1);
       const fechaFin = new Date(anoActual, mesActual + 1, 0);
-
       const response = await servicioAPI.obtenerEventosPorRango(
+        idUsuario,
         fechaInicio.toISOString().split('T')[0],
         fechaFin.toISOString().split('T')[0]
       );
-
       if (response.exito) {
         setEventos(response.eventos || []);
+      } else {
+        setEventos([]);
       }
     } catch (error) {
       console.error('Error cargando eventos:', error);
+      setEventos([]);
     }
   };
 
-  // Cargar datos al montar
-  useEffect(() => {
-    cargarDatos();
-  }, [mesActual, anoActual]);
-
-  // Refrescar manualmente
   const onRefresh = useCallback(async () => {
     setRefrescando(true);
-    await cargarDatos();
-  }, [cargando]);
+    if (usuarioId) {
+      await cargarDatos(usuarioId);
+    } else {
+      setRefrescando(false);
+    }
+  }, [usuarioId]);
 
   // Navegar entre meses
   const cambiarMes = (direccion) => {
@@ -179,7 +184,6 @@ export default function VistaCalendario({ navigation, route }) {
     setFechaActual(nuevaFecha);
   };
 
-  // Ir al mes actual
   const irAHoy = () => {
     const hoy = new Date();
     setMesActual(hoy.getMonth());
@@ -192,31 +196,30 @@ export default function VistaCalendario({ navigation, route }) {
     const primerDia = new Date(anoActual, mesActual, 1);
     const ultimoDia = new Date(anoActual, mesActual + 1, 0);
     const diasEnMes = ultimoDia.getDate();
-
-    const primerDiaSemana = primerDia.getDay(); // 0 = Domingo, 1 = Lunes, etc.
+    const primerDiaSemana = primerDia.getDay();
 
     const dias = [];
-
-    // Agregar días vacíos al principio si es necesario
     for (let i = 0; i < primerDiaSemana; i++) {
       dias.push({ dia: null, fecha: null });
     }
-
-    // Agregar los días del mes
     for (let i = 1; i <= diasEnMes; i++) {
       const fecha = new Date(anoActual, mesActual, i);
+      const fechaStr = fecha.toISOString().split('T')[0];
+      const eventosDia = eventos.filter(evento => {
+        const inicio = new Date(evento.fecha_inicio).toISOString().split('T')[0];
+        const fin = evento.fecha_fin ? new Date(evento.fecha_fin).toISOString().split('T')[0] : inicio;
+        return fechaStr >= inicio && fechaStr <= fin;
+      });
       dias.push({
         dia: i,
-        fecha: fecha.toISOString().split('T')[0],
+        fecha: fechaStr,
         esHoy: esHoy(fecha),
-        eventos: obtenerEventosDia(fecha)
+        eventos: eventosDia
       });
     }
-
     return dias;
   };
 
-  // Verificar si es hoy
   const esHoy = (fecha) => {
     const hoy = new Date();
     return fecha.getDate() === hoy.getDate() &&
@@ -224,74 +227,36 @@ export default function VistaCalendario({ navigation, route }) {
       fecha.getFullYear() === hoy.getFullYear();
   };
 
-  // Obtener eventos para un día específico
-  const obtenerEventosDia = (fecha) => {
-    const fechaStr = fecha.toISOString().split('T')[0];
-    return eventos.filter(evento => {
-      const fechaEvento = new Date(evento.fecha_inicio).toISOString().split('T')[0];
-      const fechaFin = evento.fecha_fin ?
-        new Date(evento.fecha_fin).toISOString().split('T')[0] :
-        fechaEvento;
-
-      return fechaStr >= fechaEvento && fechaStr <= fechaFin;
-    });
-  };
-
-  // Obtener eventos para un día específico (por fecha string)
   const obtenerEventosParaFecha = (fechaStr) => {
     return eventos.filter(evento => {
-      const fechaEvento = new Date(evento.fecha_inicio).toISOString().split('T')[0];
-      const fechaFin = evento.fecha_fin ?
-        new Date(evento.fecha_fin).toISOString().split('T')[0] :
-        fechaEvento;
-
-      return fechaStr >= fechaEvento && fechaStr <= fechaFin;
+      const inicio = new Date(evento.fecha_inicio).toISOString().split('T')[0];
+      const fin = evento.fecha_fin ? new Date(evento.fecha_fin).toISOString().split('T')[0] : inicio;
+      return fechaStr >= inicio && fechaStr <= fin;
     });
   };
 
   // Seleccionar día
   const seleccionarDia = (dia, fecha) => {
     if (!fecha) return;
-
     if (modoSeleccionMultiple) {
-      // Modo selección múltiple
-      const fechaStr = fecha;
-      const index = diasSeleccionados.indexOf(fechaStr);
-
+      const index = diasSeleccionados.indexOf(fecha);
       if (index === -1) {
-        setDiasSeleccionados([...diasSeleccionados, fechaStr]);
+        setDiasSeleccionados([...diasSeleccionados, fecha]);
       } else {
-        const nuevosDias = [...diasSeleccionados];
-        nuevosDias.splice(index, 1);
-        setDiasSeleccionados(nuevosDias);
+        const nuevos = [...diasSeleccionados];
+        nuevos.splice(index, 1);
+        setDiasSeleccionados(nuevos);
       }
     } else {
-      // Modo normal: abrir modal para agregar evento
       setDiaSeleccionado(fecha);
       const eventosDia = obtenerEventosParaFecha(fecha);
-
-      // Si hay eventos, mostrar modal de evento
       if (eventosDia.length > 0) {
-        setNuevoEvento({
-          titulo: '',
-          tipo: 'cita_medica',
-          color: COLORES.EXITO,
-          fecha_inicio: fecha,
-          fecha_fin: fecha,
-          hora: '09:00',
-          duracion: '1',
-          descripcion: '',
-          familiar_id: null,
-          recordatorio: true,
-          ubicacion: ''
-        });
         setModalEventoVisible(true);
       } else {
-        // Preparar nuevo evento para este día
+        // Preparar nuevo evento
         const fechaObj = new Date(fecha);
-        const horaActual = fechaObj.getHours().toString().padStart(2, '0') +
-          ':' + fechaObj.getMinutes().toString().padStart(2, '0');
-
+        const horaActual = fechaObj.getHours().toString().padStart(2, '0') + ':' +
+          fechaObj.getMinutes().toString().padStart(2, '0');
         setNuevoEvento({
           titulo: '',
           tipo: 'cita_medica',
@@ -310,81 +275,38 @@ export default function VistaCalendario({ navigation, route }) {
     }
   };
 
-  // Iniciar selección múltiple
-  const iniciarSeleccionMultiple = () => {
-    setModoSeleccionMultiple(true);
-    setDiasSeleccionados([]);
-    Alert.alert(
-      'Modo selección múltiple',
-      'Ahora puedes seleccionar varios días. Toque los días que desee seleccionar.'
-    );
-  };
-
-  // Cancelar selección múltiple
-  const cancelarSeleccionMultiple = () => {
-    setModoSeleccionMultiple(false);
-    setDiasSeleccionados([]);
-  };
-
-  // Crear evento para días seleccionados
-  const crearEventoMultiplesDias = () => {
-    if (diasSeleccionados.length === 0) {
-      Alert.alert('Error', 'Debes seleccionar al menos un día');
-      return;
-    }
-
-    // Ordenar fechas
-    const fechasOrdenadas = [...diasSeleccionados].sort();
-    const fechaInicio = fechasOrdenadas[0];
-    const fechaFin = fechasOrdenadas[fechasOrdenadas.length - 1];
-
-    setNuevoEvento({
-      ...nuevoEvento,
-      fecha_inicio: fechaInicio,
-      fecha_fin: fechaFin,
-      titulo: `Cuidado por ${fechaInicio} a ${fechaFin}`
-    });
-
-    setModalVisible(true);
-    setModoSeleccionMultiple(false);
-    setDiasSeleccionados([]);
-  };
-
   // Guardar evento
   const guardarEvento = async () => {
     try {
-      // Validaciones
       if (!nuevoEvento.titulo.trim()) {
-        Alert.alert('Error', 'Debes ingresar un título para el evento');
+        Alert.alert('Error', 'Debes ingresar un título');
         return;
       }
-
       if (!nuevoEvento.fecha_inicio) {
-        Alert.alert('Error', 'Debes seleccionar una fecha de inicio');
+        Alert.alert('Error', 'Debes seleccionar una fecha');
         return;
       }
 
-      // Preparar datos para enviar
       const datosEvento = {
-        ...nuevoEvento,
+        titulo: nuevoEvento.titulo,
         tipo_evento: nuevoEvento.tipo,
         color_evento: nuevoEvento.color,
         fecha_inicio: nuevoEvento.fecha_inicio,
         fecha_fin: nuevoEvento.fecha_fin || nuevoEvento.fecha_inicio,
         hora_inicio: nuevoEvento.hora,
         duracion_horas: parseFloat(nuevoEvento.duracion),
-        usuario_id: await obtenerUsuarioId()
+        descripcion: nuevoEvento.descripcion,
+        familiar_id: nuevoEvento.familiar_id,
+        recordatorio: nuevoEvento.recordatorio,
+        ubicacion: nuevoEvento.ubicacion
       };
 
-      // Llamar a la API para guardar el evento
-      const response = await servicioAPI.crearEvento(datosEvento);
-
+      const response = await servicioAPI.crearEvento(usuarioId, datosEvento);
       if (response.exito) {
-        Alert.alert('Éxito', 'Evento guardado correctamente');
+        Alert.alert('Éxito', 'Evento guardado');
         setModalVisible(false);
         setModalEventoVisible(false);
         onRefresh();
-
         // Limpiar formulario
         setNuevoEvento({
           titulo: '',
@@ -400,116 +322,69 @@ export default function VistaCalendario({ navigation, route }) {
           ubicacion: ''
         });
       } else {
-        Alert.alert('Error', response.error || 'No se pudo guardar el evento');
+        Alert.alert('Error', response.error || 'No se pudo guardar');
       }
-
     } catch (error) {
       console.error('Error guardando evento:', error);
-      Alert.alert('Error', 'No se pudo guardar el evento');
+      Alert.alert('Error', 'Error de conexión');
     }
   };
 
-  // Obtener ID del usuario actual
-  const obtenerUsuarioId = async () => {
-    try {
-      const usuarioData = await AsyncStorage.getItem('usuarioInfo');
-      if (usuarioData) {
-        const usuario = JSON.parse(usuarioData);
-        return usuario.id;
-      }
-      return null;
-    } catch (error) {
-      console.error('Error obteniendo usuario ID:', error);
-      return null;
-    }
-  };
-
-  // Función para editar evento
+  // Editar evento
   const editarEvento = async (eventoId) => {
-    try {
-      // Buscar el evento en la lista
-      const evento = eventos.find(e => e.id === eventoId);
-      if (!evento) {
-        Alert.alert('Error', 'Evento no encontrado');
-        return;
-      }
-
-      // Preparar datos para edición
-      setNuevoEvento({
-        titulo: evento.titulo,
-        tipo: evento.tipo_evento || 'cita_medica',
-        color: evento.color_evento || COLORES.EXITO,
-        fecha_inicio: evento.fecha_inicio,
-        fecha_fin: evento.fecha_fin || evento.fecha_inicio,
-        hora: evento.hora_inicio || '09:00',
-        duracion: evento.duracion_horas?.toString() || '1',
-        descripcion: evento.descripcion || '',
-        familiar_id: evento.familiar_id || null,
-        recordatorio: evento.recordatorio !== undefined ? evento.recordatorio : true,
-        ubicacion: evento.ubicacion || ''
-      });
-
-      setEventoEditando(eventoId);
-      setModalEditarVisible(true);
-
-    } catch (error) {
-      console.error('Error preparando edición:', error);
-      Alert.alert('Error', 'No se pudo cargar el evento para editar');
+    const evento = eventos.find(e => e.id === eventoId);
+    if (!evento) {
+      Alert.alert('Error', 'Evento no encontrado');
+      return;
     }
+    setNuevoEvento({
+      titulo: evento.titulo,
+      tipo: evento.tipo_evento || 'cita_medica',
+      color: evento.color_evento || COLORES.EXITO,
+      fecha_inicio: evento.fecha_inicio,
+      fecha_fin: evento.fecha_fin || evento.fecha_inicio,
+      hora: evento.hora_inicio || '09:00',
+      duracion: evento.duracion_horas?.toString() || '1',
+      descripcion: evento.descripcion || '',
+      familiar_id: evento.familiar_id || null,
+      recordatorio: evento.recordatorio !== undefined ? evento.recordatorio : true,
+      ubicacion: evento.ubicacion || ''
+    });
+    setEventoEditando(eventoId);
+    setModalEditarVisible(true);
   };
 
-  // Función para guardar evento editado
   const guardarEventoEditado = async () => {
     try {
-      if (!eventoEditando) return;
-
-      // Validaciones
       if (!nuevoEvento.titulo.trim()) {
-        Alert.alert('Error', 'Debes ingresar un título para el evento');
+        Alert.alert('Error', 'Debes ingresar un título');
         return;
       }
-
-      // Preparar datos para actualizar
       const datosEvento = {
-        ...nuevoEvento,
+        titulo: nuevoEvento.titulo,
         tipo_evento: nuevoEvento.tipo,
         color_evento: nuevoEvento.color,
         fecha_inicio: nuevoEvento.fecha_inicio,
         fecha_fin: nuevoEvento.fecha_fin || nuevoEvento.fecha_inicio,
         hora_inicio: nuevoEvento.hora,
-        duracion_horas: parseFloat(nuevoEvento.duracion)
+        duracion_horas: parseFloat(nuevoEvento.duracion),
+        descripcion: nuevoEvento.descripcion,
+        familiar_id: nuevoEvento.familiar_id,
+        recordatorio: nuevoEvento.recordatorio,
+        ubicacion: nuevoEvento.ubicacion
       };
-
-      // Llamar a la API para actualizar
-      const response = await servicioAPI.actualizarEvento(eventoEditando, datosEvento);
-
+      const response = await servicioAPI.actualizarEvento(eventoEditando, usuarioId, datosEvento);
       if (response.exito) {
-        Alert.alert('Éxito', 'Evento actualizado correctamente');
+        Alert.alert('Éxito', 'Evento actualizado');
         setModalEditarVisible(false);
         setEventoEditando(null);
         onRefresh();
-
-        // Limpiar formulario
-        setNuevoEvento({
-          titulo: '',
-          tipo: 'cita_medica',
-          color: COLORES.EXITO,
-          fecha_inicio: '',
-          fecha_fin: '',
-          hora: '09:00',
-          duracion: '1',
-          descripcion: '',
-          familiar_id: null,
-          recordatorio: true,
-          ubicacion: ''
-        });
       } else {
-        Alert.alert('Error', response.error || 'No se pudo actualizar el evento');
+        Alert.alert('Error', response.error || 'No se pudo actualizar');
       }
-
     } catch (error) {
       console.error('Error actualizando evento:', error);
-      Alert.alert('Error', 'No se pudo actualizar el evento');
+      Alert.alert('Error', 'Error de conexión');
     }
   };
 
@@ -517,7 +392,7 @@ export default function VistaCalendario({ navigation, route }) {
   const eliminarEvento = (eventoId) => {
     Alert.alert(
       'Confirmar eliminación',
-      '¿Estás seguro de que quieres eliminar este evento?',
+      '¿Estás seguro de eliminar este evento?',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -525,15 +400,15 @@ export default function VistaCalendario({ navigation, route }) {
           style: 'destructive',
           onPress: async () => {
             try {
-              const response = await servicioAPI.eliminarEvento(eventoId);
+              const response = await servicioAPI.eliminarEvento(eventoId, usuarioId);
               if (response.exito) {
-                Alert.alert('Éxito', 'Evento eliminado correctamente');
+                Alert.alert('Éxito', 'Evento eliminado');
                 onRefresh();
               } else {
-                Alert.alert('Error', response.error || 'No se pudo eliminar el evento');
+                Alert.alert('Error', response.error || 'No se pudo eliminar');
               }
             } catch (error) {
-              Alert.alert('Error', 'No se pudo eliminar el evento');
+              Alert.alert('Error', 'Error de conexión');
             }
           }
         }
@@ -541,70 +416,42 @@ export default function VistaCalendario({ navigation, route }) {
     );
   };
 
-  // Formatear fecha para mostrar
+  // Formatear fecha y hora
   const formatearFecha = (fechaStr) => {
     const fecha = new Date(fechaStr);
-    return fecha.toLocaleDateString('es-ES', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
+    return fecha.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   };
 
-  // Formatear hora
   const formatearHora = (horaStr) => {
-    const [horas, minutos] = horaStr.split(':');
-    return `${horas}:${minutos}`;
+    if (!horaStr) return '';
+    const [h, m] = horaStr.split(':');
+    return `${h}:${m}`;
   };
 
-  // Obtener nombre del mes
   const obtenerNombreMes = () => {
-    const meses = [
-      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
-    ];
+    const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
     return meses[mesActual];
   };
 
-  // Obtener nombre del tipo de evento
-  const obtenerNombreTipoEvento = (tipoId) => {
-    const tipo = tiposEventos.find(t => t.id === tipoId);
-    return tipo ? tipo.nombre : 'Otro';
-  };
-
-  // Obtener color del tipo de evento
-  const obtenerColorTipoEvento = (tipoId) => {
-    const tipo = tiposEventos.find(t => t.id === tipoId);
-    return tipo ? tipo.color : COLORES.GRIS_OSCURO;
-  };
-
-  // Obtener icono del tipo de evento
   const obtenerIconoTipoEvento = (tipoId) => {
     const tipo = tiposEventos.find(t => t.id === tipoId);
     return tipo ? tipo.icono : '📌';
   };
 
-  // Renderizar mini evento en el día
-  const renderMiniEvento = (evento) => {
-    const color = evento.color_evento || obtenerColorTipoEvento(evento.tipo_evento);
-    return (
-      <View
-        key={evento.id}
-        style={[
-          styles.miniEvento,
-          { backgroundColor: color }
-        ]}
-      />
-    );
+  const obtenerColorTipoEvento = (tipoId) => {
+    const tipo = tiposEventos.find(t => t.id === tipoId);
+    return tipo ? tipo.color : COLORES.GRIS_OSCURO;
   };
 
-  // Renderizar día del calendario
-  const renderDia = ({ item }) => {
-    if (!item.dia) {
-      return <View style={styles.diaVacio} />;
-    }
+  const obtenerNombreTipoEvento = (tipoId) => {
+    const tipo = tiposEventos.find(t => t.id === tipoId);
+    return tipo ? tipo.nombre : 'Otro';
+  };
 
+  // Renderizar día
+  const renderDia = ({ item }) => {
+    if (!item.dia) return <View style={styles.diaVacio} />;
     const estaSeleccionado = diasSeleccionados.includes(item.fecha);
     const esDiaSeleccionado = diaSeleccionado === item.fecha;
 
@@ -626,12 +473,11 @@ export default function VistaCalendario({ navigation, route }) {
         ]}>
           {item.dia}
         </Text>
-
-        {/* Mini indicadores de eventos */}
         <View style={styles.miniEventosContainer}>
-          {item.eventos.slice(0, 3).map(evento => renderMiniEvento(evento))}
+          {item.eventos.slice(0, 3).map(evento => (
+            <View key={evento.id} style={[styles.miniEvento, { backgroundColor: evento.color_evento || obtenerColorTipoEvento(evento.tipo_evento) }]} />
+          ))}
         </View>
-
         {item.eventos.length > 3 && (
           <Text style={styles.masEventos}>+{item.eventos.length - 3}</Text>
         )}
@@ -639,13 +485,10 @@ export default function VistaCalendario({ navigation, route }) {
     );
   };
 
-  // Mostrar pantalla de carga
+  // Estado de carga
   if (cargando) {
     return (
-      <LinearGradient
-        colors={[COLORES.AZUL_CIELO, COLORES.BLANCO, COLORES.AZUL_CIELO]}
-        style={styles.fondo}
-      >
+      <LinearGradient colors={[COLORES.AZUL_CIELO, COLORES.BLANCO, COLORES.AZUL_CIELO]} style={styles.fondo}>
         <SafeAreaView style={styles.centrado}>
           <ActivityIndicator size="large" color={COLORES.AMARILLO_PLATANO} />
           <Text style={styles.textoCargando}>Cargando calendario...</Text>
@@ -658,68 +501,45 @@ export default function VistaCalendario({ navigation, route }) {
   const nombreMes = obtenerNombreMes();
 
   return (
-    <LinearGradient
-      colors={[COLORES.AZUL_CIELO, COLORES.BLANCO]}
-      style={styles.fondo}
-    >
+    <LinearGradient colors={[COLORES.AZUL_CIELO, COLORES.BLANCO]} style={styles.fondo}>
       <SafeAreaView style={styles.contenedor}>
         {/* Encabezado */}
         <View style={styles.encabezado}>
-          <TouchableOpacity
-            style={styles.botonAtras}
-            onPress={() => navigation.goBack()}
-          >
+          <TouchableOpacity style={styles.botonAtras} onPress={() => navigation.goBack()}>
             <Text style={{ fontSize: 24 }}>⬅️</Text>
           </TouchableOpacity>
-
           <View style={styles.tituloContainer}>
             <Text style={styles.tituloPrincipal}>Calendario</Text>
             <Text style={styles.subtituloPrincipal}>{nombreMes} {anoActual}</Text>
           </View>
-
-          <TouchableOpacity
-            style={styles.botonRefrescar}
-            onPress={onRefresh}
-            disabled={refrescando}
-          >
+          <TouchableOpacity style={styles.botonRefrescar} onPress={onRefresh} disabled={refrescando}>
             <Text style={{ fontSize: 22, opacity: refrescando ? 0.5 : 1 }}>🔄</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Controles del calendario */}
+        {/* Controles */}
         <View style={styles.controlesCalendario}>
-          <TouchableOpacity
-            style={styles.botonControl}
-            onPress={() => cambiarMes(-1)}
-          >
+          <TouchableOpacity style={styles.botonControl} onPress={() => cambiarMes(-1)}>
             <Text style={{ fontSize: 20 }}>◀️</Text>
           </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.botonHoy}
-            onPress={irAHoy}
-          >
+          <TouchableOpacity style={styles.botonHoy} onPress={irAHoy}>
             <Text style={styles.textoBotonHoy}>HOY</Text>
           </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.botonControl}
-            onPress={() => cambiarMes(1)}
-          >
+          <TouchableOpacity style={styles.botonControl} onPress={() => cambiarMes(1)}>
             <Text style={{ fontSize: 20 }}>▶️</Text>
           </TouchableOpacity>
         </View>
 
         {/* Días de la semana */}
         <View style={styles.diasSemanaContainer}>
-          {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map((dia, index) => (
-            <View key={index} style={styles.diaSemana}>
+          {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map((dia, i) => (
+            <View key={i} style={styles.diaSemana}>
               <Text style={styles.textoDiaSemana}>{dia}</Text>
             </View>
           ))}
         </View>
 
-        {/* Calendario - Grid de días */}
+        {/* Grid */}
         <FlatList
           data={diasMes}
           renderItem={renderDia}
@@ -743,19 +563,26 @@ export default function VistaCalendario({ navigation, route }) {
             <Text style={styles.textoSeleccionMultiple}>
               {diasSeleccionados.length} día(s) seleccionado(s)
             </Text>
-
             <View style={styles.botonesSeleccion}>
-              <TouchableOpacity
-                style={[styles.botonSeleccion, { backgroundColor: COLORES.ERROR }]}
-                onPress={cancelarSeleccionMultiple}
-              >
+              <TouchableOpacity style={[styles.botonSeleccion, { backgroundColor: COLORES.ERROR }]} onPress={() => setModoSeleccionMultiple(false)}>
                 <Text style={styles.textoBotonSeleccion}>Cancelar</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.botonSeleccion, { backgroundColor: COLORES.EXITO }]}
-                onPress={crearEventoMultiplesDias}
-              >
+              <TouchableOpacity style={[styles.botonSeleccion, { backgroundColor: COLORES.EXITO }]} onPress={() => {
+                if (diasSeleccionados.length === 0) {
+                  Alert.alert('Error', 'Selecciona al menos un día');
+                  return;
+                }
+                const fechasOrdenadas = [...diasSeleccionados].sort();
+                setNuevoEvento({
+                  ...nuevoEvento,
+                  fecha_inicio: fechasOrdenadas[0],
+                  fecha_fin: fechasOrdenadas[fechasOrdenadas.length - 1],
+                  titulo: `Evento del ${fechasOrdenadas[0]} al ${fechasOrdenadas[fechasOrdenadas.length - 1]}`
+                });
+                setModalVisible(true);
+                setModoSeleccionMultiple(false);
+                setDiasSeleccionados([]);
+              }}>
                 <Text style={styles.textoBotonSeleccion}>Crear Evento</Text>
               </TouchableOpacity>
             </View>
@@ -766,215 +593,120 @@ export default function VistaCalendario({ navigation, route }) {
         <View style={styles.barraAcciones}>
           {!modoSeleccionMultiple ? (
             <>
-              <TouchableOpacity
-                style={styles.botonAccion}
-                onPress={iniciarSeleccionMultiple}
-              >
+              <TouchableOpacity style={styles.botonAccion} onPress={() => setModoSeleccionMultiple(true)}>
                 <Text style={{ fontSize: 18, marginRight: 6 }}>📅</Text>
                 <Text style={styles.textoBotonAccion}>Seleccionar Múltiples Días</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.botonAccionSecundario}
-                onPress={() => {
-                  setDiaSeleccionado(new Date().toISOString().split('T')[0]);
-                  setModalVisible(true);
-                }}
-              >
+              <TouchableOpacity style={styles.botonAccionSecundario} onPress={() => {
+                const hoy = new Date().toISOString().split('T')[0];
+                setDiaSeleccionado(hoy);
+                setNuevoEvento({
+                  titulo: '',
+                  tipo: 'cita_medica',
+                  color: COLORES.EXITO,
+                  fecha_inicio: hoy,
+                  fecha_fin: hoy,
+                  hora: '09:00',
+                  duracion: '1',
+                  descripcion: '',
+                  familiar_id: null,
+                  recordatorio: true,
+                  ubicacion: ''
+                });
+                setModalVisible(true);
+              }}>
                 <Text style={{ fontSize: 22 }}>➕</Text>
               </TouchableOpacity>
             </>
           ) : (
-            <TouchableOpacity
-              style={[styles.botonAccion, { backgroundColor: COLORES.ROJO_CLARO }]}
-              onPress={cancelarSeleccionMultiple}
-            >
+            <TouchableOpacity style={[styles.botonAccion, { backgroundColor: COLORES.ROJO_CLARO }]} onPress={() => setModoSeleccionMultiple(false)}>
               <Text style={{ fontSize: 18, marginRight: 6 }}>❌</Text>
               <Text style={styles.textoBotonAccion}>Cancelar Selección</Text>
             </TouchableOpacity>
           )}
         </View>
 
-        {/* Lista de eventos próximos */}
+        {/* Eventos próximos */}
         <View style={styles.seccionEventos}>
           <Text style={styles.tituloSeccion}>Eventos Próximos</Text>
-
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             {eventos.slice(0, 10).map(evento => (
               <TouchableOpacity
                 key={evento.id}
-                style={[
-                  styles.tarjetaEvento,
-                  { borderLeftColor: evento.color_evento || obtenerColorTipoEvento(evento.tipo_evento) }
-                ]}
-                onPress={() => {
-                  // Navegar a detalles del evento
-                  navigation.navigate('DetalleEvento', { eventoId: evento.id });
-                }}
+                style={[styles.tarjetaEvento, { borderLeftColor: evento.color_evento || obtenerColorTipoEvento(evento.tipo_evento) }]}
+                onPress={() => editarEvento(evento.id)}
                 onLongPress={() => {
-                  // Mostrar menú de opciones al mantener presionado
-                  Alert.alert(
-                    'Opciones del Evento',
-                    'Selecciona una acción',
-                    [
-                      { text: 'Cancelar', style: 'cancel' },
-                      {
-                        text: 'Editar',
-                        onPress: () => editarEvento(evento.id)
-                      },
-                      {
-                        text: 'Eliminar',
-                        style: 'destructive',
-                        onPress: () => eliminarEvento(evento.id)
-                      }
-                    ]
-                  );
+                  Alert.alert('Opciones', '¿Qué deseas hacer?', [
+                    { text: 'Cancelar', style: 'cancel' },
+                    { text: 'Editar', onPress: () => editarEvento(evento.id) },
+                    { text: 'Eliminar', style: 'destructive', onPress: () => eliminarEvento(evento.id) }
+                  ]);
                 }}
               >
                 <View style={styles.encabezadoEvento}>
-                  <Text style={{ fontSize: 16, marginRight: 6 }}>
-                    {obtenerIconoTipoEvento(evento.tipo_evento)}
-                  </Text>
-                  <Text style={styles.tituloEvento} numberOfLines={1}>
-                    {evento.titulo}
-                  </Text>
-                  {/* Botón de editar rápido */}
-                  <TouchableOpacity
-                    style={styles.botonEditarRapido}
-                    onPress={() => editarEvento(evento.id)}
-                  >
+                  <Text style={{ fontSize: 16, marginRight: 6 }}>{obtenerIconoTipoEvento(evento.tipo_evento)}</Text>
+                  <Text style={styles.tituloEvento} numberOfLines={1}>{evento.titulo}</Text>
+                  <TouchableOpacity style={styles.botonEditarRapido} onPress={() => editarEvento(evento.id)}>
                     <Text style={{ fontSize: 14 }}>📝</Text>
                   </TouchableOpacity>
                 </View>
-
-                <Text style={styles.fechaEvento}>
-                  {formatearFecha(evento.fecha_inicio)}
-                </Text>
-
+                <Text style={styles.fechaEvento}>{formatearFecha(evento.fecha_inicio)}</Text>
                 {evento.hora_inicio && (
-                  <Text style={styles.horaEvento}>
-                    {formatearHora(evento.hora_inicio)}
-                    {evento.duracion_horas && ` • ${evento.duracion_horas}h`}
-                  </Text>
+                  <Text style={styles.horaEvento}>{formatearHora(evento.hora_inicio)} • {evento.duracion_horas}h</Text>
                 )}
-
-                {evento.ubicacion && (
-                  <Text style={styles.ubicacionEvento} numberOfLines={1}>
-                    📍 {evento.ubicacion}
-                  </Text>
-                )}
+                {evento.ubicacion && <Text style={styles.ubicacionEvento} numberOfLines={1}>📍 {evento.ubicacion}</Text>}
               </TouchableOpacity>
             ))}
-
             {eventos.length === 0 && (
               <View style={styles.sinEventosContainer}>
                 <Text style={{ fontSize: 40, marginBottom: 10 }}>📅</Text>
-                <Text style={styles.textoSinEventos}>No hay eventos próximos</Text>
-                <Text style={styles.subtextoSinEventos}>
-                  Toca en un día para agregar un evento
-                </Text>
+                <Text style={styles.textoSinEventos}>No hay eventos</Text>
+                <Text style={styles.subtextoSinEventos}>Toca en un día para agregar</Text>
               </View>
             )}
           </ScrollView>
         </View>
       </SafeAreaView>
 
-      {/* Modal para crear nuevo evento */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
-      >
+      {/* Modal para crear evento */}
+      <Modal animationType="slide" transparent={true} visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
         <View style={styles.modalFondo}>
           <View style={styles.modalContenido}>
             <View style={styles.modalEncabezado}>
-              <Text style={styles.modalTitulo}>
-                {diaSeleccionado ? `Evento para ${formatearFecha(diaSeleccionado)}` : 'Nuevo Evento'}
-              </Text>
-
+              <Text style={styles.modalTitulo}>Nuevo Evento</Text>
               <TouchableOpacity onPress={() => setModalVisible(false)}>
                 <Text style={{ fontSize: 20 }}>❌</Text>
               </TouchableOpacity>
             </View>
-
             <ScrollView style={styles.modalFormulario}>
-              <Text style={styles.modalLabel}>Título del evento *</Text>
-              <TextInput
-                style={styles.input}
-                value={nuevoEvento.titulo}
-                onChangeText={(text) => setNuevoEvento({ ...nuevoEvento, titulo: text })}
-                placeholder="Ej: Cita con cardiólogo"
-                placeholderTextColor={COLORES.GRIS_MEDIO}
-              />
+              <Text style={styles.modalLabel}>Título *</Text>
+              <TextInput style={styles.input} value={nuevoEvento.titulo} onChangeText={text => setNuevoEvento({ ...nuevoEvento, titulo: text })} placeholder="Ej: Cita con cardiólogo" />
 
-              <Text style={styles.modalLabel}>Tipo de evento</Text>
+              <Text style={styles.modalLabel}>Tipo</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tiposContainer}>
                 {tiposEventos.map(tipo => (
-                  <TouchableOpacity
-                    key={tipo.id}
-                    style={[
-                      styles.opcionTipo,
-                      {
-                        backgroundColor: nuevoEvento.tipo === tipo.id ? tipo.color + '40' : COLORES.GRIS_CLARO,
-                        borderColor: tipo.color
-                      }
-                    ]}
-                    onPress={() => {
-                      setNuevoEvento({ ...nuevoEvento, tipo: tipo.id, color: tipo.color });
-                    }}
-                  >
+                  <TouchableOpacity key={tipo.id} style={[styles.opcionTipo, { backgroundColor: nuevoEvento.tipo === tipo.id ? tipo.color + '40' : COLORES.GRIS_CLARO, borderColor: tipo.color }]} onPress={() => setNuevoEvento({ ...nuevoEvento, tipo: tipo.id, color: tipo.color })}>
                     <Text style={{ fontSize: 20, marginRight: 6 }}>{tipo.icono}</Text>
-                    <Text style={[
-                      styles.textoOpcionTipo,
-                      { color: nuevoEvento.tipo === tipo.id ? tipo.color : COLORES.GRIS_OSCURO }
-                    ]}>
-                      {tipo.nombre}
-                    </Text>
+                    <Text style={[styles.textoOpcionTipo, { color: nuevoEvento.tipo === tipo.id ? tipo.color : COLORES.GRIS_OSCURO }]}>{tipo.nombre}</Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
 
-              <Text style={styles.modalLabel}>Color personalizado</Text>
+              <Text style={styles.modalLabel}>Color</Text>
               <View style={styles.coloresContainer}>
-                {[
-                  COLORES.EXITO, COLORES.AZUL_CIELO, COLORES.AMARILLO_PLATANO,
-                  COLORES.MORADO, COLORES.NARANJA, COLORES.ROSADO,
-                  COLORES.TURQUESA, COLORES.ROJO_CLARO, COLORES.GRIS_OSCURO
-                ].map(color => (
-                  <TouchableOpacity
-                    key={color}
-                    style={[
-                      styles.opcionColor,
-                      { backgroundColor: color },
-                      nuevoEvento.color === color && styles.opcionColorSeleccionada
-                    ]}
-                    onPress={() => setNuevoEvento({ ...nuevoEvento, color })}
-                  />
+                {[COLORES.EXITO, COLORES.AZUL_CIELO, COLORES.AMARILLO_PLATANO, COLORES.MORADO, COLORES.NARANJA, COLORES.ROSADO, COLORES.TURQUESA, COLORES.ROJO_CLARO, COLORES.GRIS_OSCURO].map(color => (
+                  <TouchableOpacity key={color} style={[styles.opcionColor, { backgroundColor: color }, nuevoEvento.color === color && styles.opcionColorSeleccionada]} onPress={() => setNuevoEvento({ ...nuevoEvento, color })} />
                 ))}
               </View>
 
               <View style={styles.filaInputs}>
                 <View style={styles.inputMitad}>
                   <Text style={styles.modalLabel}>Fecha inicio</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={nuevoEvento.fecha_inicio}
-                    editable={false}
-                    placeholder="Seleccionar fecha"
-                    placeholderTextColor={COLORES.GRIS_MEDIO}
-                  />
+                  <TextInput style={styles.input} value={nuevoEvento.fecha_inicio} editable={false} />
                 </View>
-
                 <View style={styles.inputMitad}>
                   <Text style={styles.modalLabel}>Fecha fin</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={nuevoEvento.fecha_fin}
-                    onChangeText={(text) => setNuevoEvento({ ...nuevoEvento, fecha_fin: text })}
-                    placeholder="Misma que inicio"
-                    placeholderTextColor={COLORES.GRIS_MEDIO}
-                  />
+                  <TextInput style={styles.input} value={nuevoEvento.fecha_fin} onChangeText={text => setNuevoEvento({ ...nuevoEvento, fecha_fin: text })} placeholder="Misma que inicio" />
                 </View>
               </View>
 
@@ -982,49 +714,22 @@ export default function VistaCalendario({ navigation, route }) {
                 <View style={styles.inputMitad}>
                   <Text style={styles.modalLabel}>Hora</Text>
                   <View style={styles.selectorHora}>
-                    <Text style={styles.textoHoraSeleccionada}>
-                      {nuevoEvento.hora}
-                    </Text>
+                    <Text style={styles.textoHoraSeleccionada}>{nuevoEvento.hora}</Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horasContainer}>
-                      {horasDisponibles.map(hora => (
-                        <TouchableOpacity
-                          key={hora}
-                          style={[
-                            styles.opcionHora,
-                            nuevoEvento.hora === hora && styles.opcionHoraSeleccionada
-                          ]}
-                          onPress={() => setNuevoEvento({ ...nuevoEvento, hora })}
-                        >
-                          <Text style={[
-                            styles.textoOpcionHora,
-                            nuevoEvento.hora === hora && styles.textoOpcionHoraSeleccionada
-                          ]}>
-                            {hora}
-                          </Text>
+                      {horasDisponibles.map(h => (
+                        <TouchableOpacity key={h} style={[styles.opcionHora, nuevoEvento.hora === h && styles.opcionHoraSeleccionada]} onPress={() => setNuevoEvento({ ...nuevoEvento, hora: h })}>
+                          <Text style={[styles.textoOpcionHora, nuevoEvento.hora === h && styles.textoOpcionHoraSeleccionada]}>{h}</Text>
                         </TouchableOpacity>
                       ))}
                     </ScrollView>
                   </View>
                 </View>
-
                 <View style={styles.inputMitad}>
-                  <Text style={styles.modalLabel}>Duración (horas)</Text>
+                  <Text style={styles.modalLabel}>Duración (h)</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.duracionesContainer}>
-                    {duracionesDisponibles.map(duracion => (
-                      <TouchableOpacity
-                        key={duracion}
-                        style={[
-                          styles.opcionDuracion,
-                          nuevoEvento.duracion === duracion && styles.opcionDuracionSeleccionada
-                        ]}
-                        onPress={() => setNuevoEvento({ ...nuevoEvento, duracion })}
-                      >
-                        <Text style={[
-                          styles.textoOpcionDuracion,
-                          nuevoEvento.duracion === duracion && styles.textoOpcionDuracionSeleccionada
-                        ]}>
-                          {duracion}h
-                        </Text>
+                    {duracionesDisponibles.map(d => (
+                      <TouchableOpacity key={d} style={[styles.opcionDuracion, nuevoEvento.duracion === d && styles.opcionDuracionSeleccionada]} onPress={() => setNuevoEvento({ ...nuevoEvento, duracion: d })}>
+                        <Text style={[styles.textoOpcionDuracion, nuevoEvento.duracion === d && styles.textoOpcionDuracionSeleccionada]}>{d}h</Text>
                       </TouchableOpacity>
                     ))}
                   </ScrollView>
@@ -1032,148 +737,145 @@ export default function VistaCalendario({ navigation, route }) {
               </View>
 
               <Text style={styles.modalLabel}>Familiar responsable</Text>
-              {familiares.length > 0 ? (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.familiaresContainer}>
-                  <TouchableOpacity
-                    style={[
-                      styles.opcionFamiliar,
-                      !nuevoEvento.familiar_id && styles.opcionFamiliarSeleccionada
-                    ]}
-                    onPress={() => setNuevoEvento({ ...nuevoEvento, familiar_id: null })}
-                  >
-                    <Text style={{ fontSize: 18, marginRight: 4 }}>👤</Text>
-                    <Text style={styles.textoOpcionFamiliar}>Ninguno</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.familiaresContainer}>
+                <TouchableOpacity style={[styles.opcionFamiliar, !nuevoEvento.familiar_id && styles.opcionFamiliarSeleccionada]} onPress={() => setNuevoEvento({ ...nuevoEvento, familiar_id: null })}>
+                  <Text style={{ fontSize: 18, marginRight: 4 }}>👤</Text>
+                  <Text style={styles.textoOpcionFamiliar}>Ninguno</Text>
+                </TouchableOpacity>
+                {familiares.map(f => (
+                  <TouchableOpacity key={f.id} style={[styles.opcionFamiliar, { borderColor: f.color }, nuevoEvento.familiar_id === f.id && { backgroundColor: f.color + '20', borderWidth: 2 }]} onPress={() => setNuevoEvento({ ...nuevoEvento, familiar_id: f.id })}>
+                    <View style={[styles.avatarFamiliar, { backgroundColor: f.color }]}>
+                      <Text style={styles.textoAvatarFamiliar}>{f.nombre.charAt(0).toUpperCase()}</Text>
+                    </View>
+                    <Text style={styles.textoOpcionFamiliar}>{f.nombre.split(' ')[0]}</Text>
                   </TouchableOpacity>
-
-                  {familiares.map(familiar => (
-                    <TouchableOpacity
-                      key={familiar.id}
-                      style={[
-                        styles.opcionFamiliar,
-                        { borderColor: familiar.color },
-                        nuevoEvento.familiar_id === familiar.id && {
-                          backgroundColor: familiar.color + '20',
-                          borderWidth: 2
-                        }
-                      ]}
-                      onPress={() => setNuevoEvento({ ...nuevoEvento, familiar_id: familiar.id })}
-                    >
-                      <View style={[styles.avatarFamiliar, { backgroundColor: familiar.color }]}>
-                        <Text style={styles.textoAvatarFamiliar}>
-                          {familiar.nombre.charAt(0).toUpperCase()}
-                        </Text>
-                      </View>
-                      <Text style={styles.textoOpcionFamiliar}>{familiar.nombre.split(' ')[0]}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              ) : (
-                <Text style={styles.textoNoFamiliares}>No hay familiares registrados</Text>
-              )}
+                ))}
+              </ScrollView>
 
               <Text style={styles.modalLabel}>Ubicación</Text>
-              <TextInput
-                style={styles.input}
-                value={nuevoEvento.ubicacion}
-                onChangeText={(text) => setNuevoEvento({ ...nuevoEvento, ubicacion: text })}
-                placeholder="Ej: Hospital Central, Casa, etc."
-                placeholderTextColor={COLORES.GRIS_MEDIO}
-              />
+              <TextInput style={styles.input} value={nuevoEvento.ubicacion} onChangeText={text => setNuevoEvento({ ...nuevoEvento, ubicacion: text })} placeholder="Ej: Hospital Central" />
 
               <Text style={styles.modalLabel}>Descripción</Text>
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                value={nuevoEvento.descripcion}
-                onChangeText={(text) => setNuevoEvento({ ...nuevoEvento, descripcion: text })}
-                multiline
-                numberOfLines={3}
-                placeholder="Detalles adicionales del evento..."
-                placeholderTextColor={COLORES.GRIS_MEDIO}
-              />
+              <TextInput style={[styles.input, styles.textArea]} value={nuevoEvento.descripcion} onChangeText={text => setNuevoEvento({ ...nuevoEvento, descripcion: text })} multiline numberOfLines={3} placeholder="Detalles adicionales..." />
 
               <View style={styles.filaSwitch}>
                 <Text style={styles.modalLabel}>Recordatorio</Text>
-                <TouchableOpacity
-                  style={[
-                    styles.switch,
-                    nuevoEvento.recordatorio && styles.switchActivo
-                  ]}
-                  onPress={() => setNuevoEvento({ ...nuevoEvento, recordatorio: !nuevoEvento.recordatorio })}
-                >
-                  <View style={[
-                    styles.switchPunto,
-                    nuevoEvento.recordatorio && styles.switchPuntoActivo
-                  ]} />
+                <TouchableOpacity style={[styles.switch, nuevoEvento.recordatorio && styles.switchActivo]} onPress={() => setNuevoEvento({ ...nuevoEvento, recordatorio: !nuevoEvento.recordatorio })}>
+                  <View style={[styles.switchPunto, nuevoEvento.recordatorio && styles.switchPuntoActivo]} />
                 </TouchableOpacity>
               </View>
             </ScrollView>
-
             <View style={styles.modalBotones}>
-              <TouchableOpacity
-                style={styles.botonModalCancelar}
-                onPress={() => setModalVisible(false)}
-              >
+              <TouchableOpacity style={styles.botonModalCancelar} onPress={() => setModalVisible(false)}>
                 <Text style={styles.textoBotonModalCancelar}>Cancelar</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.botonModalGuardar}
-                onPress={guardarEvento}
-              >
-                <Text style={styles.textoBotonModalGuardar}>Guardar Evento</Text>
+              <TouchableOpacity style={styles.botonModalGuardar} onPress={guardarEvento}>
+                <Text style={styles.textoBotonModalGuardar}>Guardar</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
 
-      {/* Modal para editar evento */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={modalEditarVisible}
-        onRequestClose={() => {
-          setModalEditarVisible(false);
-          setEventoEditando(null);
-        }}
-      >
+      {/* Modal para editar evento (similar al de crear, pero con título diferente) */}
+      <Modal animationType="slide" transparent={true} visible={modalEditarVisible} onRequestClose={() => { setModalEditarVisible(false); setEventoEditando(null); }}>
         <View style={styles.modalFondo}>
           <View style={styles.modalContenido}>
             <View style={styles.modalEncabezado}>
               <Text style={styles.modalTitulo}>Editar Evento</Text>
-
-              <TouchableOpacity onPress={() => {
-                setModalEditarVisible(false);
-                setEventoEditando(null);
-              }}>
+              <TouchableOpacity onPress={() => { setModalEditarVisible(false); setEventoEditando(null); }}>
                 <Text style={{ fontSize: 20 }}>❌</Text>
               </TouchableOpacity>
             </View>
-
             <ScrollView style={styles.modalFormulario}>
-              {/* TODO: Copia aquí TODO el contenido del formulario 
-                  del modal de crear evento, pero cambia:
-                  1. El título a "Editar Evento"
-                  2. El botón de guardar que llame a guardarEventoEditado()
-              */}
+              {/* Repetir el mismo formulario que el de crear, pero usando los datos de nuevoEvento */}
+              <Text style={styles.modalLabel}>Título *</Text>
+              <TextInput style={styles.input} value={nuevoEvento.titulo} onChangeText={text => setNuevoEvento({ ...nuevoEvento, titulo: text })} placeholder="Título" />
+              <Text style={styles.modalLabel}>Tipo</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tiposContainer}>
+                {tiposEventos.map(tipo => (
+                  <TouchableOpacity key={tipo.id} style={[styles.opcionTipo, { backgroundColor: nuevoEvento.tipo === tipo.id ? tipo.color + '40' : COLORES.GRIS_CLARO, borderColor: tipo.color }]} onPress={() => setNuevoEvento({ ...nuevoEvento, tipo: tipo.id, color: tipo.color })}>
+                    <Text style={{ fontSize: 20, marginRight: 6 }}>{tipo.icono}</Text>
+                    <Text style={[styles.textoOpcionTipo, { color: nuevoEvento.tipo === tipo.id ? tipo.color : COLORES.GRIS_OSCURO }]}>{tipo.nombre}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              <Text style={styles.modalLabel}>Color</Text>
+              <View style={styles.coloresContainer}>
+                {[COLORES.EXITO, COLORES.AZUL_CIELO, COLORES.AMARILLO_PLATANO, COLORES.MORADO, COLORES.NARANJA, COLORES.ROSADO, COLORES.TURQUESA, COLORES.ROJO_CLARO, COLORES.GRIS_OSCURO].map(color => (
+                  <TouchableOpacity key={color} style={[styles.opcionColor, { backgroundColor: color }, nuevoEvento.color === color && styles.opcionColorSeleccionada]} onPress={() => setNuevoEvento({ ...nuevoEvento, color })} />
+                ))}
+              </View>
+              <View style={styles.filaInputs}>
+                <View style={styles.inputMitad}>
+                  <Text style={styles.modalLabel}>Fecha inicio</Text>
+                  <TextInput style={styles.input} value={nuevoEvento.fecha_inicio} editable={false} />
+                </View>
+                <View style={styles.inputMitad}>
+                  <Text style={styles.modalLabel}>Fecha fin</Text>
+                  <TextInput style={styles.input} value={nuevoEvento.fecha_fin} onChangeText={text => setNuevoEvento({ ...nuevoEvento, fecha_fin: text })} placeholder="Misma que inicio" />
+                </View>
+              </View>
+              <View style={styles.filaInputs}>
+                <View style={styles.inputMitad}>
+                  <Text style={styles.modalLabel}>Hora</Text>
+                  <View style={styles.selectorHora}>
+                    <Text style={styles.textoHoraSeleccionada}>{nuevoEvento.hora}</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horasContainer}>
+                      {horasDisponibles.map(h => (
+                        <TouchableOpacity key={h} style={[styles.opcionHora, nuevoEvento.hora === h && styles.opcionHoraSeleccionada]} onPress={() => setNuevoEvento({ ...nuevoEvento, hora: h })}>
+                          <Text style={[styles.textoOpcionHora, nuevoEvento.hora === h && styles.textoOpcionHoraSeleccionada]}>{h}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                </View>
+                <View style={styles.inputMitad}>
+                  <Text style={styles.modalLabel}>Duración (h)</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.duracionesContainer}>
+                    {duracionesDisponibles.map(d => (
+                      <TouchableOpacity key={d} style={[styles.opcionDuracion, nuevoEvento.duracion === d && styles.opcionDuracionSeleccionada]} onPress={() => setNuevoEvento({ ...nuevoEvento, duracion: d })}>
+                        <Text style={[styles.textoOpcionDuracion, nuevoEvento.duracion === d && styles.textoOpcionDuracionSeleccionada]}>{d}h</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              </View>
+              <Text style={styles.modalLabel}>Familiar responsable</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.familiaresContainer}>
+                <TouchableOpacity style={[styles.opcionFamiliar, !nuevoEvento.familiar_id && styles.opcionFamiliarSeleccionada]} onPress={() => setNuevoEvento({ ...nuevoEvento, familiar_id: null })}>
+                  <Text style={{ fontSize: 18, marginRight: 4 }}>👤</Text>
+                  <Text style={styles.textoOpcionFamiliar}>Ninguno</Text>
+                </TouchableOpacity>
+                {familiares.map(f => (
+                  <TouchableOpacity key={f.id} style={[styles.opcionFamiliar, { borderColor: f.color }, nuevoEvento.familiar_id === f.id && { backgroundColor: f.color + '20', borderWidth: 2 }]} onPress={() => setNuevoEvento({ ...nuevoEvento, familiar_id: f.id })}>
+                    <View style={[styles.avatarFamiliar, { backgroundColor: f.color }]}>
+                      <Text style={styles.textoAvatarFamiliar}>{f.nombre.charAt(0).toUpperCase()}</Text>
+                    </View>
+                    <Text style={styles.textoOpcionFamiliar}>{f.nombre.split(' ')[0]}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              <Text style={styles.modalLabel}>Ubicación</Text>
+              <TextInput style={styles.input} value={nuevoEvento.ubicacion} onChangeText={text => setNuevoEvento({ ...nuevoEvento, ubicacion: text })} placeholder="Ubicación" />
+              <Text style={styles.modalLabel}>Descripción</Text>
+              <TextInput style={[styles.input, styles.textArea]} value={nuevoEvento.descripcion} onChangeText={text => setNuevoEvento({ ...nuevoEvento, descripcion: text })} multiline numberOfLines={3} placeholder="Detalles" />
+              <View style={styles.filaSwitch}>
+                <Text style={styles.modalLabel}>Recordatorio</Text>
+                <TouchableOpacity style={[styles.switch, nuevoEvento.recordatorio && styles.switchActivo]} onPress={() => setNuevoEvento({ ...nuevoEvento, recordatorio: !nuevoEvento.recordatorio })}>
+                  <View style={[styles.switchPunto, nuevoEvento.recordatorio && styles.switchPuntoActivo]} />
+                </TouchableOpacity>
+              </View>
             </ScrollView>
-
             <View style={styles.modalBotones}>
-              <TouchableOpacity
-                style={styles.botonModalCancelar}
-                onPress={() => {
-                  setModalEditarVisible(false);
-                  setEventoEditando(null);
-                }}
-              >
+              <TouchableOpacity style={styles.botonModalCancelar} onPress={() => { setModalEditarVisible(false); setEventoEditando(null); }}>
                 <Text style={styles.textoBotonModalCancelar}>Cancelar</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.botonModalGuardar}
-                onPress={guardarEventoEditado}
-              >
-                <Text style={styles.textoBotonModalGuardar}>Guardar Cambios</Text>
+              <TouchableOpacity style={[styles.botonModalAccion, { backgroundColor: COLORES.ERROR }]} onPress={() => eliminarEvento(eventoEditando)}>
+                <Text style={styles.textoBotonModalAccion}>Eliminar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.botonModalAccion, { backgroundColor: COLORES.EXITO }]} onPress={guardarEventoEditado}>
+                <Text style={styles.textoBotonModalAccion}>Actualizar</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1181,85 +883,46 @@ export default function VistaCalendario({ navigation, route }) {
       </Modal>
 
       {/* Modal para ver eventos del día */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={modalEventoVisible}
-        onRequestClose={() => setModalEventoVisible(false)}
-      >
+      <Modal animationType="slide" transparent={true} visible={modalEventoVisible} onRequestClose={() => setModalEventoVisible(false)}>
         <View style={styles.modalFondo}>
           <View style={styles.modalContenido}>
             <View style={styles.modalEncabezado}>
-              <Text style={styles.modalTitulo}>
-                Eventos para {diaSeleccionado ? formatearFecha(diaSeleccionado) : 'hoy'}
-              </Text>
-
+              <Text style={styles.modalTitulo}>Eventos del día</Text>
               <TouchableOpacity onPress={() => setModalEventoVisible(false)}>
                 <Text style={{ fontSize: 20 }}>❌</Text>
               </TouchableOpacity>
             </View>
-
             <ScrollView style={styles.listaEventosDia}>
               {diaSeleccionado && obtenerEventosParaFecha(diaSeleccionado).length > 0 ? (
                 obtenerEventosParaFecha(diaSeleccionado).map(evento => (
-                  <TouchableOpacity
-                    key={evento.id}
-                    style={[
-                      styles.eventoDia,
-                      { borderLeftColor: evento.color_evento || obtenerColorTipoEvento(evento.tipo_evento) }
-                    ]}
-                    onPress={() => {
-                      setModalEventoVisible(false);
-                      // Navegar a detalles del evento
-                      navigation.navigate('DetalleEvento', { eventoId: evento.id });
-                    }}
-                  >
+                  <TouchableOpacity key={evento.id} style={[styles.eventoDia, { borderLeftColor: evento.color_evento || obtenerColorTipoEvento(evento.tipo_evento) }]} onPress={() => {
+                    setModalEventoVisible(false);
+                    editarEvento(evento.id);
+                  }}>
                     <View style={styles.encabezadoEventoDia}>
-                      <Text style={{ fontSize: 20, marginRight: 8 }}>
-                        {obtenerIconoTipoEvento(evento.tipo_evento)}
-                      </Text>
+                      <Text style={{ fontSize: 20, marginRight: 8 }}>{obtenerIconoTipoEvento(evento.tipo_evento)}</Text>
                       <Text style={styles.tituloEventoDia}>{evento.titulo}</Text>
-
-                      <TouchableOpacity
-                        style={styles.botonEliminarEvento}
-                        onPress={() => eliminarEvento(evento.id)}
-                      >
+                      <TouchableOpacity style={styles.botonEliminarEvento} onPress={() => eliminarEvento(evento.id)}>
                         <Text style={{ fontSize: 16 }}>🗑️</Text>
                       </TouchableOpacity>
                     </View>
-
-                    <Text style={styles.detalleEventoDia}>
-                      {evento.hora_inicio && `${formatearHora(evento.hora_inicio)} • `}
-                      {obtenerNombreTipoEvento(evento.tipo_evento)}
-                    </Text>
-
-                    {evento.descripcion && (
-                      <Text style={styles.descripcionEventoDia}>{evento.descripcion}</Text>
-                    )}
-
-                    {evento.ubicacion && (
-                      <Text style={styles.ubicacionEventoDia}>📍 {evento.ubicacion}</Text>
-                    )}
+                    <Text style={styles.detalleEventoDia}>{evento.hora_inicio && `${formatearHora(evento.hora_inicio)} • `}{obtenerNombreTipoEvento(evento.tipo_evento)}</Text>
+                    {evento.descripcion && <Text style={styles.descripcionEventoDia}>{evento.descripcion}</Text>}
+                    {evento.ubicacion && <Text style={styles.ubicacionEventoDia}>📍 {evento.ubicacion}</Text>}
                   </TouchableOpacity>
                 ))
               ) : (
                 <View style={styles.sinEventosDia}>
                   <Text style={{ fontSize: 60, marginBottom: 10 }}>📅</Text>
                   <Text style={styles.textoSinEventosDia}>No hay eventos para este día</Text>
-                  <Text style={styles.subtextoSinEventosDia}>
-                    Toca "Agregar Evento" para crear uno nuevo
-                  </Text>
+                  <Text style={styles.subtextoSinEventosDia}>Toca "Agregar Evento" para crear uno</Text>
                 </View>
               )}
             </ScrollView>
-
-            <TouchableOpacity
-              style={styles.botonAgregarEventoDia}
-              onPress={() => {
-                setModalEventoVisible(false);
-                setModalVisible(true);
-              }}
-            >
+            <TouchableOpacity style={styles.botonAgregarEventoDia} onPress={() => {
+              setModalEventoVisible(false);
+              setModalVisible(true);
+            }}>
               <Text style={{ fontSize: 20, marginRight: 6 }}>➕</Text>
               <Text style={styles.textoBotonAgregarEventoDia}>Agregar Nuevo Evento</Text>
             </TouchableOpacity>
