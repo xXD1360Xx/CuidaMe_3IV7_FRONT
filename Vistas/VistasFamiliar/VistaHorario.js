@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,12 +11,23 @@ import {
   Modal,
   TextInput,
   Alert,
-  Dimensions
+  Dimensions,
+  Animated,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons as Icon } from '@expo/vector-icons';
 import { servicioAPI } from '../../servicios/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+
+// Polyfill findNodeHandle para web
+if (Platform.OS === 'web') {
+  const RN = require('react-native');
+  if (!RN.findNodeHandle) {
+    global.findNodeHandle = (ref) => ref?._nativeTag || ref;
+  }
+}
 
 const COLORES = {
   AZUL_CIELO: '#87CEEB',
@@ -37,12 +48,34 @@ const COLORES = {
   ROSADO: '#F48FB1',
   TURQUESA: '#4DB6AC',
   INDIGO: '#7986CB',
-  LIMA: '#D4E157'
+  LIMA: '#D4E157',
 };
 
-const { width } = Dimensions.get('window');
-const HORA_HEIGHT = 60;
+const { width, height } = Dimensions.get('window');
+const HORA_HEIGHT = 55;
 const DIA_WIDTH = (width - 60) / 7;
+
+// Días: LUNES primero
+const DIAS_SEMANA = [
+  { id: 1, nombre: 'Lunes', corto: 'Lun' },
+  { id: 2, nombre: 'Martes', corto: 'Mar' },
+  { id: 3, nombre: 'Miércoles', corto: 'Mié' },
+  { id: 4, nombre: 'Jueves', corto: 'Jue' },
+  { id: 5, nombre: 'Viernes', corto: 'Vie' },
+  { id: 6, nombre: 'Sábado', corto: 'Sáb' },
+  { id: 0, nombre: 'Domingo', corto: 'Dom' },
+];
+
+const ACTIVIDADES_PREDEFINIDAS_DEMO = [
+  { id: 'predef_banarse', nombre: 'Bañarse', color: COLORES.TURQUESA, emoji: '🚿' },
+  { id: 'predef_comer', nombre: 'Comer', color: COLORES.NARANJA, emoji: '🍽️' },
+  { id: 'predef_caminar', nombre: 'Caminar', color: COLORES.VERDE_CLARO, emoji: '🚶' },
+  { id: 'predef_ejercicios', nombre: 'Ejercicios', color: COLORES.ROJO_CLARO, emoji: '💪' },
+  { id: 'predef_descanso', nombre: 'Descanso', color: COLORES.MORADO, emoji: '🛌' },
+  { id: 'predef_lectura', nombre: 'Lectura', color: COLORES.INDIGO, emoji: '📚' },
+  { id: 'predef_visita', nombre: 'Visita Familiar', color: COLORES.ROSADO, emoji: '👪' },
+  { id: 'predef_medicina', nombre: 'Tomar Medicina', color: COLORES.EXITO, emoji: '💊' },
+];
 
 export default function VistaHorario({ navigation }) {
   // ========== ESTADOS ==========
@@ -50,9 +83,9 @@ export default function VistaHorario({ navigation }) {
   const [horario, setHorario] = useState([]);
   const [medicinas, setMedicinas] = useState([]);
   const [eventos, setEventos] = useState([]);
-  const [actividadesFijas, setActividadesFijas] = useState([]);
+  const [actividadesBase, setActividadesBase] = useState(ACTIVIDADES_PREDEFINIDAS_DEMO);
+  const [actividadesOcurrencias, setActividadesOcurrencias] = useState([]);
 
-  // Configuración con valores POR DEFECTO y BLINDADA
   const [configuracion, setConfiguracion] = useState({
     horaInicio: 8,
     horaFin: 22,
@@ -61,86 +94,74 @@ export default function VistaHorario({ navigation }) {
     mostrarFines: true,
     mostrarMedicinas: true,
     mostrarEventos: true,
-    mostrarActividades: true
+    mostrarActividades: true,
   });
 
   const [cargando, setCargando] = useState(true);
   const [refrescando, setRefrescando] = useState(false);
-  const [modalVisible, setModalVisible] = useState(false);
   const [modalConfigVisible, setModalConfigVisible] = useState(false);
   const [usuarioRol, setUsuarioRol] = useState('');
   const [semanaActual, setSemanaActual] = useState(new Date());
 
+  // Estados de selección
+  const [modoSeleccion, setModoSeleccion] = useState(false);
   const [actividadSeleccionada, setActividadSeleccionada] = useState(null);
-  const [espacioSeleccionado, setEspacioSeleccionado] = useState({ dia: null, hora: null });
+  const [celdasSeleccionadas, setCeldasSeleccionadas] = useState([]);
 
-  const [nuevaActividad, setNuevaActividad] = useState({
+  // Estados para modales
+  const [modalBaseVisible, setModalBaseVisible] = useState(false);
+  const [actividadBaseEditando, setActividadBaseEditando] = useState(null);
+  const [nuevaActividadBase, setNuevaActividadBase] = useState({
     nombre: '',
-    tipo: 'actividad_diaria',
+    tipo: 'rutinaria',
     color: COLORES.AZUL_CIELO,
+    descripcion: '',
+  });
+
+  // Modal para editar ocurrencia (clic en celda)
+  const [modalOcurrenciaVisible, setModalOcurrenciaVisible] = useState(false);
+  const [ocurrenciaEditando, setOcurrenciaEditando] = useState(null);
+  const [nuevaOcurrencia, setNuevaOcurrencia] = useState({
+    actividad_base_id: null,
     dias: [],
     hora_inicio: '08:00',
     hora_fin: '09:00',
     duracion_minutos: 60,
-    descripcion: '',
-    recordatorio: true,
-    esRecurrente: true,
+    esRecurrente: true, // Por defecto recurrente
     fecha_inicio: '',
-    fecha_fin: null
+    fecha_fin: null,
   });
 
-  const ACTIVIDADES_PREDEFINIDAS = [
-    { id: 'banarse', nombre: 'Bañarse', color: COLORES.TURQUESA, emoji: '🚿', duracion: 30 },
-    { id: 'comer', nombre: 'Comer', color: COLORES.NARANJA, emoji: '🍽️', duracion: 45 },
-    { id: 'caminar', nombre: 'Caminar', color: COLORES.VERDE_CLARO, emoji: '🚶', duracion: 30 },
-    { id: 'ejercicios', nombre: 'Ejercicios', color: COLORES.ROJO_CLARO, emoji: '💪', duracion: 30 },
-    { id: 'descanso', nombre: 'Descanso', color: COLORES.MORADO, emoji: '🛌', duracion: 60 },
-    { id: 'lectura', nombre: 'Lectura', color: COLORES.INDIGO, emoji: '📚', duracion: 45 },
-    { id: 'visita', nombre: 'Visita Familiar', color: COLORES.ROSADO, emoji: '👪', duracion: 60 },
-    { id: 'medicina', nombre: 'Tomar Medicina', color: COLORES.EXITO, emoji: '💊', duracion: 15 }
-  ];
+  // Notificación
+  const [notificacion, setNotificacion] = useState({ visible: false, mensaje: '' });
+  const animNotificacion = useRef(new Animated.Value(0)).current;
+  const timeoutNotificacion = useRef(null);
 
-  const TIPOS_ACTIVIDADES = [
-    { id: 'actividad_diaria', nombre: 'Actividad Diaria', emoji: '📅' },
-    { id: 'medicina', nombre: 'Medicina', emoji: '💊' },
-    { id: 'cita_medica', nombre: 'Cita Médica', emoji: '🩺' },
-    { id: 'evento', nombre: 'Evento', emoji: '🎉' },
-    { id: 'terapia', nombre: 'Terapia', emoji: '🧠' },
-    { id: 'recreacion', nombre: 'Recreación', emoji: '🎮' },
-    { id: 'personal', nombre: 'Cuidado Personal', emoji: '👤' }
-  ];
+  // ========== FUNCIONES DE FECHA ==========
+  const obtenerInicioSemana = (fecha) => {
+    const inicio = new Date(fecha);
+    const dia = inicio.getDay();
+    const offset = dia === 0 ? 6 : dia - 1;
+    inicio.setDate(inicio.getDate() - offset);
+    inicio.setHours(0, 0, 0, 0);
+    return inicio;
+  };
 
-  const DIAS_SEMANA = [
-    { id: 0, nombre: 'Domingo', corto: 'Dom' },
-    { id: 1, nombre: 'Lunes', corto: 'Lun' },
-    { id: 2, nombre: 'Martes', corto: 'Mar' },
-    { id: 3, nombre: 'Miércoles', corto: 'Mié' },
-    { id: 4, nombre: 'Jueves', corto: 'Jue' },
-    { id: 5, nombre: 'Viernes', corto: 'Vie' },
-    { id: 6, nombre: 'Sábado', corto: 'Sáb' }
-  ];
+  const obtenerFinSemana = (fecha) => {
+    const fin = obtenerInicioSemana(fecha);
+    fin.setDate(fin.getDate() + 6);
+    fin.setHours(23, 59, 59, 999);
+    return fin;
+  };
 
-  // ========== CARGA INICIAL ÚNICA ==========
-  useEffect(() => {
-    const init = async () => {
-      try {
-        const id = await servicioAPI.obtenerUsuarioActualId();
-        setUsuarioId(id);
-        if (id) {
-          await cargarDatosIniciales(id);
-        } else {
-          Alert.alert('Error', 'No se pudo identificar al usuario');
-          setCargando(false);
-        }
-      } catch (error) {
-        console.error('Error en init:', error);
-        setCargando(false);
-      }
-    };
-    init();
-  }, []);
+  const obtenerFechaDelDia = (diaId) => {
+    const fecha = obtenerInicioSemana(semanaActual);
+    const offset = diaId === 0 ? 6 : diaId - 1;
+    fecha.setDate(fecha.getDate() + offset);
+    return fecha;
+  };
 
-  // ========== FUNCIONES DE CARGA ==========
+  // ========== CARGA DE DATOS ==========
   const cargarDatosIniciales = async (id) => {
     try {
       setCargando(true);
@@ -149,14 +170,17 @@ export default function VistaHorario({ navigation }) {
         const usuario = JSON.parse(usuarioData);
         setUsuarioRol(usuario.rol || '');
       }
-      await cargarConfiguracion(id);
-      await cargarMedicinas(id);
-      await cargarEventosSemana(id);
-      await cargarActividadesFijas(id);
+      await Promise.all([
+        cargarConfiguracion(id),
+        cargarMedicinas(id),
+        cargarEventosSemana(id),
+        cargarActividadesBase(id),
+        cargarOcurrenciasSemana(id),
+      ]);
       generarHorario();
     } catch (error) {
-      console.error('Error cargando datos iniciales:', error);
-      Alert.alert('Error', 'No se pudieron cargar los datos del horario');
+      console.error('Error cargando datos:', error);
+      Alert.alert('Error', 'No se pudieron cargar los datos');
     } finally {
       setCargando(false);
     }
@@ -164,67 +188,95 @@ export default function VistaHorario({ navigation }) {
 
   const cargarConfiguracion = async (id) => {
     try {
-      const response = await servicioAPI.obtenerConfiguracionHorario(id);
-      if (response.exito && response.configuracion) {
-        setConfiguracion(prev => ({
-          ...prev,
-          ...response.configuracion
-        }));
+      const res = await servicioAPI.obtenerConfiguracionHorario(id);
+      if (res.exito && res.configuracion) {
+        setConfiguracion((prev) => ({ ...prev, ...res.configuracion }));
       }
     } catch (error) {
-      console.error('Error cargando configuración:', error);
+      console.warn('Configuración no disponible:', error);
     }
   };
 
   const cargarMedicinas = async (id) => {
     try {
-      const response = await servicioAPI.obtenerMedicinasHoy(id);
-      if (response.exito) {
-        setMedicinas(response.medicinas || []);
-      }
+      const res = await servicioAPI.obtenerMedicinasHoy(id);
+      if (res.exito) setMedicinas(res.medicinas || []);
     } catch (error) {
-      console.error('Error cargando medicinas:', error);
+      console.warn('Medicinas no disponibles:', error);
     }
   };
 
   const cargarEventosSemana = async (id) => {
     try {
-      const inicioSemana = obtenerInicioSemana(semanaActual);
-      const finSemana = obtenerFinSemana(semanaActual);
-      const response = await servicioAPI.obtenerEventosPorRango(
+      const inicio = obtenerInicioSemana(semanaActual);
+      const fin = obtenerFinSemana(semanaActual);
+      const res = await servicioAPI.obtenerEventosPorRango(
         id,
-        inicioSemana.toISOString().split('T')[0],
-        finSemana.toISOString().split('T')[0]
+        inicio.toISOString().split('T')[0],
+        fin.toISOString().split('T')[0]
       );
-      if (response.exito) {
-        setEventos(response.eventos || []);
-      }
+      if (res.exito) setEventos(res.eventos || []);
     } catch (error) {
-      console.error('Error cargando eventos:', error);
+      console.warn('Eventos no disponibles:', error);
     }
   };
 
-  const cargarActividadesFijas = async (id) => {
+  const cargarActividadesBase = async (id) => {
     try {
-      const response = await servicioAPI.obtenerActividadesFijas(id);
-      if (response.exito) {
-        setActividadesFijas(response.actividades || []);
+      const res = await servicioAPI.obtenerActividadesBase(id);
+      let base = [...ACTIVIDADES_PREDEFINIDAS_DEMO];
+      if (res.exito && res.actividades) {
+        const creadas = res.actividades.filter(
+          (act) => !base.some((p) => p.nombre === act.nombre)
+        );
+        base = [...base, ...creadas];
       }
+      setActividadesBase(base);
     } catch (error) {
-      console.error('Error cargando actividades fijas:', error);
+      console.warn('Usando actividades demo:', error);
+      setActividadesBase(ACTIVIDADES_PREDEFINIDAS_DEMO);
     }
   };
 
-  // ========== RECARGA MANUAL ==========
+  const cargarOcurrenciasSemana = async (id) => {
+    try {
+      const inicio = obtenerInicioSemana(semanaActual);
+      const fin = obtenerFinSemana(semanaActual);
+      const res = await servicioAPI.obtenerOcurrenciasPorRango(
+        id,
+        inicio.toISOString().split('T')[0],
+        fin.toISOString().split('T')[0]
+      );
+      if (res && res.exito && Array.isArray(res.ocurrencias)) {
+        setActividadesOcurrencias(res.ocurrencias);
+      } else {
+        console.warn('⚠️ No se obtuvieron ocurrencias, usando vacío');
+        setActividadesOcurrencias([]);
+      }
+    } catch (error) {
+      console.warn('⚠️ Error cargando ocurrencias:', error);
+      setActividadesOcurrencias([]);
+    }
+  };
+
   const recargarSemana = async () => {
     if (!usuarioId) return;
     setRefrescando(true);
-    await cargarEventosSemana(usuarioId);
-    await cargarActividadesFijas(usuarioId);
-    generarHorario();
-    setRefrescando(false);
+    try {
+      // Cargar en paralelo pero esperar a que terminen
+      await Promise.all([
+        cargarEventosSemana(usuarioId),
+        cargarOcurrenciasSemana(usuarioId),
+        cargarActividadesBase(usuarioId),
+      ]);
+      // Después de cargar, regenerar horario
+      generarHorario();
+    } catch (error) {
+      console.error('Error recargando semana:', error);
+    } finally {
+      setRefrescando(false);
+    }
   };
-
   // ========== GENERAR HORARIO ==========
   const generarHorario = () => {
     const inicio = configuracion.horaInicio || 8;
@@ -233,38 +285,36 @@ export default function VistaHorario({ navigation }) {
 
     for (let hora = inicio; hora <= fin; hora++) {
       const fila = { hora, label: formatearHora(hora), dias: {} };
-      DIAS_SEMANA.forEach(dia => {
+      DIAS_SEMANA.forEach((dia) => {
         fila.dias[dia.id] = { dia: dia.id, hora, actividades: [] };
       });
       horarioGenerado.push(fila);
     }
 
-    // ---- Medicinas ----
+    // Medicinas
     if (configuracion.mostrarMedicinas !== false) {
-      medicinas.forEach(med => {
+      medicinas.forEach((med) => {
         if (!med.hora) return;
-        const [horaMed, minMed] = med.hora.split(':').map(Number);
-        if (isNaN(horaMed) || isNaN(minMed)) return;
-        const pos = horaMed + (minMed / 60);
+        const [h, m] = med.hora.split(':').map(Number);
+        if (isNaN(h) || isNaN(m)) return;
+        const pos = h + m / 60;
         if (pos >= inicio && pos <= fin) {
-          const bloque = horarioGenerado.find(b => b.hora === horaMed);
+          const bloque = horarioGenerado.find((b) => b.hora === h);
           if (bloque) {
-            const diasAplicar = med.frecuencia === 'diaria'
-              ? DIAS_SEMANA.map(d => d.id)
+            const dias = med.frecuencia === 'diaria'
+              ? DIAS_SEMANA.map((d) => d.id)
               : obtenerDiasFrecuencia(med.frecuencia);
-            diasAplicar.forEach(diaId => {
+            dias.forEach((diaId) => {
               if (bloque.dias[diaId]) {
                 bloque.dias[diaId].actividades.push({
-                  id: `medicina_${med.id}_${diaId}`,
+                  id: `med_${med.id}_${diaId}`,
                   tipo: 'medicina',
                   nombre: med.nombre || 'Medicina',
                   color: COLORES.EXITO,
                   hora_inicio: med.hora,
                   hora_fin: sumarMinutos(med.hora, 15),
                   duracion_minutos: 15,
-                  descripcion: `Tomar ${med.dosis || ''}`,
                   esMedicina: true,
-                  datos: med
                 });
               }
             });
@@ -273,38 +323,35 @@ export default function VistaHorario({ navigation }) {
       });
     }
 
-    // ---- Actividades fijas ----
+    // Ocurrencias
     if (configuracion.mostrarActividades !== false) {
-      actividadesFijas.forEach(act => {
-        if (!act.hora_inicio || !act.hora_fin) return;
-        const [hIni, mIni] = act.hora_inicio.split(':').map(Number);
-        const [hFin, mFin] = act.hora_fin.split(':').map(Number);
+      actividadesOcurrencias.forEach((oc) => {
+        if (!oc.hora_inicio || !oc.hora_fin) return;
+        const [hIni, mIni] = oc.hora_inicio.split(':').map(Number);
+        const [hFin, mFin] = oc.hora_fin.split(':').map(Number);
         if (isNaN(hIni) || isNaN(mIni) || isNaN(hFin) || isNaN(mFin)) return;
-        const posIni = hIni + (mIni / 60);
-        const posFin = hFin + (mFin / 60);
+        const posIni = hIni + mIni / 60;
+        const posFin = hFin + mFin / 60;
         if (posIni >= inicio && posFin <= fin) {
-          const bloquesOcupa = Math.ceil((posFin - posIni) * 4);
-          const dias = act.dias || [];
-          dias.forEach(diaId => {
-            for (let i = 0; i < bloquesOcupa; i++) {
-              const bloqueHora = hIni + Math.floor(i / 4);
-              const bloque = horarioGenerado.find(b => b.hora === bloqueHora);
-              if (bloque && bloque.dias[diaId]) {
-                if (i === 0) {
-                  bloque.dias[diaId].actividades.push({
-                    id: `actividad_${act.id}_${diaId}`,
-                    tipo: 'actividad_diaria',
-                    nombre: act.nombre || 'Actividad',
-                    color: act.color || COLORES.AZUL_CIELO,
-                    hora_inicio: act.hora_inicio,
-                    hora_fin: act.hora_fin,
-                    duracion_minutos: act.duracion_minutos || 60,
-                    descripcion: act.descripcion || '',
-                    esRecurrente: act.esRecurrente,
-                    alturaBloques: bloquesOcupa,
-                    datos: act
-                  });
-                }
+          const bloques = Math.ceil((posFin - posIni) * 4);
+          const dias = oc.dias || [];
+          dias.forEach((diaId) => {
+            for (let i = 0; i < bloques; i++) {
+              const bh = hIni + Math.floor(i / 4);
+              const bloque = horarioGenerado.find((b) => b.hora === bh);
+              if (bloque && bloque.dias[diaId] && i === 0) {
+                bloque.dias[diaId].actividades.push({
+                  id: `oc_${oc.id}_${diaId}`,
+                  tipo: 'actividad',
+                  nombre: oc.actividad_base_nombre || 'Actividad',
+                  color: oc.color || COLORES.AZUL_CIELO,
+                  hora_inicio: oc.hora_inicio,
+                  hora_fin: oc.hora_fin,
+                  duracion_minutos: oc.duracion_minutos || 60,
+                  datos: oc,
+                  esOcurrencia: true,
+                  ocurrenciaId: oc.id,
+                });
               }
             }
           });
@@ -312,35 +359,31 @@ export default function VistaHorario({ navigation }) {
       });
     }
 
-    // ---- Eventos ----
+    // Eventos
     if (configuracion.mostrarEventos !== false) {
-      eventos.forEach(ev => {
+      eventos.forEach((ev) => {
         if (!ev.fecha_inicio) return;
         const fechaEv = new Date(ev.fecha_inicio);
-        const diaSemana = fechaEv.getDay();
+        const dia = fechaEv.getDay();
         const inicioSemana = obtenerInicioSemana(semanaActual);
         const finSemana = obtenerFinSemana(semanaActual);
         if (fechaEv >= inicioSemana && fechaEv <= finSemana) {
-          const hIni = ev.hora_inicio ? parseInt(ev.hora_inicio.split(':')[0]) : 9;
-          const mIni = ev.hora_inicio ? parseInt(ev.hora_inicio.split(':')[1]) : 0;
-          const duracionHoras = ev.duracion_horas || 1;
-          const posIni = hIni + (mIni / 60);
-          if (posIni >= inicio && posIni + duracionHoras <= fin) {
-            const bloquesOcupa = Math.ceil(duracionHoras * 4);
-            const bloque = horarioGenerado.find(b => b.hora === hIni);
-            if (bloque && bloque.dias[diaSemana]) {
-              bloque.dias[diaSemana].actividades.push({
-                id: `evento_${ev.id}`,
+          const h = ev.hora_inicio ? parseInt(ev.hora_inicio.split(':')[0]) : 9;
+          const m = ev.hora_inicio ? parseInt(ev.hora_inicio.split(':')[1]) : 0;
+          const dur = ev.duracion_horas || 1;
+          const pos = h + m / 60;
+          if (pos >= inicio && pos + dur <= fin) {
+            const bloques = Math.ceil(dur * 4);
+            const bloque = horarioGenerado.find((b) => b.hora === h);
+            if (bloque && bloque.dias[dia]) {
+              bloque.dias[dia].actividades.push({
+                id: `ev_${ev.id}`,
                 tipo: 'evento',
                 nombre: ev.titulo || 'Evento',
                 color: ev.color_evento || COLORES.MORADO,
                 hora_inicio: ev.hora_inicio || '09:00',
-                hora_fin: sumarHoras(ev.hora_inicio || '09:00', duracionHoras),
-                duracion_minutos: duracionHoras * 60,
-                descripcion: ev.descripcion || '',
-                ubicacion: ev.ubicacion,
-                alturaBloques: bloquesOcupa,
-                datos: ev
+                hora_fin: sumarHoras(ev.hora_inicio || '09:00', dur),
+                duracion_minutos: dur * 60,
               });
             }
           }
@@ -352,20 +395,6 @@ export default function VistaHorario({ navigation }) {
   };
 
   // ========== UTILIDADES ==========
-  const obtenerInicioSemana = (fecha) => {
-    const inicio = new Date(fecha);
-    inicio.setDate(inicio.getDate() - inicio.getDay());
-    inicio.setHours(0, 0, 0, 0);
-    return inicio;
-  };
-
-  const obtenerFinSemana = (fecha) => {
-    const fin = new Date(fecha);
-    fin.setDate(fin.getDate() + (6 - fin.getDay()));
-    fin.setHours(23, 59, 59, 999);
-    return fin;
-  };
-
   const obtenerDiasFrecuencia = (frec) => {
     const map = {
       lunes: [1],
@@ -378,7 +407,7 @@ export default function VistaHorario({ navigation }) {
       lunes_miercoles_viernes: [1, 3, 5],
       martes_jueves: [2, 4],
       fin_semana: [0, 6],
-      laborables: [1, 2, 3, 4, 5]
+      laborables: [1, 2, 3, 4, 5],
     };
     return map[frec] || [1, 2, 3, 4, 5, 6, 0];
   };
@@ -398,17 +427,21 @@ export default function VistaHorario({ navigation }) {
 
   const sumarHoras = (hora, horas) => sumarMinutos(hora, horas * 60);
 
-  // ========== NAVEGACIÓN DE SEMANA ==========
-  const cambiarSemana = (direccion) => {
+  // ========== NAVEGACIÓN ==========
+  const cambiarSemana = (dir) => {
     const nueva = new Date(semanaActual);
-    nueva.setDate(nueva.getDate() + (direccion * 7));
+    nueva.setDate(nueva.getDate() + dir * 7);
     setSemanaActual(nueva);
     recargarSemana();
   };
 
-  const irAHoy = () => {
-    setSemanaActual(new Date());
-    recargarSemana();
+  const obtenerEstadoSemana = () => {
+    const hoy = new Date();
+    const inicio = obtenerInicioSemana(semanaActual);
+    const fin = obtenerFinSemana(semanaActual);
+    if (inicio <= hoy && hoy <= fin) return 'actual';
+    if (inicio > hoy) return 'futura';
+    return 'pasada';
   };
 
   // ========== CONFIGURACIÓN ==========
@@ -419,109 +452,234 @@ export default function VistaHorario({ navigation }) {
         Alert.alert('Éxito', 'Configuración guardada');
         setModalConfigVisible(false);
         if (usuarioId) await cargarDatosIniciales(usuarioId);
+      } else {
+        Alert.alert('Error', response.error || 'No se pudo guardar la configuración');
       }
     } catch (error) {
+      console.error('Error guardando configuración:', error);
       Alert.alert('Error', 'No se pudo guardar la configuración');
     }
   };
 
-  // ========== MODALES DE ACTIVIDAD ==========
-  const seleccionarEspacio = (dia, hora) => {
-    setEspacioSeleccionado({ dia, hora });
-    const fecha = obtenerFechaDelDia(dia);
-    setNuevaActividad({
-      nombre: '',
-      tipo: 'actividad_diaria',
-      color: COLORES.AZUL_CIELO,
-      dias: [dia],
-      hora_inicio: `${hora.toString().padStart(2, '0')}:00`,
-      hora_fin: sumarMinutos(`${hora.toString().padStart(2, '0')}:00`, 60),
-      duracion_minutos: 60,
-      descripcion: '',
-      recordatorio: true,
-      esRecurrente: false,
-      fecha_inicio: fecha.toISOString().split('T')[0],
-      fecha_fin: null
-    });
-    setModalVisible(true);
+  // ========== NOTIFICACIONES ==========
+  const mostrarNotificacion = (mensaje) => {
+    if (timeoutNotificacion.current) clearTimeout(timeoutNotificacion.current);
+    setNotificacion({ visible: true, mensaje: mensaje || '' }); // Asegurar string
+    Animated.timing(animNotificacion, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+    timeoutNotificacion.current = setTimeout(() => {
+      Animated.timing(animNotificacion, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }).start(() => setNotificacion({ visible: false, mensaje: '' }));
+    }, 3000);
   };
 
-  const seleccionarActividad = (actividad, dia, hora) => {
-    setActividadSeleccionada(actividad);
-    setEspacioSeleccionado({ dia, hora });
-    setNuevaActividad({
-      nombre: actividad.nombre || '',
-      tipo: actividad.tipo || 'actividad_diaria',
-      color: actividad.color || COLORES.AZUL_CIELO,
-      dias: actividad.esRecurrente ? (actividad.datos?.dias || [dia]) : [dia],
-      hora_inicio: actividad.hora_inicio || '08:00',
-      hora_fin: actividad.hora_fin || '09:00',
-      duracion_minutos: actividad.duracion_minutos || 60,
-      descripcion: actividad.descripcion || '',
-      recordatorio: true,
-      esRecurrente: actividad.esRecurrente || false,
-      fecha_inicio: actividad.datos?.fecha_inicio || new Date().toISOString().split('T')[0],
-      fecha_fin: actividad.datos?.fecha_fin || null
-    });
-    setModalVisible(true);
+  // ========== SELECCIÓN ==========
+  const toggleModoSeleccion = () => {
+    setModoSeleccion(!modoSeleccion);
+    if (!modoSeleccion) {
+      setActividadSeleccionada(null);
+      setCeldasSeleccionadas([]);
+    }
   };
 
-  const obtenerFechaDelDia = (diaId) => {
-    const fecha = obtenerInicioSemana(semanaActual);
-    fecha.setDate(fecha.getDate() + diaId);
-    return fecha;
+  const seleccionarActividad = (act) => {
+    if (!modoSeleccion) return;
+    setActividadSeleccionada(act.id === actividadSeleccionada ? null : act);
   };
 
-  const aplicarActividadPredefinida = (actPredef) => {
-    const fecha = obtenerFechaDelDia(espacioSeleccionado.dia);
-    setNuevaActividad({
-      ...nuevaActividad,
-      nombre: actPredef.nombre,
-      color: actPredef.color,
-      duracion_minutos: actPredef.duracion,
-      descripcion: actPredef.nombre,
-      fecha_inicio: fecha.toISOString().split('T')[0]
-    });
+  const toggleCeldaSeleccionada = (dia, hora) => {
+    if (!modoSeleccion) return;
+    const idx = celdasSeleccionadas.findIndex((c) => c.dia === dia && c.hora === hora);
+    if (idx >= 0) {
+      setCeldasSeleccionadas(celdasSeleccionadas.filter((_, i) => i !== idx));
+    } else {
+      setCeldasSeleccionadas([...celdasSeleccionadas, { dia, hora }]);
+    }
   };
 
-  const guardarActividad = async () => {
+  const cancelarSeleccion = () => {
+    setModoSeleccion(false);
+    setActividadSeleccionada(null);
+    setCeldasSeleccionadas([]);
+  };
+
+  const estaListoParaAsignar = () => {
+    return modoSeleccion && actividadSeleccionada && celdasSeleccionadas.length > 0;
+  };
+
+  const asignarActividad = async () => {
+    if (!estaListoParaAsignar()) return;
+
     try {
-      if (!nuevaActividad.nombre.trim()) {
-        Alert.alert('Error', 'Debes ingresar un nombre');
-        return;
+      const grupos = {};
+      celdasSeleccionadas.forEach((c) => {
+        if (!grupos[c.dia]) grupos[c.dia] = [];
+        grupos[c.dia].push(c.hora);
+      });
+
+      for (const diaId of Object.keys(grupos)) {
+        const horas = grupos[diaId].sort((a, b) => a - b);
+        let inicio = horas[0];
+        let fin = horas[0];
+        for (let i = 1; i < horas.length; i++) {
+          if (horas[i] === fin + 1) {
+            fin = horas[i];
+          } else {
+            await crearOcurrencia(actividadSeleccionada.id, parseInt(diaId), inicio, fin);
+            inicio = horas[i];
+            fin = horas[i];
+          }
+        }
+        await crearOcurrencia(actividadSeleccionada.id, parseInt(diaId), inicio, fin);
       }
-      if (nuevaActividad.dias.length === 0) {
-        Alert.alert('Error', 'Debes seleccionar al menos un día');
-        return;
-      }
-      const datos = {
-        ...nuevaActividad,
-        duracion_minutos: parseInt(String(nuevaActividad.duracion_minutos)) || 60
-      };
-      let response;
-      if (actividadSeleccionada) {
-        response = await servicioAPI.actualizarActividad(usuarioId, actividadSeleccionada.id, datos);
-      } else {
-        response = await servicioAPI.crearActividad(usuarioId, datos);
-      }
-      if (response.exito) {
-        Alert.alert('Éxito', actividadSeleccionada ? 'Actividad actualizada' : 'Actividad creada');
-        setModalVisible(false);
-        setActividadSeleccionada(null);
-        await recargarSemana();
-      } else {
-        Alert.alert('Error', response.error || 'No se pudo guardar');
-      }
+
+      mostrarNotificacion(`✅ Asignado a ${celdasSeleccionadas.length} horarios`);
+      setModoSeleccion(false);
+      setActividadSeleccionada(null);
+      setCeldasSeleccionadas([]);
+      await recargarSemana(); // Esperar a que termine la recarga
     } catch (error) {
-      console.error('Error guardando actividad:', error);
+      console.error('Error asignando:', error);
+      Alert.alert('Error', 'No se pudo asignar');
+    }
+  };
+
+  const crearOcurrencia = async (actId, dia, inicio, fin) => {
+    const data = {
+      actividad_base_id: actId,
+      dias: [dia],
+      hora_inicio: `${inicio.toString().padStart(2, '0')}:00`,
+      hora_fin: `${(fin + 1).toString().padStart(2, '0')}:00`,
+      duracion_minutos: (fin + 1 - inicio) * 60,
+      esRecurrente: nuevaOcurrencia.esRecurrente,
+      fecha_inicio: obtenerFechaDelDia(dia).toISOString().split('T')[0],
+      fecha_fin: nuevaOcurrencia.esRecurrente ? null : obtenerFechaDelDia(dia).toISOString().split('T')[0],
+    };
+    await servicioAPI.crearOcurrencia(usuarioId, data);
+  };
+
+  // ========== GESTIÓN DE ACTIVIDADES BASE ==========
+  const guardarActividadBase = async () => {
+    try {
+      if (!nuevaActividadBase.nombre.trim()) {
+        Alert.alert('Error', 'El nombre es requerido');
+        return;
+      }
+      await servicioAPI.crearActividadBase(usuarioId, nuevaActividadBase);
+      mostrarNotificacion('✅ Actividad creada');
+      setModalBaseVisible(false);
+      setNuevaActividadBase({ nombre: '', tipo: 'rutinaria', color: COLORES.AZUL_CIELO, descripcion: '' });
+      recargarSemana();
+    } catch (error) {
       Alert.alert('Error', 'No se pudo guardar');
     }
   };
 
-  const eliminarActividad = async () => {
-    if (!actividadSeleccionada) return;
+  // ========== CLIC EN CELDA (editar ocurrencia) ==========
+  const handlePressCelda = (dia, hora) => {
+    if (modoSeleccion) return;
+
+    const bloqueHora = horario.find((b) => b.hora === hora);
+    const actividad = bloqueHora?.dias[dia]?.actividades.find(
+      (a) => a.esOcurrencia && a.ocurrenciaId
+    );
+
+    if (actividad) {
+      // Editar ocurrencia existente
+      setOcurrenciaEditando(actividad.datos);
+      setNuevaOcurrencia({
+        actividad_base_id: actividad.datos.actividad_base_id,
+        dias: actividad.datos.dias || [dia],
+        hora_inicio: actividad.datos.hora_inicio,
+        hora_fin: actividad.datos.hora_fin,
+        duracion_minutos: actividad.datos.duracion_minutos,
+        esRecurrente: actividad.datos.esRecurrente || true,
+        fecha_inicio: actividad.datos.fecha_inicio || new Date().toISOString().split('T')[0],
+        fecha_fin: actividad.datos.fecha_fin || null,
+      });
+      setModalOcurrenciaVisible(true);
+    } else {
+      // Crear nueva ocurrencia
+      const fecha = obtenerFechaDelDia(dia);
+      setOcurrenciaEditando(null);
+      setNuevaOcurrencia({
+        actividad_base_id: null,
+        dias: [dia],
+        hora_inicio: `${hora.toString().padStart(2, '0')}:00`,
+        hora_fin: `${(hora + 1).toString().padStart(2, '0')}:00`,
+        duracion_minutos: 60,
+        esRecurrente: true,
+        fecha_inicio: fecha.toISOString().split('T')[0],
+        fecha_fin: null,
+      });
+      setModalOcurrenciaVisible(true);
+    }
+  };
+
+  const guardarOcurrencia = async () => {
+    try {
+      if (!nuevaOcurrencia.actividad_base_id) {
+        Alert.alert(
+          'Seleccionar actividad',
+          'Elige una actividad para este horario',
+          [
+            ...actividadesBase.map((act) => ({
+              text: `${act.emoji || '📌'} ${act.nombre}`,
+              onPress: () => {
+                setNuevaOcurrencia((prev) => ({ ...prev, actividad_base_id: act.id }));
+                setTimeout(() => guardarOcurrencia(), 100);
+              },
+            })),
+            {
+              text: 'Crear nueva',
+              onPress: () => {
+                setModalOcurrenciaVisible(false);
+                setNuevaActividadBase({ nombre: '', tipo: 'rutinaria', color: COLORES.AZUL_CIELO, descripcion: '' });
+                setModalBaseVisible(true);
+              },
+            },
+            { text: 'Cancelar', style: 'cancel' },
+          ],
+          { cancelable: true }
+        );
+        return;
+      }
+
+      const data = { ...nuevaOcurrencia };
+      // Asegurar que fecha_fin sea null si es recurrente
+      if (data.esRecurrente) {
+        data.fecha_fin = null;
+      } else {
+        // Si no es recurrente, la fecha_fin es la misma que fecha_inicio (solo ese día)
+        data.fecha_fin = data.fecha_inicio;
+      }
+
+      if (ocurrenciaEditando) {
+        await servicioAPI.actualizarOcurrencia(ocurrenciaEditando.id, data);
+        mostrarNotificacion('✅ Horario actualizado');
+      } else {
+        await servicioAPI.crearOcurrencia(usuarioId, data);
+        mostrarNotificacion('✅ Horario agregado');
+      }
+      setModalOcurrenciaVisible(false);
+      setOcurrenciaEditando(null);
+      recargarSemana();
+    } catch (error) {
+      console.error('Error guardando ocurrencia:', error);
+      Alert.alert('Error', 'No se pudo guardar');
+    }
+  };
+
+  const eliminarOcurrencia = async () => {
+    if (!ocurrenciaEditando) return;
     Alert.alert(
-      'Eliminar Actividad',
+      'Eliminar horario',
       '¿Estás seguro?',
       [
         { text: 'Cancelar', style: 'cancel' },
@@ -530,483 +688,446 @@ export default function VistaHorario({ navigation }) {
           style: 'destructive',
           onPress: async () => {
             try {
-              const response = await servicioAPI.eliminarActividad(usuarioId, actividadSeleccionada.id);
-              if (response.exito) {
-                Alert.alert('Éxito', 'Actividad eliminada');
-                setModalVisible(false);
-                setActividadSeleccionada(null);
-                await recargarSemana();
-              }
+              await servicioAPI.eliminarOcurrencia(ocurrenciaEditando.id);
+              mostrarNotificacion('🗑️ Horario eliminado');
+              setModalOcurrenciaVisible(false);
+              setOcurrenciaEditando(null);
+              recargarSemana();
             } catch (error) {
               Alert.alert('Error', 'No se pudo eliminar');
             }
-          }
-        }
+          },
+        },
       ]
     );
   };
 
-  // ========== RENDER DE CELDAS ==========
+  // ========== RENDER DE CELDA ==========
   const renderCeldaHorario = (diaId, hora) => {
     const esFin = diaId === 0 || diaId === 6;
-    const bloqueHora = horario.find(b => b.hora === hora);
+    const bloqueHora = horario.find((b) => b.hora === hora);
     const actividades = bloqueHora?.dias[diaId]?.actividades || [];
-    const actividadesEnEstaHora = actividades.filter(a => {
-      const [h] = a.hora_inicio.split(':').map(Number);
-      return h === hora;
-    });
+    const esSeleccionada = celdasSeleccionadas.some((c) => c.dia === diaId && c.hora === hora);
 
     return (
       <TouchableOpacity
-        style={[styles.celdaHorario, esFin && styles.celdaFinDeSemana]}
-        onPress={() => seleccionarEspacio(diaId, hora)}
+        style={[
+          styles.celdaHorario,
+          esFin && styles.celdaFinDeSemana,
+          esSeleccionada && styles.celdaSeleccionadaMultiple,
+        ]}
+        onPress={() => {
+          if (modoSeleccion) {
+            toggleCeldaSeleccionada(diaId, hora);
+          } else {
+            handlePressCelda(diaId, hora);
+          }
+        }}
         activeOpacity={0.7}
       >
-        {actividadesEnEstaHora.map(act => {
-          const estilo = calcularEstiloActividad(act, hora);
+        {actividades.map((act) => {
+          const [hIni, mIni] = act.hora_inicio.split(':').map(Number);
+          const duracion = act.duracion_minutos || 60;
+          const top = (hIni + mIni / 60 - hora) * HORA_HEIGHT;
+          const altura = (duracion / 60) * HORA_HEIGHT;
+          const estilo = {
+            top: Math.max(0, top),
+            height: Math.max(10, altura),
+            backgroundColor: act.color || COLORES.AZUL_CIELO,
+          };
           return (
-            <TouchableOpacity
-              key={act.id}
-              style={[styles.actividad, estilo]}
-              onPress={() => seleccionarActividad(act, diaId, hora)}
-            >
+            <View key={act.id} style={[styles.actividad, estilo]}>
               <Text style={styles.nombreActividad} numberOfLines={1}>
                 {act.nombre}
               </Text>
-              <Text style={styles.horaActividad} numberOfLines={1}>
-                {act.hora_inicio} - {act.hora_fin}
-              </Text>
-            </TouchableOpacity>
+            </View>
           );
         })}
       </TouchableOpacity>
     );
   };
 
-  const calcularEstiloActividad = (act, hora) => {
-    const [hIni, mIni] = act.hora_inicio.split(':').map(Number);
-    const duracion = act.duracion_minutos || 60;
-    const top = (hIni + (mIni / 60) - hora) * HORA_HEIGHT;
-    const altura = (duracion / 60) * HORA_HEIGHT;
-    return {
-      top: Math.max(0, top),
-      height: Math.max(10, altura),
-      backgroundColor: act.color || COLORES.AZUL_CIELO
-    };
-  };
-
   // ========== RENDER PRINCIPAL ==========
+  useEffect(() => {
+    const init = async () => {
+      const id = await servicioAPI.obtenerUsuarioActualId();
+      setUsuarioId(id);
+      if (id) {
+        await cargarDatosIniciales(id);
+      } else {
+        setCargando(false);
+        Alert.alert('Error', 'Usuario no identificado');
+      }
+    };
+    init();
+  }, []);
+
   if (cargando) {
     return (
-      <LinearGradient colors={[COLORES.AZUL_CIELO, COLORES.BLANCO]} style={styles.fondo}>
+      <View style={styles.fondoBlanco}>
         <SafeAreaView style={styles.centrado}>
-          <ActivityIndicator size="large" color={COLORES.AMARILLO_PLATANO} />
+          <ActivityIndicator size="large" color={COLORES.AZUL_CIELO_OSCURO} />
           <Text style={styles.textoCargando}>Cargando horario...</Text>
         </SafeAreaView>
-      </LinearGradient>
+      </View>
     );
   }
 
-  const fechaInicioSemana = obtenerInicioSemana(semanaActual);
-  const fechaFinSemana = obtenerFinSemana(semanaActual);
-  const esAdministrador = usuarioRol === 'familiar_administrador' || usuarioRol === 'familiar_admin';
+  const inicioSemana = obtenerInicioSemana(semanaActual);
+  const finSemana = obtenerFinSemana(semanaActual);
+  const estado = obtenerEstadoSemana();
 
-  // ========== VALORES SEGUROS PARA CONFIGURACIÓN ==========
-  const config = {
-    horaInicio: configuracion?.horaInicio ?? 8,
-    horaFin: configuracion?.horaFin ?? 22,
-    horaDespertar: configuracion?.horaDespertar ?? 7,
-    horaDormir: configuracion?.horaDormir ?? 22,
-    mostrarFines: configuracion?.mostrarFines ?? true,
-    mostrarMedicinas: configuracion?.mostrarMedicinas ?? true,
-    mostrarEventos: configuracion?.mostrarEventos ?? true,
-    mostrarActividades: configuracion?.mostrarActividades ?? true
+  // Colores según estado de la semana
+  const estadoColores = {
+    actual: { bg: '#FFE135', text: COLORES.TEXTO_OSCURO }, // Amarillo
+    futura: { bg: '#87CEEB', text: COLORES.TEXTO_OSCURO }, // Azul cielo
+    pasada: { bg: '#D3D3D3', text: COLORES.GRIS_OSCURO }, // Gris
   };
+  const estadoColor = estadoColores[estado] || estadoColores.actual;
 
   return (
-    <LinearGradient colors={[COLORES.AZUL_CIELO, COLORES.BLANCO]} style={styles.fondo}>
+    <GestureHandlerRootView style={styles.fondoBlanco}>
       <SafeAreaView style={styles.contenedor}>
         {/* ===== ENCABEZADO ===== */}
         <View style={styles.encabezado}>
           <TouchableOpacity style={styles.botonAtras} onPress={() => navigation.goBack()}>
             <Icon name="arrow-back-outline" size={28} color={COLORES.TEXTO_OSCURO} />
           </TouchableOpacity>
-          <View style={styles.tituloContainer}>
-            <Text style={styles.tituloPrincipal}>Horario Semanal</Text>
-            <Text style={styles.subtituloPrincipal}>
-              {fechaInicioSemana.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} -{' '}
-              {fechaFinSemana.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
-            </Text>
-          </View>
-          <TouchableOpacity style={styles.botonRefrescar} onPress={recargarSemana} disabled={refrescando}>
-            <Icon name="refresh-outline" size={24} color={refrescando ? COLORES.GRIS_OSCURO : COLORES.TEXTO_OSCURO} />
+          <Text style={styles.tituloPrincipal}>Horario Semanal</Text>
+          <TouchableOpacity style={styles.botonConfig} onPress={() => setModalConfigVisible(true)}>
+            <Icon name="settings-outline" size={24} color={COLORES.TEXTO_OSCURO} />
           </TouchableOpacity>
         </View>
 
-        {/* ===== CONTROLES DE NAVEGACIÓN ===== */}
+        {/* ===== CONTROLES + ESTADO SEMANA ===== */}
         <View style={styles.controlesNavegacion}>
           <TouchableOpacity style={styles.botonControl} onPress={() => cambiarSemana(-1)}>
             <Icon name="chevron-back-outline" size={28} color={COLORES.TEXTO_OSCURO} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.botonHoy} onPress={irAHoy}>
-            <Text style={styles.textoBotonHoy}>SEMANA ACTUAL</Text>
-          </TouchableOpacity>
+
+          <View style={[styles.estadoSemanaContainer, { backgroundColor: estadoColor.bg }]}>
+            <Text style={[styles.estadoSemanaTexto, { color: estadoColor.text }]}>
+              {estado === 'actual' ? 'Semana actual' : estado === 'futura' ? 'Semana futura' : 'Semana pasada'}
+            </Text>
+            <Text style={[styles.estadoSemanaFechas, { color: estadoColor.text }]}>
+              {inicioSemana.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} -{' '}
+              {finSemana.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+            </Text>
+          </View>
+
           <TouchableOpacity style={styles.botonControl} onPress={() => cambiarSemana(1)}>
             <Icon name="chevron-forward-outline" size={28} color={COLORES.TEXTO_OSCURO} />
           </TouchableOpacity>
         </View>
 
-        {/* ===== LEYENDA ===== */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.leyendaContainer}>
-          {ACTIVIDADES_PREDEFINIDAS.map(act => (
-            <TouchableOpacity
-              key={act.id}
-              style={[styles.itemLeyenda, { backgroundColor: act.color + '40' }]}
-              onPress={() => {
-                if (esAdministrador) {
-                  setModalVisible(true);
-                } else {
-                  Alert.alert('Acceso Restringido', 'Solo administradores pueden agregar actividades.');
-                }
-              }}
-            >
-              <Text style={{ fontSize: 14, marginRight: 4 }}>{act.emoji}</Text>
-              <Text style={[styles.textoLeyenda, { color: act.color }]}>{act.nombre}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
         {/* ===== HORARIO ===== */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horarioContainer}>
-          <View style={styles.columnaHoras}>
-            {horario.map((fila, idx) => (
-              <View key={idx} style={styles.celdaHora}>
-                <Text style={styles.textoHora}>{fila.label}</Text>
-              </View>
-            ))}
-          </View>
-
-          <View style={styles.gridDias}>
-            <View style={styles.encabezadosDias}>
-              {DIAS_SEMANA.map(dia => {
-                const fecha = obtenerFechaDelDia(dia.id);
-                const esFin = dia.id === 0 || dia.id === 6;
-                return (
-                  <View key={dia.id} style={[styles.encabezadoDia, esFin && styles.encabezadoFinDeSemana]}>
-                    <Text style={[styles.textoEncabezadoDia, esFin && styles.textoEncabezadoFinDeSemana]}>
-                      {dia.corto}
-                    </Text>
-                    <Text style={[styles.textoFechaDia, esFin && styles.textoFechaFinDeSemana]}>
-                      {fecha.getDate()}
-                    </Text>
+        <View style={styles.horarioWrapper}>
+          <ScrollView
+            refreshControl={<RefreshControl refreshing={refrescando} onRefresh={recargarSemana} colors={[COLORES.AMARILLO_PLATANO]} />}
+            style={styles.horarioScroll}
+          >
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.columnaHoras}>
+                {horario.map((fila, idx) => (
+                  <View key={idx} style={styles.celdaHora}>
+                    <Text style={styles.textoHora}>{fila.label}</Text>
                   </View>
-                );
-              })}
-            </View>
+                ))}
+              </View>
 
-            <View style={styles.cuerpoHorario}>
-              {horario.map((fila, horaIndex) => (
-                <View key={horaIndex} style={styles.filaHoraria}>
-                  {DIAS_SEMANA.map(dia => (
-                    <View key={dia.id} style={styles.contenedorCeldaDia}>
-                      {renderCeldaHorario(dia.id, fila.hora)}
+              <View style={styles.gridDias}>
+                <View style={styles.encabezadosDias}>
+                  {DIAS_SEMANA.map((dia) => {
+                    const fecha = obtenerFechaDelDia(dia.id);
+                    const esFin = dia.id === 0 || dia.id === 6;
+                    return (
+                      <View key={dia.id} style={[styles.encabezadoDia, esFin && styles.encabezadoFinDeSemana]}>
+                        <Text style={[styles.textoEncabezadoDia, esFin && styles.textoEncabezadoFinDeSemana]}>
+                          {dia.corto}
+                        </Text>
+                        <Text style={[styles.textoFechaDia, esFin && styles.textoFechaFinDeSemana]}>
+                          {fecha.getDate()}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+
+                <View style={styles.cuerpoHorario}>
+                  {horario.map((fila, horaIndex) => (
+                    <View key={horaIndex} style={styles.filaHoraria}>
+                      {DIAS_SEMANA.map((dia) => (
+                        <View key={dia.id} style={styles.contenedorCeldaDia}>
+                          {renderCeldaHorario(dia.id, fila.hora)}
+                        </View>
+                      ))}
                     </View>
                   ))}
                 </View>
-              ))}
-            </View>
-          </View>
-        </ScrollView>
-
-        {/* ===== BARRA DE ACCIONES ===== */}
-        <View style={styles.barraAcciones}>
-          <TouchableOpacity
-            style={styles.botonAccionPrincipal}
-            onPress={() => {
-              if (esAdministrador) {
-                setModalVisible(true);
-              } else {
-                Alert.alert('Acceso Restringido', 'Solo administradores pueden agregar actividades.');
-              }
-            }}
-          >
-            <Icon name="add-outline" size={24} color={COLORES.BLANCO} />
-            <Text style={styles.textoBotonAccionPrincipal}>Agregar Actividad</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.botonAccionSecundario} onPress={() => setModalConfigVisible(true)}>
-            <Icon name="settings-outline" size={24} color={COLORES.TEXTO_OSCURO} />
-          </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </ScrollView>
         </View>
 
-        {/* ===== ESTADÍSTICAS ===== */}
-        <View style={styles.estadisticasContainer}>
-          <View style={styles.itemEstadistica}>
-            <Icon name="medkit-outline" size={20} color={COLORES.EXITO} />
-            <Text style={styles.numeroEstadistica}>
-              {medicinas.filter(m => m.frecuencia === 'diaria').length}
-            </Text>
-            <Text style={styles.textoEstadistica}>Medicinas diarias</Text>
-          </View>
-          <View style={styles.separadorEstadistica} />
-          <View style={styles.itemEstadistica}>
-            <Icon name="calendar-outline" size={20} color={COLORES.NARANJA} />
-            <Text style={styles.numeroEstadistica}>{actividadesFijas.length}</Text>
-            <Text style={styles.textoEstadistica}>Actividades fijas</Text>
-          </View>
-          <View style={styles.separadorEstadistica} />
-          <View style={styles.itemEstadistica}>
-            <Icon name="time-outline" size={20} color={COLORES.MORADO} />
-            <Text style={styles.numeroEstadistica}>{eventos.length}</Text>
-            <Text style={styles.textoEstadistica}>Eventos esta semana</Text>
-          </View>
+        {/* ===== BOTONES DE ACCIÓN (arriba a la derecha) ===== */}
+        <View style={styles.botonesAccion}>
+          {modoSeleccion ? (
+            <>
+              <TouchableOpacity style={[styles.botonAccion, styles.botonCancelar]} onPress={cancelarSeleccion}>
+                <Text style={styles.textoBotonAccion}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.botonAccion,
+                  styles.botonAsignar,
+                  !estaListoParaAsignar() && styles.botonDeshabilitado,
+                ]}
+                onPress={asignarActividad}
+                disabled={!estaListoParaAsignar()}
+              >
+                <Text style={styles.textoBotonAccion}>Asignar</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <TouchableOpacity style={[styles.botonAccion, styles.botonSeleccionar]} onPress={toggleModoSeleccion}>
+                <Text style={styles.textoBotonAccion}>Seleccionar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.botonAccion, styles.botonNueva]} onPress={() => setModalBaseVisible(true)}>
+                <Text style={styles.textoBotonAccion}>+ Nueva</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+
+        {/* ===== ACTIVIDADES EN 3 FILAS ===== */}
+        <View style={styles.seccionActividades}>
+          <ScrollView contentContainerStyle={styles.grillaActividades}>
+            {actividadesBase.map((act) => {
+              const seleccionada = actividadSeleccionada?.id === act.id;
+              const tieneOcurrencia = actividadesOcurrencias.some((oc) => oc.actividad_base_id === act.id);
+              return (
+                <TouchableOpacity
+                  key={act.id}
+                  style={[
+                    styles.cuadradoActividad,
+                    { backgroundColor: seleccionada ? act.color : act.color + '40' },
+                    seleccionada && styles.cuadradoActividadSeleccionada,
+                    tieneOcurrencia && styles.cuadradoActividadConOcurrencia,
+                  ]}
+                  onPress={() => seleccionarActividad(act)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.emojiActividad}>{act.emoji || '📌'}</Text>
+                  <Text style={[styles.nombreActividadCuadrado, { color: seleccionada ? COLORES.BLANCO : act.color }]}>
+                    {act.nombre}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
         </View>
       </SafeAreaView>
 
-      {/* ===== MODAL DE ACTIVIDAD ===== */}
+      {/* ===== MODAL NUEVA ACTIVIDAD ===== */}
       <Modal
         animationType="slide"
         transparent
-        visible={modalVisible}
-        onRequestClose={() => {
-          setModalVisible(false);
-          setActividadSeleccionada(null);
-        }}
+        visible={modalBaseVisible}
+        onRequestClose={() => setModalBaseVisible(false)}
       >
-        <View style={styles.modalFondo}>
+        <TouchableOpacity
+          style={styles.modalFondo}
+          activeOpacity={1}
+          onPressOut={() => setModalBaseVisible(false)}
+        >
           <View style={styles.modalContenido}>
             <View style={styles.modalEncabezado}>
-              <Text style={styles.modalTitulo}>
-                {actividadSeleccionada ? 'Editar Actividad' : 'Nueva Actividad'}
-              </Text>
-              <TouchableOpacity
-                onPress={() => {
-                  setModalVisible(false);
-                  setActividadSeleccionada(null);
-                }}
-              >
+              <Text style={styles.modalTitulo}>Nueva Actividad</Text>
+              <TouchableOpacity onPress={() => setModalBaseVisible(false)}>
                 <Icon name="close-outline" size={24} color={COLORES.TEXTO_OSCURO} />
               </TouchableOpacity>
             </View>
-
             <ScrollView style={styles.modalFormulario}>
-              {/* Nombre */}
               <Text style={styles.modalLabel}>Nombre *</Text>
               <TextInput
                 style={styles.input}
-                value={nuevaActividad.nombre}
-                onChangeText={text => setNuevaActividad({ ...nuevaActividad, nombre: text })}
-                placeholder="Ej: Bañarse"
+                value={nuevaActividadBase.nombre}
+                onChangeText={(t) => setNuevaActividadBase({ ...nuevaActividadBase, nombre: t })}
+                placeholder="Ej: Terapia"
               />
-
-              {/* Predefinidas */}
-              <Text style={styles.modalLabel}>Actividades Predefinidas</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.actividadesPredefinidas}>
-                {ACTIVIDADES_PREDEFINIDAS.map(act => (
-                  <TouchableOpacity
-                    key={act.id}
-                    style={[styles.opcionPredefinida, { backgroundColor: act.color + '20', borderColor: act.color }]}
-                    onPress={() => aplicarActividadPredefinida(act)}
-                  >
-                    <Text style={[styles.textoOpcionPredefinida, { color: act.color }]}>
-                      {act.emoji} {act.nombre}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-
-              {/* Tipo */}
-              <Text style={styles.modalLabel}>Tipo</Text>
-              <View style={styles.tiposContainer}>
-                {TIPOS_ACTIVIDADES.map(tipo => (
-                  <TouchableOpacity
-                    key={tipo.id}
-                    style={[
-                      styles.opcionTipo,
-                      nuevaActividad.tipo === tipo.id && { backgroundColor: COLORES.AZUL_CIELO }
-                    ]}
-                    onPress={() => setNuevaActividad({ ...nuevaActividad, tipo: tipo.id })}
-                  >
-                    <Text style={{ fontSize: 16, marginRight: 6 }}>{tipo.emoji}</Text>
-                    <Text
-                      style={[
-                        styles.textoOpcionTipo,
-                        nuevaActividad.tipo === tipo.id && styles.textoOpcionTipoSeleccionado
-                      ]}
-                    >
-                      {tipo.nombre}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              {/* Color */}
               <Text style={styles.modalLabel}>Color</Text>
               <View style={styles.coloresContainer}>
-                {[
-                  COLORES.AZUL_CIELO,
-                  COLORES.EXITO,
-                  COLORES.AMARILLO_PLATANO,
-                  COLORES.MORADO,
-                  COLORES.NARANJA,
-                  COLORES.ROSADO,
-                  COLORES.TURQUESA,
-                  COLORES.INDIGO,
-                  COLORES.LIMA
-                ].map(color => (
+                {[COLORES.AZUL_CIELO, COLORES.EXITO, COLORES.AMARILLO_PLATANO, COLORES.MORADO, COLORES.NARANJA, COLORES.ROSADO, COLORES.TURQUESA, COLORES.INDIGO].map((c) => (
                   <TouchableOpacity
-                    key={color}
-                    style={[
-                      styles.opcionColor,
-                      { backgroundColor: color },
-                      nuevaActividad.color === color && styles.opcionColorSeleccionada
-                    ]}
-                    onPress={() => setNuevaActividad({ ...nuevaActividad, color })}
+                    key={c}
+                    style={[styles.opcionColor, { backgroundColor: c }, nuevaActividadBase.color === c && styles.opcionColorSeleccionada]}
+                    onPress={() => setNuevaActividadBase({ ...nuevaActividadBase, color: c })}
                   />
                 ))}
               </View>
+              <Text style={styles.modalLabel}>Descripción</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={nuevaActividadBase.descripcion}
+                onChangeText={(t) => setNuevaActividadBase({ ...nuevaActividadBase, descripcion: t })}
+                multiline
+                numberOfLines={3}
+              />
+            </ScrollView>
+            <View style={styles.modalBotones}>
+              <TouchableOpacity style={styles.botonModalCancelar} onPress={() => setModalBaseVisible(false)}>
+                <Text style={styles.textoBotonModalCancelar}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.botonModalAccion, { backgroundColor: COLORES.EXITO }]} onPress={guardarActividadBase}>
+                <Text style={styles.textoBotonModalAccion}>Guardar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
-              {/* Días */}
+      {/* ===== MODAL OCURRENCIA (editar horario) ===== */}
+      <Modal
+        animationType="slide"
+        transparent
+        visible={modalOcurrenciaVisible}
+        onRequestClose={() => setModalOcurrenciaVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalFondo}
+          activeOpacity={1}
+          onPressOut={() => setModalOcurrenciaVisible(false)}
+        >
+          <View style={styles.modalContenido}>
+            <View style={styles.modalEncabezado}>
+              <Text style={styles.modalTitulo}>{ocurrenciaEditando ? 'Editar horario' : 'Nuevo horario'}</Text>
+              <TouchableOpacity onPress={() => setModalOcurrenciaVisible(false)}>
+                <Icon name="close-outline" size={24} color={COLORES.TEXTO_OSCURO} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalFormulario}>
+              <Text style={styles.modalLabel}>Actividad</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectorActividades}>
+                {actividadesBase.map((act) => (
+                  <TouchableOpacity
+                    key={act.id}
+                    style={[
+                      styles.opcionActividad,
+                      nuevaOcurrencia.actividad_base_id === act.id && { backgroundColor: act.color + '40', borderColor: act.color },
+                    ]}
+                    onPress={() => setNuevaOcurrencia({ ...nuevaOcurrencia, actividad_base_id: act.id })}
+                  >
+                    <Text style={{ fontSize: 20 }}>{act.emoji || '📌'}</Text>
+                    <Text style={[styles.textoOpcionActividad, { color: act.color }]}>{act.nombre}</Text>
+                  </TouchableOpacity>
+                ))}
+                <TouchableOpacity
+                  style={styles.opcionActividad}
+                  onPress={() => {
+                    setModalOcurrenciaVisible(false);
+                    setNuevaActividadBase({ nombre: '', tipo: 'rutinaria', color: COLORES.AZUL_CIELO, descripcion: '' });
+                    setModalBaseVisible(true);
+                  }}
+                >
+                  <Icon name="add-circle-outline" size={24} color={COLORES.GRIS_OSCURO} />
+                  <Text style={styles.textoOpcionActividad}>Nueva</Text>
+                </TouchableOpacity>
+              </ScrollView>
+
               <Text style={styles.modalLabel}>Días</Text>
               <View style={styles.diasContainer}>
-                {DIAS_SEMANA.map(dia => (
+                {DIAS_SEMANA.map((dia) => (
                   <TouchableOpacity
                     key={dia.id}
-                    style={[
-                      styles.opcionDia,
-                      nuevaActividad.dias.includes(dia.id) && styles.opcionDiaSeleccionada
-                    ]}
+                    style={[styles.opcionDia, nuevaOcurrencia.dias.includes(dia.id) && styles.opcionDiaSeleccionada]}
                     onPress={() => {
-                      const nuevos = [...nuevaActividad.dias];
+                      const nuevos = [...nuevaOcurrencia.dias];
                       const idx = nuevos.indexOf(dia.id);
                       idx === -1 ? nuevos.push(dia.id) : nuevos.splice(idx, 1);
-                      setNuevaActividad({ ...nuevaActividad, dias: nuevos });
+                      setNuevaOcurrencia({ ...nuevaOcurrencia, dias: nuevos });
                     }}
                   >
-                    <Text
-                      style={[
-                        styles.textoOpcionDia,
-                        nuevaActividad.dias.includes(dia.id) && styles.textoOpcionDiaSeleccionada
-                      ]}
-                    >
+                    <Text style={[styles.textoOpcionDia, nuevaOcurrencia.dias.includes(dia.id) && styles.textoOpcionDiaSeleccionada]}>
                       {dia.corto}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
 
-              {/* Horario */}
               <View style={styles.horarioInputs}>
                 <View style={styles.inputMitad}>
                   <Text style={styles.subLabel}>Inicio</Text>
                   <TextInput
                     style={styles.input}
-                    value={nuevaActividad.hora_inicio}
-                    onChangeText={text => setNuevaActividad({ ...nuevaActividad, hora_inicio: text })}
+                    value={nuevaOcurrencia.hora_inicio}
+                    onChangeText={(t) => setNuevaOcurrencia({ ...nuevaOcurrencia, hora_inicio: t })}
                   />
                 </View>
                 <View style={styles.inputMitad}>
                   <Text style={styles.subLabel}>Fin</Text>
                   <TextInput
                     style={styles.input}
-                    value={nuevaActividad.hora_fin}
-                    onChangeText={text => setNuevaActividad({ ...nuevaActividad, hora_fin: text })}
+                    value={nuevaOcurrencia.hora_fin}
+                    onChangeText={(t) => setNuevaOcurrencia({ ...nuevaOcurrencia, hora_fin: t })}
                   />
                 </View>
               </View>
 
-              {/* Duración */}
               <Text style={styles.modalLabel}>Duración (minutos)</Text>
               <TextInput
                 style={styles.input}
-                value={String(nuevaActividad.duracion_minutos ?? 60)}
-                onChangeText={text => {
-                  const num = parseInt(text);
-                  setNuevaActividad({ ...nuevaActividad, duracion_minutos: isNaN(num) ? 0 : num });
+                value={String(nuevaOcurrencia.duracion_minutos)}
+                onChangeText={(t) => {
+                  const num = parseInt(t);
+                  setNuevaOcurrencia({ ...nuevaOcurrencia, duracion_minutos: isNaN(num) ? 0 : num });
                 }}
                 keyboardType="numeric"
-                placeholder="60"
               />
 
-              {/* Recurrente */}
               <View style={styles.opcionRecurrente}>
                 <TouchableOpacity
                   style={styles.botonRecurrente}
-                  onPress={() => setNuevaActividad({ ...nuevaActividad, esRecurrente: !nuevaActividad.esRecurrente })}
+                  onPress={() => setNuevaOcurrencia({ ...nuevaOcurrencia, esRecurrente: !nuevaOcurrencia.esRecurrente })}
                 >
-                  <Text style={{ fontSize: 24, marginRight: 8 }}>
-                    {nuevaActividad.esRecurrente ? '✅' : '⚪'}
-                  </Text>
+                  <View style={styles.switchRecurrente}>
+                    <View style={[styles.switchPuntoRecurrente, nuevaOcurrencia.esRecurrente && styles.switchPuntoActivoRecurrente]} />
+                  </View>
                   <Text style={styles.textoRecurrente}>
-                    {nuevaActividad.esRecurrente ? 'Recurrente' : 'Solo este día'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Descripción */}
-              <Text style={styles.modalLabel}>Descripción</Text>
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                value={nuevaActividad.descripcion}
-                onChangeText={text => setNuevaActividad({ ...nuevaActividad, descripcion: text })}
-                multiline
-                numberOfLines={3}
-              />
-
-              {/* Recordatorio */}
-              <View style={styles.opcionRecordatorio}>
-                <TouchableOpacity
-                  style={styles.botonRecordatorio}
-                  onPress={() => setNuevaActividad({ ...nuevaActividad, recordatorio: !nuevaActividad.recordatorio })}
-                >
-                  <Text style={{ fontSize: 24, marginRight: 8 }}>
-                    {nuevaActividad.recordatorio ? '🔔' : '🔕'}
-                  </Text>
-                  <Text style={styles.textoRecordatorio}>
-                    {nuevaActividad.recordatorio ? 'Con recordatorio' : 'Sin recordatorio'}
+                    {nuevaOcurrencia.esRecurrente ? 'Repetir todas las semanas' : 'Solo esta semana'}
                   </Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>
-
             <View style={styles.modalBotones}>
-              {actividadSeleccionada && (
-                <TouchableOpacity
-                  style={[styles.botonModalAccion, { backgroundColor: COLORES.ERROR }]}
-                  onPress={eliminarActividad}
-                >
+              {ocurrenciaEditando && (
+                <TouchableOpacity style={[styles.botonModalAccion, { backgroundColor: COLORES.ROJO_CLARO }]} onPress={eliminarOcurrencia}>
                   <Text style={styles.textoBotonModalAccion}>Eliminar</Text>
                 </TouchableOpacity>
               )}
-              <TouchableOpacity
-                style={styles.botonModalCancelar}
-                onPress={() => {
-                  setModalVisible(false);
-                  setActividadSeleccionada(null);
-                }}
-              >
+              <TouchableOpacity style={styles.botonModalCancelar} onPress={() => setModalOcurrenciaVisible(false)}>
                 <Text style={styles.textoBotonModalCancelar}>Cancelar</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.botonModalAccion, { backgroundColor: COLORES.EXITO }]}
-                onPress={guardarActividad}
-              >
-                <Text style={styles.textoBotonModalAccion}>
-                  {actividadSeleccionada ? 'Actualizar' : 'Guardar'}
-                </Text>
+              <TouchableOpacity style={[styles.botonModalAccion, { backgroundColor: COLORES.EXITO }]} onPress={guardarOcurrencia}>
+                <Text style={styles.textoBotonModalAccion}>{ocurrenciaEditando ? 'Actualizar' : 'Guardar'}</Text>
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </TouchableOpacity>
       </Modal>
 
-      {/* ===== MODAL DE CONFIGURACIÓN ===== */}
+      {/* ===== MODAL CONFIGURACIÓN ===== */}
       <Modal
         animationType="slide"
         transparent
         visible={modalConfigVisible}
         onRequestClose={() => setModalConfigVisible(false)}
       >
-        <View style={styles.modalFondo}>
+        <TouchableOpacity
+          style={styles.modalFondo}
+          activeOpacity={1}
+          onPressOut={() => setModalConfigVisible(false)}
+        >
           <View style={styles.modalContenido}>
             <View style={styles.modalEncabezado}>
               <Text style={styles.modalTitulo}>Configuración</Text>
@@ -1014,23 +1135,18 @@ export default function VistaHorario({ navigation }) {
                 <Icon name="close-outline" size={24} color={COLORES.TEXTO_OSCURO} />
               </TouchableOpacity>
             </View>
-
             <ScrollView style={styles.modalFormulario}>
-              {/* Horas de visualización */}
               <View style={styles.seccionConfig}>
-                <Text style={styles.tituloSeccionConfig}>Horas de visualización</Text>
+                <Text style={styles.tituloSeccionConfig}>Horas</Text>
                 <View style={styles.rangoHoras}>
                   <View style={styles.inputRango}>
                     <Text style={styles.labelRango}>Inicio</Text>
                     <TextInput
                       style={styles.input}
-                      value={String(config.horaInicio)}
-                      onChangeText={text => {
-                        const num = parseInt(text);
-                        setConfiguracion({
-                          ...configuracion,
-                          horaInicio: isNaN(num) ? 8 : Math.max(0, Math.min(23, num))
-                        });
+                      value={String(configuracion.horaInicio ?? 8)}
+                      onChangeText={(t) => {
+                        const num = parseInt(t);
+                        setConfiguracion({ ...configuracion, horaInicio: isNaN(num) ? 8 : Math.max(0, Math.min(23, num)) });
                       }}
                       keyboardType="numeric"
                     />
@@ -1040,28 +1156,23 @@ export default function VistaHorario({ navigation }) {
                     <Text style={styles.labelRango}>Fin</Text>
                     <TextInput
                       style={styles.input}
-                      value={String(config.horaFin)}
-                      onChangeText={text => {
-                        const num = parseInt(text);
-                        setConfiguracion({
-                          ...configuracion,
-                          horaFin: isNaN(num) ? 22 : Math.max(0, Math.min(23, num))
-                        });
+                      value={String(configuracion.horaFin ?? 22)}
+                      onChangeText={(t) => {
+                        const num = parseInt(t);
+                        setConfiguracion({ ...configuracion, horaFin: isNaN(num) ? 22 : Math.max(0, Math.min(23, num)) });
                       }}
                       keyboardType="numeric"
                     />
                   </View>
                 </View>
               </View>
-
-              {/* Mostrar */}
               <View style={styles.seccionConfig}>
                 <Text style={styles.tituloSeccionConfig}>Mostrar</Text>
                 {[
                   { key: 'mostrarMedicinas', label: 'Medicinas' },
                   { key: 'mostrarEventos', label: 'Eventos' },
                   { key: 'mostrarActividades', label: 'Actividades' },
-                  { key: 'mostrarFines', label: 'Fines de semana' }
+                  { key: 'mostrarFines', label: 'Fines de semana' },
                 ].map(({ key, label }) => (
                   <View key={key} style={styles.opcionConfig}>
                     <Text style={styles.textoOpcionConfig}>{label}</Text>
@@ -1075,7 +1186,6 @@ export default function VistaHorario({ navigation }) {
                 ))}
               </View>
             </ScrollView>
-
             <View style={styles.modalBotones}>
               <TouchableOpacity style={styles.botonModalCancelar} onPress={() => setModalConfigVisible(false)}>
                 <Text style={styles.textoBotonModalCancelar}>Cancelar</Text>
@@ -1085,157 +1195,235 @@ export default function VistaHorario({ navigation }) {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </TouchableOpacity>
       </Modal>
-    </LinearGradient>
+
+      {/* ===== NOTIFICACIÓN ===== */}
+      {notificacion.visible && notificacion.mensaje && (
+        <Animated.View
+          style={[
+            styles.notificacionContainer,
+            {
+              opacity: animNotificacion,
+              transform: [{ translateY: animNotificacion.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] }) }],
+            },
+          ]}
+        >
+          <View style={styles.notificacionContenido}>
+            <Icon name="checkmark-circle" size={20} color={COLORES.BLANCO} style={{ marginRight: 10 }} />
+            <Text style={styles.notificacionTexto}>{notificacion.mensaje}</Text>
+          </View>
+        </Animated.View>
+      )}
+    </GestureHandlerRootView>
   );
 }
 
 // ==================== ESTILOS ====================
 const styles = StyleSheet.create({
-  fondo: { flex: 1 },
-  contenedor: { flex: 1 },
+  fondoBlanco: { flex: 1, backgroundColor: COLORES.BLANCO },
+  contenedor: { flex: 1, paddingTop: 20 },
   centrado: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  textoCargando: { color: COLORES.TEXTO_OSCURO, marginTop: 20, fontSize: 16 },
+  textoCargando: { color: COLORES.GRIS_OSCURO, marginTop: 20, fontSize: 16 },
 
   encabezado: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingVertical: 12,
     backgroundColor: COLORES.BLANCO,
     borderBottomWidth: 1,
     borderBottomColor: COLORES.GRIS_CLARO,
   },
   botonAtras: { padding: 8 },
-  tituloContainer: { flex: 1, alignItems: 'center' },
   tituloPrincipal: { fontSize: 20, fontWeight: 'bold', color: COLORES.TEXTO_OSCURO },
-  subtituloPrincipal: { fontSize: 12, color: COLORES.GRIS_OSCURO, marginTop: 2 },
-  botonRefrescar: { padding: 8 },
+  botonConfig: { padding: 8 },
 
   controlesNavegacion: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingVertical: 12,
     backgroundColor: COLORES.BLANCO,
     borderBottomWidth: 1,
     borderBottomColor: COLORES.GRIS_CLARO,
   },
   botonControl: { padding: 10, borderRadius: 20, backgroundColor: COLORES.GRIS_CLARO },
-  botonHoy: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, backgroundColor: COLORES.AMARILLO_PLATANO },
-  textoBotonHoy: { color: COLORES.TEXTO_OSCURO, fontSize: 14, fontWeight: 'bold' },
-
-  leyendaContainer: {
-    backgroundColor: COLORES.BLANCO,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORES.GRIS_CLARO,
-  },
-  itemLeyenda: {
-    flexDirection: 'row',
+  estadoSemanaContainer: {
+    flex: 1,
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-    marginRight: 10,
-    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    marginHorizontal: 10,
   },
-  textoLeyenda: { fontSize: 12, fontWeight: '600', marginLeft: 6 },
+  estadoSemanaTexto: { fontSize: 16, fontWeight: 'bold' },
+  estadoSemanaFechas: { fontSize: 12, fontWeight: 'bold' },
 
-  horarioContainer: { flex: 1, backgroundColor: COLORES.BLANCO },
+  horarioWrapper: { flex: 0.7, backgroundColor: COLORES.BLANCO },
+  horarioScroll: { flex: 1 },
   columnaHoras: { width: 60, backgroundColor: COLORES.GRIS_CLARO },
   celdaHora: { height: HORA_HEIGHT, justifyContent: 'flex-start', paddingTop: 8, paddingLeft: 8, borderBottomWidth: 1, borderBottomColor: COLORES.GRIS_MEDIO },
   textoHora: { fontSize: 12, color: COLORES.GRIS_OSCURO, fontWeight: '600' },
 
   gridDias: { flex: 1 },
   encabezadosDias: { flexDirection: 'row', backgroundColor: COLORES.GRIS_CLARO },
-  encabezadoDia: { width: DIA_WIDTH, alignItems: 'center', paddingVertical: 10, borderLeftWidth: 1, borderLeftColor: COLORES.GRIS_MEDIO },
-  encabezadoFinDeSemana: { backgroundColor: COLORES.AZUL_CIELO + '20' },
-  textoEncabezadoDia: { fontSize: 14, fontWeight: 'bold', color: COLORES.TEXTO_OSCURO },
-  textoEncabezadoFinDeSemana: { color: COLORES.AZUL_CIELO_OSCURO },
-  textoFechaDia: { fontSize: 12, color: COLORES.GRIS_OSCURO, marginTop: 4 },
-  textoFechaFinDeSemana: { color: COLORES.AZUL_CIELO },
+  encabezadoDia: { width: DIA_WIDTH, alignItems: 'center', paddingVertical: 8, borderLeftWidth: 1, borderLeftColor: COLORES.GRIS_MEDIO },
+  encabezadoFinDeSemana: { backgroundColor: COLORES.GRIS_CLARO + '40' }, // más sutil
+  textoEncabezadoDia: { fontSize: 13, fontWeight: 'bold', color: COLORES.TEXTO_OSCURO },
+  textoEncabezadoFinDeSemana: { color: COLORES.GRIS_OSCURO },
+  textoFechaDia: { fontSize: 11, color: COLORES.GRIS_OSCURO, marginTop: 2 },
+  textoFechaFinDeSemana: { color: COLORES.GRIS_OSCURO },
 
   cuerpoHorario: { backgroundColor: COLORES.BLANCO },
   filaHoraria: { flexDirection: 'row', height: HORA_HEIGHT, borderBottomWidth: 1, borderBottomColor: COLORES.GRIS_CLARO },
   contenedorCeldaDia: { width: DIA_WIDTH, borderLeftWidth: 1, borderLeftColor: COLORES.GRIS_CLARO },
   celdaHorario: { flex: 1, borderBottomWidth: 1, borderBottomColor: COLORES.GRIS_CLARO, position: 'relative', minHeight: HORA_HEIGHT },
-  celdaFinDeSemana: { backgroundColor: COLORES.GRIS_CLARO + '80' },
+  celdaFinDeSemana: { backgroundColor: COLORES.GRIS_CLARO + '40' }, // más sutil
+  celdaSeleccionadaMultiple: { backgroundColor: COLORES.AZUL_CIELO + '40', borderColor: COLORES.AZUL_CIELO, borderWidth: 2 },
 
-  actividad: { position: 'absolute', left: 2, right: 2, borderRadius: 6, padding: 6, zIndex: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
-  nombreActividad: { fontSize: 10, fontWeight: 'bold', color: COLORES.BLANCO, marginBottom: 2 },
-  horaActividad: { fontSize: 8, color: COLORES.BLANCO, opacity: 0.9 },
+  actividad: { position: 'absolute', left: 2, right: 2, borderRadius: 4, padding: 4, zIndex: 1 },
+  nombreActividad: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: COLORES.TEXTO_OSCURO, // negro en negritas
+    textAlign: 'center',
+    textShadowColor: 'rgba(255,255,255,0.5)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 2,
+  },
 
-  barraAcciones: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 15, backgroundColor: COLORES.BLANCO, borderTopWidth: 1, borderTopColor: COLORES.GRIS_CLARO },
-  botonAccionPrincipal: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORES.AZUL_CIELO_OSCURO, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 25, flex: 1, marginRight: 15, justifyContent: 'center' },
-  textoBotonAccionPrincipal: { color: COLORES.BLANCO, fontSize: 16, fontWeight: '600', marginLeft: 8 },
-  botonAccionSecundario: { padding: 12, borderRadius: 25, backgroundColor: COLORES.GRIS_CLARO },
+  botonesAccion: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    backgroundColor: COLORES.BLANCO,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORES.GRIS_CLARO,
+    gap: 12,
+  },
+  botonAccion: {
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  botonSeleccionar: { backgroundColor: COLORES.AZUL_CIELO_OSCURO },
+  botonNueva: { backgroundColor: COLORES.EXITO },
+  botonCancelar: { backgroundColor: COLORES.ROJO_CLARO },
+  botonAsignar: { backgroundColor: COLORES.EXITO },
+  botonDeshabilitado: { backgroundColor: COLORES.GRIS_MEDIO },
+  textoBotonAccion: { color: COLORES.BLANCO, fontSize: 13, fontWeight: 'bold' },
 
-  estadisticasContainer: { flexDirection: 'row', backgroundColor: COLORES.BLANCO, padding: 20, borderTopWidth: 1, borderTopColor: COLORES.GRIS_CLARO },
-  itemEstadistica: { flex: 1, alignItems: 'center' },
-  numeroEstadistica: { fontSize: 24, fontWeight: 'bold', color: COLORES.TEXTO_OSCURO, marginTop: 8, marginBottom: 4 },
-  textoEstadistica: { fontSize: 12, color: COLORES.GRIS_OSCURO, textAlign: 'center' },
-  separadorEstadistica: { width: 1, backgroundColor: COLORES.GRIS_CLARO, marginHorizontal: 10 },
+  seccionActividades: {
+    backgroundColor: COLORES.BLANCO,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderTopWidth: 1,
+    borderTopColor: COLORES.GRIS_CLARO,
+    flex: 0.2,
+  },
+  grillaActividades: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
+    gap: 8,
+    paddingBottom: 8,
+  },
+  cuadradoActividad: {
+    width: (width - 48) / 3,
+    height: 52,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 4,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  cuadradoActividadSeleccionada: {
+    borderColor: COLORES.TEXTO_OSCURO,
+    borderWidth: 3,
+    transform: [{ scale: 1.05 }],
+  },
+  cuadradoActividadConOcurrencia: {
+    borderColor: COLORES.EXITO,
+    borderWidth: 2,
+  },
+  emojiActividad: { fontSize: 18 },
+  nombreActividadCuadrado: { fontSize: 10, fontWeight: 'bold', textAlign: 'center', marginTop: 2 },
 
+  // Modal
   modalFondo: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContenido: { backgroundColor: COLORES.BLANCO, borderTopLeftRadius: 25, borderTopRightRadius: 25, padding: 25, maxHeight: '90%' },
-  modalEncabezado: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: COLORES.GRIS_CLARO },
-  modalTitulo: { fontSize: 20, fontWeight: 'bold', color: COLORES.TEXTO_OSCURO, flex: 1 },
-  modalFormulario: { maxHeight: 500 },
-  modalLabel: { fontSize: 14, fontWeight: '600', color: COLORES.TEXTO_OSCURO, marginBottom: 8, marginTop: 15 },
-  input: { backgroundColor: COLORES.GRIS_CLARO, borderRadius: 10, paddingHorizontal: 15, paddingVertical: 12, fontSize: 16, color: COLORES.TEXTO_OSCURO, borderWidth: 1, borderColor: COLORES.GRIS_MEDIO },
-  textArea: { minHeight: 80, textAlignVertical: 'top' },
-  inputMitad: { width: '48%' },
-  subLabel: { fontSize: 12, color: COLORES.GRIS_OSCURO, marginBottom: 5 },
-
-  actividadesPredefinidas: { flexDirection: 'row', marginBottom: 15 },
-  opcionPredefinida: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, marginRight: 10, borderWidth: 1 },
-  textoOpcionPredefinida: { fontSize: 12, fontWeight: '600', marginLeft: 6 },
-
-  tiposContainer: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 15 },
-  opcionTipo: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, marginRight: 10, marginBottom: 10, borderWidth: 1, borderColor: COLORES.GRIS_MEDIO },
-  textoOpcionTipo: { fontSize: 12, color: COLORES.GRIS_OSCURO, marginLeft: 6 },
-  textoOpcionTipoSeleccionado: { color: COLORES.BLANCO, fontWeight: 'bold' },
-
-  coloresContainer: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 15 },
-  opcionColor: { width: 30, height: 30, borderRadius: 15, marginRight: 10, marginBottom: 10, borderWidth: 2, borderColor: 'transparent' },
+  modalContenido: { backgroundColor: COLORES.BLANCO, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%', padding: 20 },
+  modalEncabezado: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  modalTitulo: { fontSize: 18, fontWeight: 'bold', color: COLORES.TEXTO_OSCURO },
+  modalFormulario: { maxHeight: 400 },
+  modalLabel: { fontSize: 14, fontWeight: '600', color: COLORES.TEXTO_OSCURO, marginBottom: 6, marginTop: 12 },
+  input: { backgroundColor: COLORES.GRIS_CLARO, borderRadius: 8, padding: 10, fontSize: 14, borderWidth: 1, borderColor: COLORES.GRIS_MEDIO },
+  textArea: { minHeight: 70, textAlignVertical: 'top' },
+  coloresContainer: { flexDirection: 'row', flexWrap: 'wrap', marginVertical: 8 },
+  opcionColor: { width: 32, height: 32, borderRadius: 16, marginRight: 10, marginBottom: 8, borderWidth: 2, borderColor: 'transparent' },
   opcionColorSeleccionada: { borderColor: COLORES.TEXTO_OSCURO, transform: [{ scale: 1.1 }] },
+  modalBotones: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: COLORES.GRIS_CLARO },
+  botonModalCancelar: { flex: 1, paddingVertical: 12, marginRight: 8, borderRadius: 8, backgroundColor: COLORES.GRIS_CLARO, alignItems: 'center' },
+  textoBotonModalCancelar: { color: COLORES.TEXTO_OSCURO, fontSize: 14, fontWeight: '600' },
+  botonModalAccion: { flex: 1, paddingVertical: 12, marginLeft: 8, borderRadius: 8, alignItems: 'center' },
+  textoBotonModalAccion: { color: COLORES.BLANCO, fontSize: 14, fontWeight: '600' },
 
-  diasContainer: { flexDirection: 'row', marginBottom: 15 },
-  opcionDia: { flex: 1, paddingVertical: 10, marginHorizontal: 2, borderRadius: 8, borderWidth: 1, borderColor: COLORES.GRIS_MEDIO, alignItems: 'center' },
+  selectorActividades: { flexDirection: 'row', marginBottom: 8 },
+  opcionActividad: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, borderWidth: 1, borderColor: COLORES.GRIS_MEDIO, marginRight: 8 },
+  textoOpcionActividad: { fontSize: 12, fontWeight: '600', marginLeft: 4 },
+
+  diasContainer: { flexDirection: 'row', marginBottom: 8 },
+  opcionDia: { flex: 1, paddingVertical: 8, marginHorizontal: 2, borderRadius: 8, borderWidth: 1, borderColor: COLORES.GRIS_MEDIO, alignItems: 'center' },
   opcionDiaSeleccionada: { backgroundColor: COLORES.AZUL_CIELO, borderColor: COLORES.AZUL_CIELO_OSCURO },
-  textoOpcionDia: { fontSize: 12, color: COLORES.GRIS_OSCURO },
+  textoOpcionDia: { fontSize: 11, color: COLORES.GRIS_OSCURO },
   textoOpcionDiaSeleccionada: { color: COLORES.BLANCO, fontWeight: 'bold' },
 
-  horarioInputs: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
-  opcionRecurrente: { marginBottom: 15 },
-  botonRecurrente: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
-  textoRecurrente: { fontSize: 14, color: COLORES.TEXTO_OSCURO, marginLeft: 10 },
+  horarioInputs: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  inputMitad: { width: '48%' },
+  subLabel: { fontSize: 12, color: COLORES.GRIS_OSCURO, marginBottom: 4 },
+  opcionRecurrente: { marginBottom: 8 },
+  botonRecurrente: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8 },
+  switchRecurrente: { width: 44, height: 24, borderRadius: 12, backgroundColor: COLORES.GRIS_MEDIO, justifyContent: 'center', paddingHorizontal: 2, marginRight: 10 },
+  switchPuntoRecurrente: { width: 20, height: 20, borderRadius: 10, backgroundColor: COLORES.BLANCO, alignSelf: 'flex-start' },
+  switchPuntoActivoRecurrente: { alignSelf: 'flex-end', backgroundColor: COLORES.EXITO },
+  textoRecurrente: { fontSize: 14, color: COLORES.TEXTO_OSCURO, marginLeft: 8 },
 
-  opcionRecordatorio: { marginBottom: 15 },
-  botonRecordatorio: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
-  textoRecordatorio: { fontSize: 14, color: COLORES.TEXTO_OSCURO, marginLeft: 10 },
-
-  modalBotones: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 20, paddingTop: 20, borderTopWidth: 1, borderTopColor: COLORES.GRIS_CLARO },
-  botonModalCancelar: { flex: 1, paddingVertical: 14, marginRight: 10, borderRadius: 10, backgroundColor: COLORES.GRIS_CLARO, alignItems: 'center' },
-  textoBotonModalCancelar: { color: COLORES.TEXTO_OSCURO, fontSize: 16, fontWeight: '600' },
-  botonModalAccion: { flex: 1, paddingVertical: 14, marginLeft: 10, borderRadius: 10, alignItems: 'center' },
-  textoBotonModalAccion: { color: COLORES.BLANCO, fontSize: 16, fontWeight: '600' },
-
-  seccionConfig: { marginBottom: 25 },
-  tituloSeccionConfig: { fontSize: 16, fontWeight: 'bold', color: COLORES.TEXTO_OSCURO, marginBottom: 15 },
+  // Config
+  seccionConfig: { marginBottom: 16 },
+  tituloSeccionConfig: { fontSize: 15, fontWeight: 'bold', color: COLORES.TEXTO_OSCURO, marginBottom: 10 },
   rangoHoras: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   inputRango: { flex: 1, alignItems: 'center' },
-  labelRango: { fontSize: 14, color: COLORES.GRIS_OSCURO, marginBottom: 8 },
-  separadorRango: { fontSize: 16, color: COLORES.GRIS_OSCURO, marginHorizontal: 15 },
-  opcionConfig: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: COLORES.GRIS_CLARO },
-  textoOpcionConfig: { fontSize: 15, color: COLORES.TEXTO_OSCURO },
-  switch: { width: 50, height: 28, borderRadius: 14, backgroundColor: COLORES.GRIS_MEDIO, justifyContent: 'center', paddingHorizontal: 2 },
+  labelRango: { fontSize: 12, color: COLORES.GRIS_OSCURO, marginBottom: 4 },
+  separadorRango: { fontSize: 16, color: COLORES.GRIS_OSCURO, marginHorizontal: 10 },
+  opcionConfig: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: COLORES.GRIS_CLARO },
+  textoOpcionConfig: { fontSize: 14, color: COLORES.TEXTO_OSCURO },
+  switch: { width: 44, height: 24, borderRadius: 12, backgroundColor: COLORES.GRIS_MEDIO, justifyContent: 'center', paddingHorizontal: 2 },
   switchActivo: { backgroundColor: COLORES.EXITO },
-  switchPunto: { width: 24, height: 24, borderRadius: 12, backgroundColor: COLORES.BLANCO, alignSelf: 'flex-start' },
+  switchPunto: { width: 20, height: 20, borderRadius: 10, backgroundColor: COLORES.BLANCO, alignSelf: 'flex-start' },
   switchPuntoActivo: { alignSelf: 'flex-end' },
+
+  // Notificación
+  notificacionContainer: {
+    position: 'absolute',
+    top: 60,
+    right: 20,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    borderRadius: 12,
+    padding: 12,
+    maxWidth: '80%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  notificacionContenido: { flexDirection: 'row', alignItems: 'center' },
+  notificacionTexto: { color: COLORES.BLANCO, fontSize: 14, flex: 1 },
 });

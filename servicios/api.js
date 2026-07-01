@@ -19,7 +19,6 @@ const obtenerToken = async () => {
 
 const obtenerHeaders = async (contenidoJSON = true) => {
   const token = await obtenerToken();
-  console.log('🔑 Token en headers:', token ? '✅ Sí' : '❌ No');
   const headers = {
     Accept: 'application/json',
   };
@@ -32,45 +31,32 @@ const obtenerHeaders = async (contenidoJSON = true) => {
   return headers;
 };
 
-const peticion = async (endpoint, metodo = 'POST', datos = null, formData = false) => {
+const peticion = async (endpoint, metodo = 'POST', datos = null) => {
   const url = `${URL_BASE_API}${endpoint}`;
-  const baseHeaders = await obtenerHeaders(!formData);
-  const headers = formData
-    ? { ...baseHeaders, Accept: 'application/json' }
-    : baseHeaders;
-
-
+  const headers = await obtenerHeaders(true);
 
   const opciones = {
     method: metodo,
     headers,
   };
 
-  if (datos) {
-    if (formData) {
-      opciones.body = datos;
-    } else {
-      opciones.body = JSON.stringify(datos);
-    }
+  if (datos && (metodo === 'POST' || metodo === 'PUT' || metodo === 'PATCH')) {
+    opciones.body = JSON.stringify(datos);
   }
 
   try {
-    const respuesta = await fetch(url, {
-      method: metodo,
-      headers: headers,
-      body: datos ? JSON.stringify(datos) : undefined,
-    });
+    const respuesta = await fetch(url, opciones);
     const texto = await respuesta.text();
     try {
       const json = JSON.parse(texto);
       return json;
     } catch (e) {
       console.warn('⚠️ Respuesta no JSON:', texto);
-      return { exito: false, error: 'Respuesta inválida del servidor' };
+      return { exito: false, error: 'Respuesta inválida del servidor', codigo: 'RESPUESTA_INVALIDA' };
     }
   } catch (error) {
     console.error(`❌ Error en petición ${metodo} ${endpoint}:`, error.message);
-    return { exito: false, error: 'Error de conexión con el servidor' };
+    return { exito: false, error: 'Error de conexión con el servidor', codigo: 'ERROR_CONEXION' };
   }
 };
 
@@ -89,8 +75,8 @@ export const servicioAPI = {
   completarPerfilConCodigo: (usuarioId, datosPerfil) =>
     peticion('/auth/completar-perfil', 'POST', { usuario_id: usuarioId, ...datosPerfil }),
 
-  registrarUsuario: (datos, endpoint = '/registro') =>
-    peticion(`/auth${endpoint}`, 'POST', datos),
+  registrarUsuario: (datos) =>
+    peticion('/auth/registro', 'POST', datos),
 
   // Recuperación de contraseña
   solicitarRecuperacion: (email) =>
@@ -114,13 +100,15 @@ export const servicioAPI = {
     }),
 
   verificarToken: async (token) => {
-    // Si no se pasa token, intenta obtenerlo del almacenamiento
     const tokenFinal = token || await obtenerToken();
     return peticion('/auth/verificar', 'POST', { token: tokenFinal || null });
   },
 
   cerrarSesion: (usuarioId) =>
     peticion('/auth/cerrar-sesion', 'POST', { usuario_id: usuarioId }),
+
+  verificarDisponibilidad: (email, username) =>
+    peticion('/auth/verificar-disponibilidad', 'GET', { email, username }),
 
   // ========== 👤 USUARIOS Y PERFILES ==========
   obtenerMiPerfil: (usuarioId) =>
@@ -388,7 +376,37 @@ export const servicioAPI = {
   generarReporteGastos: (usuarioId, tipoReporte, filtros) =>
     peticion('/gastos/generar-reporte', 'POST', { usuario_id: usuarioId, tipo_reporte: tipoReporte, filtros }),
 
-  // ========== 📋 HORARIO ==========
+  // ========== 📋 HORARIO - ACTIVIDADES BASE ==========
+  obtenerActividadesBase: (usuarioId) =>
+    peticion('/horario/actividades-base', 'POST', { usuario_id: usuarioId }),
+
+  crearActividadBase: (usuarioId, datos) =>
+    peticion('/horario/actividades-base/crear', 'POST', { usuario_id: usuarioId, ...datos }),
+
+  actualizarActividadBase: (actividadBaseId, datos) =>
+    peticion(`/horario/actividades-base/${actividadBaseId}`, 'PUT', datos),
+
+  eliminarActividadBase: (actividadBaseId) =>
+    peticion(`/horario/actividades-base/${actividadBaseId}`, 'DELETE'),
+
+  // ========== 📋 HORARIO - OCURRENCIAS ==========
+  obtenerOcurrenciasPorRango: (usuarioId, fechaInicio, fechaFin) =>
+    peticion('/horario/ocurrencias/rango', 'POST', {
+      usuario_id: usuarioId,
+      fecha_inicio: fechaInicio,
+      fecha_fin: fechaFin,
+    }),
+
+  crearOcurrencia: (usuarioId, datos) =>
+    peticion('/horario/ocurrencias/crear', 'POST', { usuario_id: usuarioId, ...datos }),
+
+  actualizarOcurrencia: (ocurrenciaId, datos) =>
+    peticion(`/horario/ocurrencias/${ocurrenciaId}`, 'PUT', datos),
+
+  eliminarOcurrencia: (ocurrenciaId) =>
+    peticion(`/horario/ocurrencias/${ocurrenciaId}`, 'DELETE'),
+
+  // ========== 📋 HORARIO - OTRAS ==========
   obtenerConfiguracionHorario: (usuarioId) =>
     peticion('/horario/configuracion', 'POST', { usuario_id: usuarioId }),
 
@@ -449,9 +467,7 @@ export const servicioAPI = {
 
   // ========== 📧 ENVÍO DE CORREOS (genérico) ==========
   enviarCorreoVerificacion: (datos) => {
-    // Este endpoint no existe en el backend actual, pero lo dejamos por compatibilidad
-    // Se puede implementar como un proxy o usar el servicio de correo directamente
-    console.warn('⚠️ enviarCorreoVerificacion no está implementado en el backend. Usa solicitarRecuperacion o completarPerfilConCodigo según el caso.');
+    console.warn('⚠️ enviarCorreoVerificacion no está implementado. Usa solicitarRecuperacion o completarPerfilConCodigo.');
     return Promise.resolve({ exito: false, error: 'Función no disponible' });
   },
 
@@ -472,9 +488,9 @@ export const servicioAPI = {
     }
   },
 
-  subirImagenPerfil: async (usuarioId, formData) => {
-    // Este endpoint puede variar; se asume que existe en el backend
-    return peticion('/preferencias/subir-foto-perfil', 'POST', formData, true);
+  subirImagenPerfil: (usuarioId, formData) => {
+    // Para subir archivos (si se necesita)
+    return peticion('/preferencias/subir-foto-perfil', 'POST', formData);
   },
 };
 
