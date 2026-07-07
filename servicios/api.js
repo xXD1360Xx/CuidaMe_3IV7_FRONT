@@ -19,6 +19,8 @@ const obtenerToken = async () => {
 
 const obtenerHeaders = async (contenidoJSON = true) => {
   const token = await obtenerToken();
+  console.log('🔑 Token en headers:', token ? '✅ Presente' : '❌ No encontrado');
+
   const headers = {
     Accept: 'application/json',
   };

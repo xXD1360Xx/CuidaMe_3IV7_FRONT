@@ -284,6 +284,7 @@ export default function VistaHorario({ navigation }) {
 
   const cargarConfiguracion = async (id) => {
     try {
+      // Usar POST en lugar de GET, y enviar usuario_id en el body
       const res = await servicioAPI.obtenerConfiguracionHorario(id);
       if (res.exito && res.configuracion) {
         setConfiguracion((prev) => ({ ...prev, ...res.configuracion }));
@@ -321,24 +322,40 @@ export default function VistaHorario({ navigation }) {
     try {
       const res = await servicioAPI.obtenerActividadesBase(id);
       if (res.exito && res.actividades && res.actividades.length > 0) {
-        const base = res.actividades.map(act => ({
+        // 🔹 Eliminar duplicados por nombre, priorizando las que tienen emoji
+        const mapa = new Map();
+        res.actividades.forEach(act => {
+          const clave = act.nombre.trim().toLowerCase();
+          if (!mapa.has(clave)) {
+            mapa.set(clave, act);
+          } else {
+            // Si ya existe una con ese nombre, conservar la que tiene emoji
+            const existente = mapa.get(clave);
+            if (!existente.emoji && act.emoji) {
+              mapa.set(clave, act);
+            }
+          }
+        });
+        const base = Array.from(mapa.values()).map(act => ({
           id: act.id,
           nombre: act.nombre,
           color: act.color || COLORES.AZUL_CIELO,
-          emoji: act.emoji || '📌',
+          emoji: act.emoji && act.emoji.trim() !== '' ? act.emoji : '📌',
           descripcion: act.descripcion || '',
         }));
         setActividadesBase(base);
+        console.log('✅ Actividades base cargadas con emojis:', base.map(a => a.emoji));
       } else {
         console.warn('⚠️ No se obtuvieron actividades del backend, usando demo');
         setActividadesBase(ACTIVIDADES_PREDEFINIDAS_DEMO);
       }
+      console.log('📦 Actividades del backend:', res.actividades.map(a => ({ nombre: a.nombre, emoji: a.emoji })));
+
     } catch (error) {
       console.warn('Error cargando actividades base:', error);
       setActividadesBase(ACTIVIDADES_PREDEFINIDAS_DEMO);
     }
   };
-
   const cargarOcurrenciasSemana = async (id) => {
     try {
       const inicio = obtenerInicioSemana(semanaActual);
@@ -432,8 +449,7 @@ export default function VistaHorario({ navigation }) {
         if (posIni >= inicio && posFin <= fin) {
           const bloques = Math.ceil((posFin - posIni) * 4);
           const dias = oc.dias || [];
-          const actividadBase = actividadesBase.find(a => a.id === oc.actividad_base_id);
-          const emoji = actividadBase?.emoji || '📌';
+          const emoji = oc.emoji || '📌';
           dias.forEach((diaId) => {
             for (let i = 0; i < bloques; i++) {
               const bh = hIni + Math.floor(i / 4);
@@ -745,19 +761,44 @@ export default function VistaHorario({ navigation }) {
   // ========== CRUD ACTIVIDAD BASE ==========
   const guardarActividadBase = async () => {
     try {
-      if (!nuevaActividadBase.nombre.trim()) {
+      const nombreLimpio = nuevaActividadBase.nombre.trim();
+      if (!nombreLimpio) {
         Alert.alert('Error', 'El nombre es requerido');
         return;
       }
+
+      // 🔹 BUSCAR SI YA EXISTE UNA ACTIVIDAD CON EL MISMO NOMBRE
+      const existente = actividadesBase.find(
+        a => a.nombre.trim().toLowerCase() === nombreLimpio.toLowerCase()
+      );
+
+      // Si existe, la reutilizamos sin llamar al backend
+      if (existente && !actividadBaseEditando) {
+        mostrarNotificacion('♻️ Actividad con este nombre ya creada');
+        setModalBaseVisible(false);
+        setActividadBaseEditando(null);
+        setNuevaActividadBase({ nombre: '', emoji: '📌', color: COLORES.AZUL_CIELO, descripcion: '' });
+        if (callbackNuevaActividad) {
+          callbackNuevaActividad(existente.id);
+          setCallbackNuevaActividad(null);
+        }
+        return;
+      }
+
+      // Si no existe, proceder a crear/actualizar
       const data = {
-        nombre: nuevaActividadBase.nombre,
-        emoji: nuevaActividadBase.emoji || '📌',
+        nombre: nombreLimpio,
+        // 🔹 Usar el emoji del formulario, si viene vacío usar '📌'
+        emoji: nuevaActividadBase.emoji && nuevaActividadBase.emoji.trim() !== '' ? nuevaActividadBase.emoji : '📌',
         color: nuevaActividadBase.color || COLORES.AZUL_CIELO,
         descripcion: nuevaActividadBase.descripcion || '',
       };
       let nuevoId = null;
       if (actividadBaseEditando) {
-        await servicioAPI.actualizarActividadBase(actividadBaseEditando.id, data);
+        await servicioAPI.actualizarActividadBase(actividadBaseEditando.id, {
+          ...data,
+          emoji: nuevaActividadBase.emoji || '📌'  // Asegura que se actualice
+        });
         nuevoId = actividadBaseEditando.id;
         mostrarNotificacion('✅ Actividad actualizada');
       } else {
@@ -781,7 +822,6 @@ export default function VistaHorario({ navigation }) {
       Alert.alert('Error', 'No se pudo guardar');
     }
   };
-
   const eliminarActividadBase = async () => {
     if (!actividadBaseEditando) return;
     Alert.alert(
