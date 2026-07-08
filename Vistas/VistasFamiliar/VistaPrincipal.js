@@ -236,9 +236,8 @@ export default function PantallaPrincipal({ navigation }) {
   };
 
   const irANotificaciones = () => {
-    // Aquí puedes navegar a una pantalla de notificaciones si existe
-    Alert.alert('Notificaciones', 'Tienes notificaciones pendientes');
     setNotificacionesNoLeidas(0);
+    navegarA('Notificaciones');
   };
 
   // ---------- UTILIDADES ----------

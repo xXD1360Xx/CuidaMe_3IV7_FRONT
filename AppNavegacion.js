@@ -19,7 +19,7 @@ import VistaMedicinas from './Vistas/VistasFamiliar/VistaMedicinas';
 import VistaPreferencias from './Vistas/VistasFamiliar/VistaPreferencias';
 import VistaInfoAnciano from './Vistas/VistasFamiliar/VistaInfoAnciano';
 import VistaCalendario from './Vistas/VistasFamiliar/VistaCalendario';
-// ✅ DESCOMENTADA: VistaCrearAnciano existe en VistasLogin
+import VistaNotificaciones from './Vistas/VistasFamiliar/VistaNotificaciones';
 import VistaCrearAnciano from './Vistas/VistasLogin/VistaCrearAnciano';
 
 // ❌ Las siguientes vistas NO EXISTEN, se mantienen comentadas
@@ -139,8 +139,7 @@ export default function AppNavegacion() {
           <Stack.Screen name="Preferencias" component={VistaPreferencias} />
           <Stack.Screen name="InfoAnciano" component={VistaInfoAnciano} />
           <Stack.Screen name="Calendario" component={VistaCalendario} />
-
-          {/* ✅ DESCOMENTADA: Pantalla para crear/editar adulto mayor */}
+          <Stack.Screen name="Notificaciones" component={VistaNotificaciones} />
           <Stack.Screen name="CrearAnciano" component={VistaCrearAnciano} />
 
           {/* ❌ Vistas de perfiles específicos - COMENTADAS porque no existen */}

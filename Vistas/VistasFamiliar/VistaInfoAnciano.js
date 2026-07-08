@@ -11,12 +11,19 @@ import {
   Modal,
   TextInput,
   Alert,
+  Platform,
+  StatusBar,
+  Animated,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons as Icon } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 import { servicioAPI } from '../../servicios/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// Colores estandarizados
 const COLORES = {
   AZUL_CIELO: '#87CEEB',
   AZUL_CIELO_OSCURO: '#5D8AA8',
@@ -33,7 +40,33 @@ const COLORES = {
   ROJO_CLARO: '#EF5350',
   MORADO: '#BA68C8',
   NARANJA: '#FF9800',
+  ROSADO: '#F48FB1',
+  TURQUESA: '#4DB6AC',
+  INDIGO: '#7986CB',
 };
+
+// Colores por categoría para fondos sutiles
+const COLOR_CATEGORIA = {
+  enfermedad: { bg: COLORES.ROJO_CLARO + '15', border: COLORES.ROJO_CLARO, icon: 'medical-outline' },
+  alergia: { bg: COLORES.NARANJA + '15', border: COLORES.NARANJA, icon: 'alert-circle-outline' },
+  medicina: { bg: COLORES.EXITO + '15', border: COLORES.EXITO, icon: 'medkit-outline' },
+  articulo: { bg: COLORES.AZUL_CIELO + '15', border: COLORES.AZUL_CIELO_OSCURO, icon: 'cube-outline' },
+  hobby: { bg: COLORES.MORADO + '15', border: COLORES.MORADO, icon: 'happy-outline' },
+  cita: { bg: COLORES.TURQUESA + '15', border: COLORES.TURQUESA, icon: 'calendar-outline' },
+};
+
+// Actividades predefinidas (hobbies)
+const ACTIVIDADES_PREDEFINIDAS = [
+  { nombre: 'Leer', emoji: '📖', color: COLORES.INDIGO },
+  { nombre: 'Jardinería', emoji: '🌱', color: COLORES.VERDE_CLARO },
+  { nombre: 'Pintar', emoji: '🎨', color: COLORES.ROSA },
+  { nombre: 'Música', emoji: '🎵', color: COLORES.MORADO },
+  { nombre: 'Tejer', emoji: '🧶', color: COLORES.NARANJA },
+  { nombre: 'Manualidades', emoji: '🧩', color: COLORES.AMARILLO_PLATANO },
+  { nombre: 'Cocinar', emoji: '👨‍🍳', color: COLORES.ROJO_CLARO },
+  { nombre: 'Jugar cartas', emoji: '🃏', color: COLORES.TURQUESA },
+  { nombre: 'Pasear', emoji: '🚶‍♀️', color: COLORES.EXITO },
+];
 
 export default function VistaInfoAnciano({ navigation }) {
   const [adultoMayor, setAdultoMayor] = useState(null);
@@ -44,13 +77,28 @@ export default function VistaInfoAnciano({ navigation }) {
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTipo, setModalTipo] = useState('');
   const [modalData, setModalData] = useState({});
+  const [notificacionesNoLeidas, setNotificacionesNoLeidas] = useState(0);
 
-  // Estados para formularios
-  const [nuevaEnfermedad, setNuevaEnfermedad] = useState('');
-  const [nuevaAlergia, setNuevaAlergia] = useState('');
-  const [nuevoArticulo, setNuevoArticulo] = useState({ nombre: '', cantidad: '1', ubicacion: '' });
-  const [nuevoHobby, setNuevoHobby] = useState('');
+  // Estados para el formulario de edición del adulto mayor
+  const [formAdultoMayor, setFormAdultoMayor] = useState({
+    nombre: '',
+    fecha_nacimiento: '',
+    genero: '',
+    estado_salud: '',
+    nivel_dependencia: '',
+    contacto_emergencia: '',
+    telefono_emergencia: '',
+    notas: '',
+  });
 
+  // Estados para agregar/editar elementos
+  const [nuevaEnfermedad, setNuevaEnfermedad] = useState({ nombre: '', fecha_diagnostico: '', tratamiento: '' });
+  const [nuevaAlergia, setNuevaAlergia] = useState({ nombre: '', severidad: 'baja', reaccion: '' });
+  const [nuevoArticulo, setNuevoArticulo] = useState({ nombre: '', cantidad: '1', ubicacion: '', estado: 'optimo' });
+  const [nuevoHobby, setNuevoHobby] = useState({ nombre: '', emoji: '📌', color: COLORES.MORADO });
+  const [nuevaCita, setNuevaCita] = useState({ especialista: '', frecuencia: 'mensual', proxima_cita: '', ubicacion: '' });
+
+  // ---------- CARGA DE DATOS ----------
   const cargarDatos = useCallback(async () => {
     try {
       setCargando(true);
@@ -67,6 +115,17 @@ export default function VistaInfoAnciano({ navigation }) {
       const response = await servicioAPI.obtenerAdultoMayorPrincipal(id);
       if (response.exito && response.adultoMayor) {
         setAdultoMayor(response.adultoMayor);
+        // Precargar formulario de edición
+        setFormAdultoMayor({
+          nombre: response.adultoMayor.nombre || '',
+          fecha_nacimiento: response.adultoMayor.fecha_nacimiento || '',
+          genero: response.adultoMayor.genero || '',
+          estado_salud: response.adultoMayor.estado_salud || '',
+          nivel_dependencia: response.adultoMayor.nivel_dependencia || '',
+          contacto_emergencia: response.adultoMayor.contacto_emergencia || '',
+          telefono_emergencia: response.adultoMayor.telefono_emergencia || '',
+          notas: response.adultoMayor.notas || '',
+        });
       } else {
         setAdultoMayor(null);
       }
@@ -82,6 +141,8 @@ export default function VistaInfoAnciano({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       cargarDatos();
+      // Simular notificaciones no leídas
+      setNotificacionesNoLeidas(2);
     }, [cargarDatos])
   );
 
@@ -90,6 +151,7 @@ export default function VistaInfoAnciano({ navigation }) {
     await cargarDatos();
   }, [cargarDatos]);
 
+  // ---------- UTILIDADES ----------
   const esAdministrador = usuarioRol === 'familiar_admin' || usuarioRol === 'familiar_principal';
 
   const calcularEdad = (fechaNacimiento) => {
@@ -105,7 +167,6 @@ export default function VistaInfoAnciano({ navigation }) {
     return edad;
   };
 
-  // Formatear fecha
   const formatearFecha = (fechaStr) => {
     if (!fechaStr) return 'Fecha no disponible';
     const fecha = new Date(fechaStr);
@@ -113,59 +174,157 @@ export default function VistaInfoAnciano({ navigation }) {
     return fecha.toLocaleDateString('es-ES', {
       weekday: 'short',
       day: 'numeric',
-      month: 'short'
+      month: 'short',
+      year: 'numeric',
     });
   };
 
+  const formatearFechaInput = (fechaStr) => {
+    if (!fechaStr) return '';
+    const fecha = new Date(fechaStr);
+    if (isNaN(fecha)) return '';
+    return fecha.toISOString().split('T')[0];
+  };
+
+  const obtenerColorEstadoSalud = (estado) => {
+    const map = {
+      excelente: COLORES.EXITO,
+      bueno: COLORES.VERDE_CLARO,
+      regular: COLORES.AMARILLO_PLATANO,
+      malo: COLORES.ERROR,
+    };
+    return map[estado?.toLowerCase()] || COLORES.GRIS_OSCURO;
+  };
+
+  // ---------- NAVEGACIÓN ----------
+  const navegarA = (destino, params = {}) => {
+    navigation.navigate(destino, params);
+  };
+
+  const irANotificaciones = () => {
+    Alert.alert('Notificaciones', 'Tienes notificaciones pendientes');
+    setNotificacionesNoLeidas(0);
+  };
+
+  // ---------- CRUD DE ELEMENTOS ----------
   const abrirModal = (tipo, datos = {}) => {
     setModalTipo(tipo);
     setModalData(datos);
     setModalVisible(true);
+    // Precargar datos según tipo
     switch (tipo) {
       case 'enfermedad':
-        setNuevaEnfermedad(datos.nombre || '');
+        setNuevaEnfermedad({
+          nombre: datos.nombre || '',
+          fecha_diagnostico: datos.fecha_diagnostico || '',
+          tratamiento: datos.tratamiento || '',
+        });
         break;
       case 'alergia':
-        setNuevaAlergia(datos.nombre || '');
+        setNuevaAlergia({
+          nombre: datos.nombre || '',
+          severidad: datos.severidad || 'baja',
+          reaccion: datos.reaccion || '',
+        });
         break;
       case 'articulo':
         setNuevoArticulo({
           nombre: datos.nombre || '',
           cantidad: datos.cantidad?.toString() || '1',
           ubicacion: datos.ubicacion || '',
+          estado: datos.estado || 'optimo',
         });
         break;
       case 'hobby':
-        setNuevoHobby(datos.nombre || '');
+        setNuevoHobby({
+          nombre: datos.nombre || '',
+          emoji: datos.emoji || '📌',
+          color: datos.color || COLORES.MORADO,
+        });
+        break;
+      case 'cita':
+        setNuevaCita({
+          especialista: datos.especialista || '',
+          frecuencia: datos.frecuencia || 'mensual',
+          proxima_cita: datos.proxima_cita || '',
+          ubicacion: datos.ubicacion || '',
+        });
+        break;
+      case 'editarAdulto':
+        // Abrir modal de edición del adulto mayor con datos precargados
+        setFormAdultoMayor({
+          nombre: adultoMayor?.nombre || '',
+          fecha_nacimiento: adultoMayor?.fecha_nacimiento || '',
+          genero: adultoMayor?.genero || '',
+          estado_salud: adultoMayor?.estado_salud || '',
+          nivel_dependencia: adultoMayor?.nivel_dependencia || '',
+          contacto_emergencia: adultoMayor?.contacto_emergencia || '',
+          telefono_emergencia: adultoMayor?.telefono_emergencia || '',
+          notas: adultoMayor?.notas || '',
+        });
+        setModalTipo('editarAdulto');
+        setModalVisible(true);
         break;
     }
   };
 
   const guardarModal = async () => {
     try {
-      if (modalTipo === 'enfermedad' && !nuevaEnfermedad.trim()) {
+      const tipo = modalTipo;
+      if (tipo === 'editarAdulto') {
+        // Guardar cambios del adulto mayor
+        const response = await servicioAPI.actualizarAdultoMayor(usuarioId, adultoMayor.id, formAdultoMayor); if (response.exito) {
+          Alert.alert('Éxito', 'Información actualizada correctamente');
+          setModalVisible(false);
+          cargarDatos();
+        } else {
+          Alert.alert('Error', response.error || 'No se pudo actualizar');
+        }
+        return;
+      }
+
+      // Validaciones para otros tipos
+      if (tipo === 'enfermedad' && !nuevaEnfermedad.nombre.trim()) {
         Alert.alert('Error', 'Debes ingresar el nombre de la enfermedad');
         return;
       }
-      if (modalTipo === 'alergia' && !nuevaAlergia.trim()) {
+      if (tipo === 'alergia' && !nuevaAlergia.nombre.trim()) {
         Alert.alert('Error', 'Debes ingresar el nombre de la alergia');
         return;
       }
-      if (modalTipo === 'articulo' && !nuevoArticulo.nombre.trim()) {
+      if (tipo === 'articulo' && !nuevoArticulo.nombre.trim()) {
         Alert.alert('Error', 'Debes ingresar el nombre del artículo');
         return;
       }
-      if (modalTipo === 'hobby' && !nuevoHobby.trim()) {
+      if (tipo === 'hobby' && !nuevoHobby.nombre.trim()) {
         Alert.alert('Error', 'Debes ingresar el nombre del hobby');
         return;
+      }
+      if (tipo === 'cita' && !nuevaCita.especialista.trim()) {
+        Alert.alert('Error', 'Debes ingresar el nombre del especialista');
+        return;
+      }
+
+      // Si es un hobby, también agregarlo como actividad base
+      if (tipo === 'hobby' && !modalData.id) {
+        // Agregar a actividades base para VistaHorario
+        await servicioAPI.crearActividadBase(usuarioId, {
+          nombre: nuevoHobby.nombre,
+          emoji: nuevoHobby.emoji || '📌',
+          color: nuevoHobby.color || COLORES.MORADO,
+          tipo: 'recreacion',
+          descripcion: 'Hobby del adulto mayor',
+        });
       }
 
       Alert.alert('Éxito', 'Información guardada correctamente');
       setModalVisible(false);
-      setNuevaEnfermedad('');
-      setNuevaAlergia('');
-      setNuevoArticulo({ nombre: '', cantidad: '1', ubicacion: '' });
-      setNuevoHobby('');
+      // Resetear estados
+      setNuevaEnfermedad({ nombre: '', fecha_diagnostico: '', tratamiento: '' });
+      setNuevaAlergia({ nombre: '', severidad: 'baja', reaccion: '' });
+      setNuevoArticulo({ nombre: '', cantidad: '1', ubicacion: '', estado: 'optimo' });
+      setNuevoHobby({ nombre: '', emoji: '📌', color: COLORES.MORADO });
+      setNuevaCita({ especialista: '', frecuencia: 'mensual', proxima_cita: '', ubicacion: '' });
       cargarDatos();
     } catch (error) {
       console.error('Error guardando datos:', error);
@@ -176,7 +335,7 @@ export default function VistaInfoAnciano({ navigation }) {
   const eliminarElemento = (tipo, id) => {
     Alert.alert(
       'Confirmar eliminación',
-      `¿Estás seguro de que quieres eliminar este ${tipo}?`,
+      `¿Estás seguro de eliminar este ${tipo}?`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -195,37 +354,93 @@ export default function VistaInfoAnciano({ navigation }) {
     );
   };
 
-  const navegarA = (destino, params = {}) => {
-    navigation.navigate(destino, params);
+  // ---------- RENDER DE SWIPEABLE ----------
+  const renderSwipeableItem = (item, tipo, categoria, onEdit, onDelete) => {
+    const colores = COLOR_CATEGORIA[categoria] || COLOR_CATEGORIA.hobby;
+
+    return (
+      <Swipeable
+        renderLeftActions={(progress, dragX) => {
+          const trans = dragX.interpolate({
+            inputRange: [0, 50, 100, 200],
+            outputRange: [-20, 0, 0, 0],
+          });
+          return (
+            <Animated.View style={[styles.swipeLeft, { transform: [{ translateX: trans }] }]}>
+              <Icon name="create-outline" size={24} color={COLORES.BLANCO} />
+              <Text style={styles.swipeText}>Editar</Text>
+            </Animated.View>
+          );
+        }}
+        renderRightActions={(progress, dragX) => {
+          const trans = dragX.interpolate({
+            inputRange: [-200, -100, -50, 0],
+            outputRange: [0, 0, 0, -20],
+          });
+          return (
+            <Animated.View style={[styles.swipeRight, { transform: [{ translateX: trans }] }]}>
+              <Icon name="trash-outline" size={24} color={COLORES.BLANCO} />
+              <Text style={styles.swipeText}>Eliminar</Text>
+            </Animated.View>
+          );
+        }}
+        onSwipeableLeftOpen={() => onEdit(item)}
+        onSwipeableRightOpen={() => onDelete(item.id)}
+        overshootLeft={false}
+        overshootRight={false}
+        friction={2}
+      >
+        <TouchableOpacity
+          style={[styles.itemLista, { backgroundColor: colores.bg, borderLeftColor: colores.border, borderLeftWidth: 4 }]}
+          onPress={() => onEdit(item)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.infoItem}>
+            <Icon name={colores.icon} size={20} color={colores.border} />
+            <Text style={styles.textoItem}>{item.nombre}</Text>
+            {item.detalle && <Text style={styles.detalleItem}>{item.detalle}</Text>}
+          </View>
+          <Icon name="chevron-forward-outline" size={20} color={COLORES.GRIS_OSCURO} />
+        </TouchableOpacity>
+      </Swipeable>
+    );
   };
 
+  // ---------- RENDER PRINCIPAL ----------
   if (cargando) {
     return (
-      <LinearGradient colors={[COLORES.AZUL_CIELO, COLORES.BLANCO]} style={styles.fondo}>
+      <View style={styles.fondoBlanco}>
         <SafeAreaView style={styles.centrado}>
           <ActivityIndicator size="large" color={COLORES.AMARILLO_PLATANO} />
           <Text style={styles.textoCargando}>Cargando información...</Text>
         </SafeAreaView>
-      </LinearGradient>
+      </View>
     );
   }
 
   if (!adultoMayor) {
     return (
-      <LinearGradient colors={[COLORES.AZUL_CIELO, COLORES.BLANCO]} style={styles.fondo}>
+      <View style={styles.fondoBlanco}>
         <SafeAreaView style={styles.contenedor}>
           <View style={styles.encabezado}>
             <TouchableOpacity style={styles.botonAtras} onPress={() => navigation.goBack()}>
-              <Text style={{ fontSize: 24 }}>⬅️</Text>
+              <Icon name="arrow-back-outline" size={28} color={COLORES.TEXTO_OSCURO} />
             </TouchableOpacity>
             <View style={styles.tituloContainer}>
               <Text style={styles.tituloPrincipal}>Información del Adulto Mayor</Text>
             </View>
-            <View style={{ width: 40 }} />
+            <TouchableOpacity style={styles.botonNotificaciones} onPress={irANotificaciones}>
+              <Icon name="notifications-outline" size={28} color={COLORES.TEXTO_OSCURO} />
+              {notificacionesNoLeidas > 0 && (
+                <View style={styles.badgeContainer}>
+                  <Text style={styles.badgeTexto}>{notificacionesNoLeidas}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
           </View>
 
           <View style={styles.sinAdultoContainer}>
-            <Text style={styles.sinAdultoIcono}>👤</Text>
+            <Icon name="person-outline" size={80} color={COLORES.GRIS_MEDIO} />
             <Text style={styles.sinAdultoTitulo}>No hay adulto mayor asignado</Text>
             <Text style={styles.sinAdultoSubtitulo}>
               Registra la información de la persona a quien vas a cuidar.
@@ -240,7 +455,8 @@ export default function VistaInfoAnciano({ navigation }) {
                 });
               }}
             >
-              <Text style={styles.textoBotonAgregarAdulto}>➕ Agregar adulto mayor</Text>
+              <Icon name="add-outline" size={24} color={COLORES.BLANCO} />
+              <Text style={styles.textoBotonAgregarAdulto}>Agregar adulto mayor</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -251,25 +467,31 @@ export default function VistaInfoAnciano({ navigation }) {
             </TouchableOpacity>
           </View>
         </SafeAreaView>
-      </LinearGradient>
+      </View>
     );
   }
 
-  // Render principal cuando hay adulto mayor
+  const edad = calcularEdad(adultoMayor.fecha_nacimiento);
+
   return (
-    <LinearGradient colors={[COLORES.AZUL_CIELO, COLORES.BLANCO]} style={styles.fondo}>
+    <GestureHandlerRootView style={styles.fondoBlanco}>
       <SafeAreaView style={styles.contenedor}>
         {/* Encabezado */}
         <View style={styles.encabezado}>
           <TouchableOpacity style={styles.botonAtras} onPress={() => navigation.goBack()}>
-            <Text style={{ fontSize: 24 }}>⬅️</Text>
+            <Icon name="arrow-back-outline" size={28} color={COLORES.TEXTO_OSCURO} />
           </TouchableOpacity>
           <View style={styles.tituloContainer}>
             <Text style={styles.tituloPrincipal}>Información General</Text>
             <Text style={styles.subtituloPrincipal}>{adultoMayor?.nombre || 'Adulto Mayor'}</Text>
           </View>
-          <TouchableOpacity style={styles.botonRefrescar} onPress={onRefresh} disabled={refrescando}>
-            <Text style={{ fontSize: 22, opacity: refrescando ? 0.5 : 1 }}>🔄</Text>
+          <TouchableOpacity style={styles.botonNotificaciones} onPress={irANotificaciones}>
+            <Icon name="notifications-outline" size={28} color={COLORES.TEXTO_OSCURO} />
+            {notificacionesNoLeidas > 0 && (
+              <View style={styles.badgeContainer}>
+                <Text style={styles.badgeTexto}>{notificacionesNoLeidas}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -287,14 +509,14 @@ export default function VistaInfoAnciano({ navigation }) {
           {/* Tarjeta de información básica */}
           <View style={styles.seccion}>
             <View style={styles.encabezadoSeccion}>
-              <Text style={{ fontSize: 24, marginRight: 8 }}>ℹ️</Text>
+              <Icon name="person-circle-outline" size={28} color={COLORES.AZUL_CIELO_OSCURO} />
               <Text style={styles.tituloSeccion}>Información Básica</Text>
               {esAdministrador && (
                 <TouchableOpacity
                   style={styles.botonEditar}
-                  onPress={() => navegarA('CrearAnciano', { usuarioId, codigoFamiliar: null })}
+                  onPress={() => abrirModal('editarAdulto')}
                 >
-                  <Text style={{ fontSize: 18 }}>📝</Text>
+                  <Icon name="create-outline" size={22} color={COLORES.AZUL_CIELO_OSCURO} />
                 </TouchableOpacity>
               )}
             </View>
@@ -302,14 +524,12 @@ export default function VistaInfoAnciano({ navigation }) {
             <View style={styles.contenedorTarjeta}>
               <View style={styles.filaInfo}>
                 <View style={styles.itemInfo}>
-                  <Text style={{ fontSize: 18, marginRight: 6 }}>📅</Text>
+                  <Icon name="calendar-outline" size={20} color={COLORES.GRIS_OSCURO} />
                   <Text style={styles.labelInfo}>Edad:</Text>
-                  <Text style={styles.valorInfo}>
-                    {calcularEdad(adultoMayor?.fecha_nacimiento)} años
-                  </Text>
+                  <Text style={styles.valorInfo}>{edad} años</Text>
                 </View>
                 <View style={styles.itemInfo}>
-                  <Text style={{ fontSize: 18, marginRight: 6 }}>🧬</Text>
+                  <Icon name="male-female-outline" size={20} color={COLORES.GRIS_OSCURO} />
                   <Text style={styles.labelInfo}>Género:</Text>
                   <Text style={styles.valorInfo}>
                     {adultoMayor?.genero === 'M' || adultoMayor?.genero === 'Masculino'
@@ -323,21 +543,12 @@ export default function VistaInfoAnciano({ navigation }) {
 
               <View style={styles.filaInfo}>
                 <View style={styles.itemInfo}>
-                  <Text style={{ fontSize: 18, marginRight: 6 }}>❤️</Text>
+                  <Icon name="heart-outline" size={20} color={COLORES.ROJO_CLARO} />
                   <Text style={styles.labelInfo}>Estado de salud:</Text>
                   <View
                     style={[
                       styles.estadoSalud,
-                      {
-                        backgroundColor:
-                          adultoMayor?.estado_salud === 'excelente'
-                            ? COLORES.EXITO
-                            : adultoMayor?.estado_salud === 'bueno'
-                              ? COLORES.VERDE_CLARO
-                              : adultoMayor?.estado_salud === 'regular'
-                                ? COLORES.AMARILLO_PLATANO
-                                : COLORES.ERROR,
-                      },
+                      { backgroundColor: obtenerColorEstadoSalud(adultoMayor?.estado_salud) },
                     ]}
                   >
                     <Text style={styles.textoEstadoSalud}>
@@ -346,7 +557,7 @@ export default function VistaInfoAnciano({ navigation }) {
                   </View>
                 </View>
                 <View style={styles.itemInfo}>
-                  <Text style={{ fontSize: 18, marginRight: 6 }}>🛌</Text>
+                  <Icon name="bed-outline" size={20} color={COLORES.GRIS_OSCURO} />
                   <Text style={styles.labelInfo}>Dependencia:</Text>
                   <Text style={styles.valorInfo}>
                     {adultoMayor?.nivel_dependencia === 'alta'
@@ -361,14 +572,14 @@ export default function VistaInfoAnciano({ navigation }) {
               </View>
 
               <View style={styles.infoCompleta}>
+                <Icon name="calendar-outline" size={18} color={COLORES.GRIS_OSCURO} />
                 <Text style={styles.labelInfo}>Fecha de nacimiento:</Text>
-                <Text style={styles.valorInfo}>
-                  {formatearFecha(adultoMayor?.fecha_nacimiento)}
-                </Text>
+                <Text style={styles.valorInfo}>{formatearFecha(adultoMayor?.fecha_nacimiento)}</Text>
               </View>
 
               {adultoMayor?.contacto_emergencia && (
                 <View style={styles.infoCompleta}>
+                  <Icon name="call-outline" size={18} color={COLORES.GRIS_OSCURO} />
                   <Text style={styles.labelInfo}>Contacto emergencia:</Text>
                   <Text style={styles.valorInfo}>{adultoMayor.contacto_emergencia}</Text>
                 </View>
@@ -376,6 +587,7 @@ export default function VistaInfoAnciano({ navigation }) {
 
               {adultoMayor?.telefono_emergencia && (
                 <View style={styles.infoCompleta}>
+                  <Icon name="call-outline" size={18} color={COLORES.ERROR} />
                   <Text style={styles.labelInfo}>Teléfono emergencia:</Text>
                   <Text style={[styles.valorInfo, { color: COLORES.ERROR }]}>
                     {adultoMayor.telefono_emergencia}
@@ -388,40 +600,28 @@ export default function VistaInfoAnciano({ navigation }) {
           {/* Enfermedades */}
           <View style={styles.seccion}>
             <View style={styles.encabezadoSeccion}>
-              <Text style={{ fontSize: 24, marginRight: 8 }}>🩺</Text>
+              <Icon name="medical-outline" size={24} color={COLORES.ROJO_CLARO} />
               <Text style={styles.tituloSeccion}>Enfermedades y Condiciones</Text>
               {esAdministrador && (
                 <TouchableOpacity style={styles.botonAgregar} onPress={() => abrirModal('enfermedad')}>
-                  <Text style={{ fontSize: 22 }}>➕</Text>
+                  <Icon name="add-outline" size={24} color={COLORES.ROJO_CLARO} />
                 </TouchableOpacity>
               )}
             </View>
             <View style={styles.contenedorTarjeta}>
               {adultoMayor?.enfermedades?.length > 0 ? (
-                adultoMayor.enfermedades.map((enfermedad, index) => (
-                  <View key={index} style={styles.itemLista}>
-                    <View style={styles.infoItem}>
-                      <Text style={{ fontSize: 16, marginRight: 6 }}>⚠️</Text>
-                      <Text style={styles.textoItem}>{enfermedad.nombre}</Text>
-                      {enfermedad.fecha_diagnostico && (
-                        <Text style={styles.fechaItem}>
-                          Diagnóstico: {formatearFecha(enfermedad.fecha_diagnostico)}
-                        </Text>
-                      )}
-                      {enfermedad.tratamiento && (
-                        <Text style={styles.detalleItem}>Tratamiento: {enfermedad.tratamiento}</Text>
-                      )}
-                    </View>
-                    {esAdministrador && (
-                      <TouchableOpacity
-                        style={styles.botonEliminar}
-                        onPress={() => eliminarElemento('enfermedad', enfermedad.id)}
-                      >
-                        <Text style={{ fontSize: 16 }}>🗑️</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                ))
+                adultoMayor.enfermedades.map((enfermedad) =>
+                  renderSwipeableItem(
+                    {
+                      ...enfermedad,
+                      detalle: `${enfermedad.fecha_diagnostico ? 'Diagnóstico: ' + formatearFecha(enfermedad.fecha_diagnostico) : ''}${enfermedad.tratamiento ? ' • Tratamiento: ' + enfermedad.tratamiento : ''}`,
+                    },
+                    'enfermedad',
+                    'enfermedad',
+                    (item) => abrirModal('enfermedad', item),
+                    (id) => eliminarElemento('enfermedad', id)
+                  )
+                )
               ) : (
                 <Text style={styles.textoVacioLista}>No hay enfermedades registradas</Text>
               )}
@@ -431,52 +631,28 @@ export default function VistaInfoAnciano({ navigation }) {
           {/* Alergias */}
           <View style={styles.seccion}>
             <View style={styles.encabezadoSeccion}>
-              <Text style={{ fontSize: 24, marginRight: 8 }}>⚠️</Text>
+              <Icon name="alert-circle-outline" size={24} color={COLORES.NARANJA} />
               <Text style={styles.tituloSeccion}>Alergias</Text>
               {esAdministrador && (
                 <TouchableOpacity style={styles.botonAgregar} onPress={() => abrirModal('alergia')}>
-                  <Text style={{ fontSize: 22 }}>➕</Text>
+                  <Icon name="add-outline" size={24} color={COLORES.NARANJA} />
                 </TouchableOpacity>
               )}
             </View>
             <View style={styles.contenedorTarjeta}>
               {adultoMayor?.alergias?.length > 0 ? (
-                adultoMayor.alergias.map((alergia, index) => (
-                  <View key={index} style={styles.itemLista}>
-                    <View style={styles.infoItem}>
-                      <Text style={{ fontSize: 16, marginRight: 6 }}>⚡</Text>
-                      <Text style={styles.textoItem}>{alergia.nombre}</Text>
-                      {alergia.severidad && (
-                        <View
-                          style={[
-                            styles.badgeSeveridad,
-                            {
-                              backgroundColor:
-                                alergia.severidad === 'alta'
-                                  ? COLORES.ERROR
-                                  : alergia.severidad === 'media'
-                                    ? COLORES.AMARILLO_PLATANO
-                                    : COLORES.VERDE_CLARO,
-                            },
-                          ]}
-                        >
-                          <Text style={styles.textoBadge}>{alergia.severidad.toUpperCase()}</Text>
-                        </View>
-                      )}
-                      {alergia.reaccion && (
-                        <Text style={styles.detalleItem}>Reacción: {alergia.reaccion}</Text>
-                      )}
-                    </View>
-                    {esAdministrador && (
-                      <TouchableOpacity
-                        style={styles.botonEliminar}
-                        onPress={() => eliminarElemento('alergia', alergia.id)}
-                      >
-                        <Text style={{ fontSize: 16 }}>🗑️</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                ))
+                adultoMayor.alergias.map((alergia) =>
+                  renderSwipeableItem(
+                    {
+                      ...alergia,
+                      detalle: `Severidad: ${alergia.severidad?.toUpperCase() || 'No especificada'}${alergia.reaccion ? ' • Reacción: ' + alergia.reaccion : ''}`,
+                    },
+                    'alergia',
+                    'alergia',
+                    (item) => abrirModal('alergia', item),
+                    (id) => eliminarElemento('alergia', id)
+                  )
+                )
               ) : (
                 <Text style={styles.textoVacioLista}>No hay alergias registradas</Text>
               )}
@@ -486,7 +662,7 @@ export default function VistaInfoAnciano({ navigation }) {
           {/* Medicinas Habituales */}
           <View style={styles.seccion}>
             <View style={styles.encabezadoSeccion}>
-              <Text style={{ fontSize: 24, marginRight: 8 }}>💊</Text>
+              <Icon name="medkit-outline" size={24} color={COLORES.EXITO} />
               <Text style={styles.tituloSeccion}>Medicinas Habituales</Text>
               <TouchableOpacity style={styles.botonVerTodo} onPress={() => navegarA('Medicinas')}>
                 <Text style={styles.textoBotonVerTodo}>Ver todas →</Text>
@@ -494,32 +670,25 @@ export default function VistaInfoAnciano({ navigation }) {
             </View>
             <View style={styles.contenedorTarjeta}>
               {adultoMayor?.medicinas_habituales?.length > 0 ? (
-                adultoMayor.medicinas_habituales.slice(0, 3).map((medicina, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={styles.itemLista}
-                    onPress={() => navegarA('Medicinas', { medicinaId: medicina.id })}
-                  >
-                    <View style={styles.infoItem}>
-                      <Text style={{ fontSize: 16, marginRight: 6 }}>💊</Text>
-                      <Text style={styles.textoItem}>{medicina.nombre}</Text>
-                      <Text style={styles.detalleItem}>
-                        {medicina.dosis} • {medicina.frecuencia}
-                      </Text>
-                      {medicina.proposito && (
-                        <Text style={styles.detalleItem}>Para: {medicina.proposito}</Text>
-                      )}
-                    </View>
-                    <Text style={{ fontSize: 16 }}>▶️</Text>
-                  </TouchableOpacity>
-                ))
+                adultoMayor.medicinas_habituales.slice(0, 5).map((medicina) =>
+                  renderSwipeableItem(
+                    {
+                      ...medicina,
+                      detalle: `${medicina.dosis || ''}${medicina.frecuencia ? ' • ' + medicina.frecuencia : ''}`,
+                    },
+                    'medicina',
+                    'medicina',
+                    (item) => navegarA('Medicinas', { medicinaId: item.id }),
+                    (id) => eliminarElemento('medicina', id)
+                  )
+                )
               ) : (
                 <Text style={styles.textoVacioLista}>No hay medicinas registradas</Text>
               )}
-              {adultoMayor?.medicinas_habituales?.length > 3 && (
+              {adultoMayor?.medicinas_habituales?.length > 5 && (
                 <TouchableOpacity style={styles.botonVerMas} onPress={() => navegarA('Medicinas')}>
                   <Text style={styles.textoBotonVerMas}>
-                    Ver {adultoMayor.medicinas_habituales.length - 3} medicinas más
+                    Ver {adultoMayor.medicinas_habituales.length - 5} medicinas más
                   </Text>
                 </TouchableOpacity>
               )}
@@ -529,38 +698,28 @@ export default function VistaInfoAnciano({ navigation }) {
           {/* Artículos */}
           <View style={styles.seccion}>
             <View style={styles.encabezadoSeccion}>
-              <Text style={{ fontSize: 24, marginRight: 8 }}>📦</Text>
+              <Icon name="cube-outline" size={24} color={COLORES.AZUL_CIELO_OSCURO} />
               <Text style={styles.tituloSeccion}>Artículos y Equipamiento</Text>
               {esAdministrador && (
                 <TouchableOpacity style={styles.botonAgregar} onPress={() => abrirModal('articulo')}>
-                  <Text style={{ fontSize: 22 }}>➕</Text>
+                  <Icon name="add-outline" size={24} color={COLORES.AZUL_CIELO_OSCURO} />
                 </TouchableOpacity>
               )}
             </View>
             <View style={styles.contenedorTarjeta}>
               {adultoMayor?.articulos?.length > 0 ? (
-                adultoMayor.articulos.map((articulo, index) => (
-                  <View key={index} style={styles.itemLista}>
-                    <View style={styles.infoItem}>
-                      <Text style={{ fontSize: 16, marginRight: 6 }}>📦</Text>
-                      <Text style={styles.textoItem}>{articulo.nombre}</Text>
-                      <View style={styles.infoDetalle}>
-                        <Text style={styles.detalleItem}>Cantidad: {articulo.cantidad}</Text>
-                        {articulo.ubicacion && (
-                          <Text style={styles.detalleItem}>Ubicación: {articulo.ubicacion}</Text>
-                        )}
-                      </View>
-                    </View>
-                    {esAdministrador && (
-                      <TouchableOpacity
-                        style={styles.botonEliminar}
-                        onPress={() => eliminarElemento('artículo', articulo.id)}
-                      >
-                        <Text style={{ fontSize: 16 }}>🗑️</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                ))
+                adultoMayor.articulos.map((articulo) =>
+                  renderSwipeableItem(
+                    {
+                      ...articulo,
+                      detalle: `Cantidad: ${articulo.cantidad || 1}${articulo.ubicacion ? ' • Ubicación: ' + articulo.ubicacion : ''}${articulo.estado ? ' • Estado: ' + articulo.estado : ''}`,
+                    },
+                    'artículo',
+                    'articulo',
+                    (item) => abrirModal('articulo', item),
+                    (id) => eliminarElemento('artículo', id)
+                  )
+                )
               ) : (
                 <Text style={styles.textoVacioLista}>No hay artículos registrados</Text>
               )}
@@ -570,71 +729,56 @@ export default function VistaInfoAnciano({ navigation }) {
           {/* Hobbies */}
           <View style={styles.seccion}>
             <View style={styles.encabezadoSeccion}>
-              <Text style={{ fontSize: 24, marginRight: 8 }}>🌟</Text>
+              <Icon name="happy-outline" size={24} color={COLORES.MORADO} />
               <Text style={styles.tituloSeccion}>Hobbies y Actividades</Text>
               {esAdministrador && (
                 <TouchableOpacity style={styles.botonAgregar} onPress={() => abrirModal('hobby')}>
-                  <Text style={{ fontSize: 22 }}>➕</Text>
+                  <Icon name="add-outline" size={24} color={COLORES.MORADO} />
                 </TouchableOpacity>
               )}
             </View>
             <View style={styles.contenedorTarjeta}>
               {adultoMayor?.hobbies?.length > 0 ? (
-                <View style={styles.contenedorHobbies}>
-                  {adultoMayor.hobbies.map((hobby, index) => (
-                    <View key={index} style={styles.hobbyItem}>
-                      <Text style={{ fontSize: 14, marginRight: 6 }}>⭐</Text>
-                      <Text style={styles.textoHobby}>{hobby.nombre}</Text>
-                      {esAdministrador && (
-                        <TouchableOpacity
-                          style={styles.botonEliminarHobby}
-                          onPress={() => eliminarElemento('hobby', hobby.id)}
-                        >
-                          <Text style={{ fontSize: 14 }}>❌</Text>
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  ))}
-                </View>
+                adultoMayor.hobbies.map((hobby) =>
+                  renderSwipeableItem(
+                    hobby,
+                    'hobby',
+                    'hobby',
+                    (item) => abrirModal('hobby', item),
+                    (id) => eliminarElemento('hobby', id)
+                  )
+                )
               ) : (
                 <Text style={styles.textoVacioLista}>No hay hobbies registrados</Text>
               )}
             </View>
           </View>
 
-          {/* Citas Rutinarias */}
+          {/* Citas Médicas Rutinarias */}
           <View style={styles.seccion}>
             <View style={styles.encabezadoSeccion}>
-              <Text style={{ fontSize: 24, marginRight: 8 }}>📅</Text>
+              <Icon name="calendar-outline" size={24} color={COLORES.TURQUESA} />
               <Text style={styles.tituloSeccion}>Citas Médicas Rutinarias</Text>
-              <TouchableOpacity
-                style={styles.botonVerTodo}
-                onPress={() => navegarA('Calendario', { tipo: 'citas_medicas' })}
-              >
-                <Text style={styles.textoBotonVerTodo}>Ver calendario →</Text>
-              </TouchableOpacity>
+              {esAdministrador && (
+                <TouchableOpacity style={styles.botonAgregar} onPress={() => abrirModal('cita')}>
+                  <Icon name="add-outline" size={24} color={COLORES.TURQUESA} />
+                </TouchableOpacity>
+              )}
             </View>
             <View style={styles.contenedorTarjeta}>
               {adultoMayor?.citas_rutinarias?.length > 0 ? (
-                adultoMayor.citas_rutinarias.map((cita, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={styles.itemLista}
-                    onPress={() => navegarA('Calendario', { citaId: cita.id })}
-                  >
-                    <View style={styles.infoItem}>
-                      <Text style={{ fontSize: 16, marginRight: 6 }}>🩺</Text>
-                      <Text style={styles.textoItem}>{cita.especialista || cita.tipo}</Text>
-                      <Text style={styles.detalleItem}>
-                        Frecuencia: {cita.frecuencia} • Próxima: {formatearFecha(cita.proxima_cita)}
-                      </Text>
-                      {cita.ubicacion && (
-                        <Text style={styles.detalleItem}>Lugar: {cita.ubicacion}</Text>
-                      )}
-                    </View>
-                    <Text style={{ fontSize: 16 }}>▶️</Text>
-                  </TouchableOpacity>
-                ))
+                adultoMayor.citas_rutinarias.map((cita) =>
+                  renderSwipeableItem(
+                    {
+                      ...cita,
+                      detalle: `Frecuencia: ${cita.frecuencia || 'No especificada'}${cita.proxima_cita ? ' • Próxima: ' + formatearFecha(cita.proxima_cita) : ''}${cita.ubicacion ? ' • Lugar: ' + cita.ubicacion : ''}`,
+                    },
+                    'cita',
+                    'cita',
+                    (item) => abrirModal('cita', item),
+                    (id) => eliminarElemento('cita', id)
+                  )
+                )
               ) : (
                 <Text style={styles.textoVacioLista}>No hay citas rutinarias registradas</Text>
               )}
@@ -645,7 +789,7 @@ export default function VistaInfoAnciano({ navigation }) {
           {adultoMayor?.notas && (
             <View style={styles.seccion}>
               <View style={styles.encabezadoSeccion}>
-                <Text style={{ fontSize: 24, marginRight: 8 }}>📄</Text>
+                <Icon name="document-text-outline" size={24} color={COLORES.GRIS_OSCURO} />
                 <Text style={styles.tituloSeccion}>Notas Adicionales</Text>
               </View>
               <View style={styles.contenedorTarjeta}>
@@ -653,238 +797,386 @@ export default function VistaInfoAnciano({ navigation }) {
               </View>
             </View>
           )}
-
-          {/* Botones de acción */}
-          {esAdministrador && (
-            <View style={styles.seccionAcciones}>
-              <TouchableOpacity
-                style={styles.botonAccion}
-                onPress={() => navegarA('CrearAnciano', { usuarioId, codigoFamiliar: null })}
-              >
-                <Text style={{ fontSize: 18, marginRight: 6 }}>✏️</Text>
-                <Text style={styles.textoBotonAccion}>Editar Información Completa</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.botonAccion, { backgroundColor: COLORES.VERDE_CLARO }]}
-                onPress={() => Alert.alert('Reporte', 'Funcionalidad en desarrollo')}
-              >
-                <Text style={{ fontSize: 18, marginRight: 6 }}>📥</Text>
-                <Text style={styles.textoBotonAccion}>Generar Reporte</Text>
-              </TouchableOpacity>
-            </View>
-          )}
         </ScrollView>
       </SafeAreaView>
 
-      {/* Modal para agregar/editar */}
+      {/* ===== MODAL AGREGAR/EDITAR ELEMENTOS ===== */}
       <Modal
         animationType="slide"
-        transparent={true}
+        transparent
         visible={modalVisible}
         onRequestClose={() => setModalVisible(false)}
       >
-        <View style={styles.modalFondo}>
-          <View style={styles.modalContenido}>
-            <View style={styles.modalEncabezado}>
-              <Text style={styles.modalTitulo}>
-                {modalData.id ? 'Editar' : 'Agregar'}{' '}
-                {modalTipo === 'enfermedad'
-                  ? 'Enfermedad'
-                  : modalTipo === 'alergia'
-                    ? 'Alergia'
-                    : modalTipo === 'articulo'
-                      ? 'Artículo'
-                      : 'Hobby'}
-              </Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <Text style={{ fontSize: 20 }}>❌</Text>
-              </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.modalFondo}
+          activeOpacity={1}
+          onPress={() => setModalVisible(false)}
+        >
+          <TouchableWithoutFeedback>
+            <View style={styles.modalContenido}>
+              <View style={styles.modalEncabezado}>
+                <Text style={styles.modalTitulo}>
+                  {modalData.id ? 'Editar' : 'Agregar'}{' '}
+                  {modalTipo === 'enfermedad'
+                    ? 'Enfermedad'
+                    : modalTipo === 'alergia'
+                      ? 'Alergia'
+                      : modalTipo === 'articulo'
+                        ? 'Artículo'
+                        : modalTipo === 'hobby'
+                          ? 'Hobby'
+                          : modalTipo === 'cita'
+                            ? 'Cita'
+                            : 'Adulto Mayor'}
+                </Text>
+                <TouchableOpacity onPress={() => setModalVisible(false)}>
+                  <Icon name="close-outline" size={24} color={COLORES.TEXTO_OSCURO} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.modalFormulario}>
+                {modalTipo === 'editarAdulto' ? (
+                  // Formulario completo de edición del adulto mayor
+                  <>
+                    <Text style={styles.modalLabel}>Nombre *</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={formAdultoMayor.nombre}
+                      onChangeText={(text) => setFormAdultoMayor({ ...formAdultoMayor, nombre: text })}
+                      placeholder="Nombre completo"
+                    />
+
+                    <Text style={styles.modalLabel}>Fecha de nacimiento</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={formAdultoMayor.fecha_nacimiento}
+                      onChangeText={(text) => setFormAdultoMayor({ ...formAdultoMayor, fecha_nacimiento: text })}
+                      placeholder="YYYY-MM-DD"
+                    />
+
+                    <Text style={styles.modalLabel}>Género</Text>
+                    <View style={styles.opcionesGenero}>
+                      <TouchableOpacity
+                        style={[styles.opcionGenero, formAdultoMayor.genero === 'M' && styles.opcionGeneroSeleccionada]}
+                        onPress={() => setFormAdultoMayor({ ...formAdultoMayor, genero: 'M' })}
+                      >
+                        <Text style={[styles.textoOpcionGenero, formAdultoMayor.genero === 'M' && styles.textoOpcionGeneroSeleccionada]}>
+                          Masculino
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.opcionGenero, formAdultoMayor.genero === 'F' && styles.opcionGeneroSeleccionada]}
+                        onPress={() => setFormAdultoMayor({ ...formAdultoMayor, genero: 'F' })}
+                      >
+                        <Text style={[styles.textoOpcionGenero, formAdultoMayor.genero === 'F' && styles.textoOpcionGeneroSeleccionada]}>
+                          Femenino
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <Text style={styles.modalLabel}>Estado de salud</Text>
+                    <View style={styles.opcionesEstadoSalud}>
+                      {['excelente', 'bueno', 'regular', 'malo'].map((estado) => (
+                        <TouchableOpacity
+                          key={estado}
+                          style={[
+                            styles.opcionEstadoSalud,
+                            { backgroundColor: obtenerColorEstadoSalud(estado) + '30' },
+                            formAdultoMayor.estado_salud === estado && styles.opcionEstadoSaludSeleccionada,
+                          ]}
+                          onPress={() => setFormAdultoMayor({ ...formAdultoMayor, estado_salud: estado })}
+                        >
+                          <Text
+                            style={[
+                              styles.textoOpcionEstadoSalud,
+                              formAdultoMayor.estado_salud === estado && styles.textoOpcionEstadoSaludSeleccionada,
+                              { color: obtenerColorEstadoSalud(estado) },
+                            ]}
+                          >
+                            {estado.toUpperCase()}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    <Text style={styles.modalLabel}>Nivel de dependencia</Text>
+                    <View style={styles.opcionesDependencia}>
+                      {['baja', 'media', 'alta'].map((nivel) => (
+                        <TouchableOpacity
+                          key={nivel}
+                          style={[
+                            styles.opcionDependencia,
+                            formAdultoMayor.nivel_dependencia === nivel && styles.opcionDependenciaSeleccionada,
+                          ]}
+                          onPress={() => setFormAdultoMayor({ ...formAdultoMayor, nivel_dependencia: nivel })}
+                        >
+                          <Text
+                            style={[
+                              styles.textoOpcionDependencia,
+                              formAdultoMayor.nivel_dependencia === nivel && styles.textoOpcionDependenciaSeleccionada,
+                            ]}
+                          >
+                            {nivel.toUpperCase()}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    <Text style={styles.modalLabel}>Contacto de emergencia</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={formAdultoMayor.contacto_emergencia}
+                      onChangeText={(text) => setFormAdultoMayor({ ...formAdultoMayor, contacto_emergencia: text })}
+                      placeholder="Nombre del contacto de emergencia"
+                    />
+
+                    <Text style={styles.modalLabel}>Teléfono de emergencia</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={formAdultoMayor.telefono_emergencia}
+                      onChangeText={(text) => setFormAdultoMayor({ ...formAdultoMayor, telefono_emergencia: text })}
+                      placeholder="Teléfono de emergencia"
+                      keyboardType="phone-pad"
+                    />
+
+                    <Text style={styles.modalLabel}>Notas adicionales</Text>
+                    <TextInput
+                      style={[styles.input, styles.textArea]}
+                      value={formAdultoMayor.notas}
+                      onChangeText={(text) => setFormAdultoMayor({ ...formAdultoMayor, notas: text })}
+                      multiline
+                      numberOfLines={4}
+                      placeholder="Notas adicionales..."
+                    />
+                  </>
+                ) : modalTipo === 'enfermedad' ? (
+                  <>
+                    <Text style={styles.modalLabel}>Nombre de la enfermedad *</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={nuevaEnfermedad.nombre}
+                      onChangeText={(text) => setNuevaEnfermedad({ ...nuevaEnfermedad, nombre: text })}
+                      placeholder="Ej: Hipertensión, Diabetes"
+                    />
+                    <Text style={styles.modalLabel}>Fecha de diagnóstico</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={nuevaEnfermedad.fecha_diagnostico}
+                      onChangeText={(text) => setNuevaEnfermedad({ ...nuevaEnfermedad, fecha_diagnostico: text })}
+                      placeholder="YYYY-MM-DD"
+                    />
+                    <Text style={styles.modalLabel}>Tratamiento</Text>
+                    <TextInput
+                      style={[styles.input, styles.textArea]}
+                      value={nuevaEnfermedad.tratamiento}
+                      onChangeText={(text) => setNuevaEnfermedad({ ...nuevaEnfermedad, tratamiento: text })}
+                      multiline
+                      numberOfLines={3}
+                      placeholder="Describe el tratamiento..."
+                    />
+                  </>
+                ) : modalTipo === 'alergia' ? (
+                  <>
+                    <Text style={styles.modalLabel}>Nombre de la alergia *</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={nuevaAlergia.nombre}
+                      onChangeText={(text) => setNuevaAlergia({ ...nuevaAlergia, nombre: text })}
+                      placeholder="Ej: Penicilina, Polen"
+                    />
+                    <Text style={styles.modalLabel}>Severidad</Text>
+                    <View style={styles.opcionesSeveridad}>
+                      {['baja', 'media', 'alta'].map((sev) => (
+                        <TouchableOpacity
+                          key={sev}
+                          style={[
+                            styles.opcionSeveridad,
+                            { backgroundColor: sev === 'baja' ? COLORES.VERDE_CLARO : sev === 'media' ? COLORES.AMARILLO_PLATANO : COLORES.ERROR },
+                            nuevaAlergia.severidad === sev && styles.opcionSeveridadSeleccionada,
+                          ]}
+                          onPress={() => setNuevaAlergia({ ...nuevaAlergia, severidad: sev })}
+                        >
+                          <Text style={[styles.textoOpcionSeveridad, nuevaAlergia.severidad === sev && styles.textoOpcionSeveridadSeleccionada]}>
+                            {sev.toUpperCase()}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    <Text style={styles.modalLabel}>Reacción</Text>
+                    <TextInput
+                      style={[styles.input, styles.textArea]}
+                      value={nuevaAlergia.reaccion}
+                      onChangeText={(text) => setNuevaAlergia({ ...nuevaAlergia, reaccion: text })}
+                      multiline
+                      numberOfLines={3}
+                      placeholder="Describe la reacción..."
+                    />
+                  </>
+                ) : modalTipo === 'articulo' ? (
+                  <>
+                    <Text style={styles.modalLabel}>Nombre del artículo *</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={nuevoArticulo.nombre}
+                      onChangeText={(text) => setNuevoArticulo({ ...nuevoArticulo, nombre: text })}
+                      placeholder="Ej: Bastón, Silla de ruedas"
+                    />
+                    <Text style={styles.modalLabel}>Cantidad</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={nuevoArticulo.cantidad}
+                      onChangeText={(text) => setNuevoArticulo({ ...nuevoArticulo, cantidad: text })}
+                      keyboardType="numeric"
+                    />
+                    <Text style={styles.modalLabel}>Ubicación</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={nuevoArticulo.ubicacion}
+                      onChangeText={(text) => setNuevoArticulo({ ...nuevoArticulo, ubicacion: text })}
+                      placeholder="Ej: Habitación principal"
+                    />
+                    <Text style={styles.modalLabel}>Estado</Text>
+                    <View style={styles.opcionesEstado}>
+                      {['optimo', 'regular', 'reparar'].map((est) => (
+                        <TouchableOpacity
+                          key={est}
+                          style={[
+                            styles.opcionEstado,
+                            { backgroundColor: est === 'optimo' ? COLORES.EXITO : est === 'regular' ? COLORES.AMARILLO_PLATANO : COLORES.ERROR },
+                            nuevoArticulo.estado === est && styles.opcionEstadoSeleccionada,
+                          ]}
+                          onPress={() => setNuevoArticulo({ ...nuevoArticulo, estado: est })}
+                        >
+                          <Text style={[styles.textoOpcionEstado, nuevoArticulo.estado === est && styles.textoOpcionEstadoSeleccionada]}>
+                            {est.toUpperCase()}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </>
+                ) : modalTipo === 'hobby' ? (
+                  <>
+                    <Text style={styles.modalLabel}>Nombre del hobby *</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={nuevoHobby.nombre}
+                      onChangeText={(text) => setNuevoHobby({ ...nuevoHobby, nombre: text })}
+                      placeholder="Ej: Lectura, Jardinería"
+                    />
+                    <Text style={styles.modalLabel}>Emoji</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={nuevoHobby.emoji}
+                      onChangeText={(text) => setNuevoHobby({ ...nuevoHobby, emoji: text })}
+                      placeholder="Ej: 📖"
+                      maxLength={2}
+                    />
+                    <Text style={styles.modalLabel}>Color</Text>
+                    <View style={styles.coloresContainer}>
+                      {[COLORES.INDIGO, COLORES.VERDE_CLARO, COLORES.ROSA, COLORES.MORADO, COLORES.NARANJA, COLORES.AMARILLO_PLATANO, COLORES.ROJO_CLARO, COLORES.TURQUESA, COLORES.EXITO].map((color) => (
+                        <TouchableOpacity
+                          key={color}
+                          style={[styles.opcionColor, { backgroundColor: color }, nuevoHobby.color === color && styles.opcionColorSeleccionada]}
+                          onPress={() => setNuevoHobby({ ...nuevoHobby, color })}
+                        />
+                      ))}
+                    </View>
+                  </>
+                ) : modalTipo === 'cita' ? (
+                  <>
+                    <Text style={styles.modalLabel}>Especialista *</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={nuevaCita.especialista}
+                      onChangeText={(text) => setNuevaCita({ ...nuevaCita, especialista: text })}
+                      placeholder="Ej: Cardiólogo, Geriatra"
+                    />
+                    <Text style={styles.modalLabel}>Frecuencia</Text>
+                    <View style={styles.opcionesFrecuencia}>
+                      {['semanal', 'mensual', 'trimestral', 'semestral', 'anual'].map((frec) => (
+                        <TouchableOpacity
+                          key={frec}
+                          style={[styles.opcionFrecuencia, nuevaCita.frecuencia === frec && styles.opcionFrecuenciaSeleccionada]}
+                          onPress={() => setNuevaCita({ ...nuevaCita, frecuencia: frec })}
+                        >
+                          <Text style={[styles.textoOpcionFrecuencia, nuevaCita.frecuencia === frec && styles.textoOpcionFrecuenciaSeleccionada]}>
+                            {frec.toUpperCase()}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    <Text style={styles.modalLabel}>Próxima cita</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={nuevaCita.proxima_cita}
+                      onChangeText={(text) => setNuevaCita({ ...nuevaCita, proxima_cita: text })}
+                      placeholder="YYYY-MM-DD"
+                    />
+                    <Text style={styles.modalLabel}>Ubicación</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={nuevaCita.ubicacion}
+                      onChangeText={(text) => setNuevaCita({ ...nuevaCita, ubicacion: text })}
+                      placeholder="Ej: Hospital Central"
+                    />
+                  </>
+                ) : null}
+              </ScrollView>
+
+              <View style={styles.modalBotones}>
+                <TouchableOpacity style={styles.botonModalCancelar} onPress={() => setModalVisible(false)}>
+                  <Text style={styles.textoBotonModalCancelar}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.botonModalAccion, { backgroundColor: COLORES.EXITO }]} onPress={guardarModal}>
+                  <Text style={styles.textoBotonModalAccion}>
+                    {modalData.id ? 'Actualizar' : 'Guardar'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
-
-            <ScrollView style={styles.modalFormulario}>
-              {modalTipo === 'enfermedad' && (
-                <>
-                  <Text style={styles.modalLabel}>Nombre de la enfermedad *</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={nuevaEnfermedad}
-                    onChangeText={setNuevaEnfermedad}
-                    placeholder="Ej: Hipertensión, Diabetes"
-                    placeholderTextColor={COLORES.GRIS_MEDIO}
-                  />
-                  <Text style={styles.modalLabel}>Fecha de diagnóstico</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="YYYY-MM-DD"
-                    placeholderTextColor={COLORES.GRIS_MEDIO}
-                  />
-                  <Text style={styles.modalLabel}>Tratamiento</Text>
-                  <TextInput
-                    style={[styles.input, styles.textArea]}
-                    multiline
-                    numberOfLines={3}
-                    placeholder="Describe el tratamiento..."
-                    placeholderTextColor={COLORES.GRIS_MEDIO}
-                  />
-                </>
-              )}
-
-              {modalTipo === 'alergia' && (
-                <>
-                  <Text style={styles.modalLabel}>Nombre de la alergia *</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={nuevaAlergia}
-                    onChangeText={setNuevaAlergia}
-                    placeholder="Ej: Penicilina, Polen"
-                    placeholderTextColor={COLORES.GRIS_MEDIO}
-                  />
-                  <Text style={styles.modalLabel}>Severidad</Text>
-                  <View style={styles.opcionesSeveridad}>
-                    <TouchableOpacity
-                      style={[styles.opcionSeveridad, { backgroundColor: COLORES.VERDE_CLARO }]}
-                      onPress={() => { }}
-                    >
-                      <Text style={styles.textoOpcionSeveridad}>BAJA</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.opcionSeveridad, { backgroundColor: COLORES.AMARILLO_PLATANO }]}
-                      onPress={() => { }}
-                    >
-                      <Text style={styles.textoOpcionSeveridad}>MEDIA</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.opcionSeveridad, { backgroundColor: COLORES.ERROR }]}
-                      onPress={() => { }}
-                    >
-                      <Text style={styles.textoOpcionSeveridad}>ALTA</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <Text style={styles.modalLabel}>Reacción</Text>
-                  <TextInput
-                    style={[styles.input, styles.textArea]}
-                    multiline
-                    numberOfLines={3}
-                    placeholder="Describe la reacción..."
-                    placeholderTextColor={COLORES.GRIS_MEDIO}
-                  />
-                </>
-              )}
-
-              {modalTipo === 'articulo' && (
-                <>
-                  <Text style={styles.modalLabel}>Nombre del artículo *</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={nuevoArticulo.nombre}
-                    onChangeText={(text) => setNuevoArticulo({ ...nuevoArticulo, nombre: text })}
-                    placeholder="Ej: Bastón, Silla de ruedas"
-                    placeholderTextColor={COLORES.GRIS_MEDIO}
-                  />
-                  <Text style={styles.modalLabel}>Cantidad</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={nuevoArticulo.cantidad}
-                    onChangeText={(text) => setNuevoArticulo({ ...nuevoArticulo, cantidad: text })}
-                    keyboardType="numeric"
-                    placeholder="1"
-                    placeholderTextColor={COLORES.GRIS_MEDIO}
-                  />
-                  <Text style={styles.modalLabel}>Ubicación</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={nuevoArticulo.ubicacion}
-                    onChangeText={(text) => setNuevoArticulo({ ...nuevoArticulo, ubicacion: text })}
-                    placeholder="Ej: Habitación principal"
-                    placeholderTextColor={COLORES.GRIS_MEDIO}
-                  />
-                  <Text style={styles.modalLabel}>Estado</Text>
-                  <View style={styles.opcionesEstado}>
-                    <TouchableOpacity style={[styles.opcionEstado, { backgroundColor: COLORES.EXITO }]}>
-                      <Text style={styles.textoOpcionEstado}>ÓPTIMO</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.opcionEstado, { backgroundColor: COLORES.AMARILLO_PLATANO }]}>
-                      <Text style={styles.textoOpcionEstado}>REGULAR</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.opcionEstado, { backgroundColor: COLORES.ERROR }]}>
-                      <Text style={styles.textoOpcionEstado}>REPARAR</Text>
-                    </TouchableOpacity>
-                  </View>
-                </>
-              )}
-
-              {modalTipo === 'hobby' && (
-                <>
-                  <Text style={styles.modalLabel}>Nombre del hobby *</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={nuevoHobby}
-                    onChangeText={setNuevoHobby}
-                    placeholder="Ej: Lectura, Jardinería"
-                    placeholderTextColor={COLORES.GRIS_MEDIO}
-                  />
-                  <Text style={styles.modalLabel}>Frecuencia</Text>
-                  <View style={styles.opcionesFrecuencia}>
-                    <TouchableOpacity style={styles.opcionFrecuencia}>
-                      <Text style={styles.textoOpcionFrecuencia}>Diario</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.opcionFrecuencia}>
-                      <Text style={styles.textoOpcionFrecuencia}>Semanal</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.opcionFrecuencia}>
-                      <Text style={styles.textoOpcionFrecuencia}>Ocasional</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <Text style={styles.modalLabel}>Notas adicionales</Text>
-                  <TextInput
-                    style={[styles.input, styles.textArea]}
-                    multiline
-                    numberOfLines={3}
-                    placeholder="Detalles adicionales..."
-                    placeholderTextColor={COLORES.GRIS_MEDIO}
-                  />
-                </>
-              )}
-            </ScrollView>
-
-            <View style={styles.modalBotones}>
-              <TouchableOpacity style={styles.botonModalCancelar} onPress={() => setModalVisible(false)}>
-                <Text style={styles.textoBotonModalCancelar}>Cancelar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.botonModalGuardar} onPress={guardarModal}>
-                <Text style={styles.textoBotonModalGuardar}>Guardar</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
+          </TouchableWithoutFeedback>
+        </TouchableOpacity>
       </Modal>
-    </LinearGradient>
+    </GestureHandlerRootView>
   );
 }
 
+// ==================== ESTILOS ====================
 const styles = StyleSheet.create({
-  fondo: { flex: 1 },
-  contenedor: { flex: 1 },
+  fondoBlanco: { flex: 1, backgroundColor: COLORES.BLANCO },
+  contenedor: { flex: 1, paddingTop: Platform.OS === 'ios' ? 40 : StatusBar.currentHeight + 10 },
   centrado: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  textoCargando: { color: COLORES.TEXTO_OSCURO, marginTop: 20, fontSize: 16 },
+  textoCargando: { color: COLORES.GRIS_OSCURO, marginTop: 20, fontSize: 16 },
 
   // Encabezado
   encabezado: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     backgroundColor: COLORES.BLANCO,
     borderBottomWidth: 1,
     borderBottomColor: COLORES.GRIS_CLARO,
   },
-  botonAtras: { padding: 8 },
+  botonAtras: { padding: 6 },
   tituloContainer: { flex: 1, alignItems: 'center' },
-  tituloPrincipal: { fontSize: 20, fontWeight: 'bold', color: COLORES.TEXTO_OSCURO },
+  tituloPrincipal: { fontSize: 22, fontWeight: 'bold', color: COLORES.TEXTO_OSCURO },
   subtituloPrincipal: { fontSize: 14, color: COLORES.GRIS_OSCURO, marginTop: 2 },
-  botonRefrescar: { padding: 8 },
+  botonNotificaciones: { padding: 6, position: 'relative' },
+  badgeContainer: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: COLORES.ERROR,
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  badgeTexto: { color: COLORES.BLANCO, fontSize: 11, fontWeight: 'bold' },
 
   // Sin adulto
   sinAdultoContainer: {
@@ -894,23 +1186,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 30,
     paddingVertical: 60,
   },
-  sinAdultoIcono: { fontSize: 60, marginBottom: 20 },
-  sinAdultoTitulo: { fontSize: 22, fontWeight: 'bold', color: COLORES.TEXTO_OSCURO, textAlign: 'center', marginBottom: 12 },
-  sinAdultoSubtitulo: {
-    fontSize: 16,
-    color: COLORES.GRIS_OSCURO,
-    textAlign: 'center',
-    marginBottom: 30,
-    lineHeight: 24,
-  },
+  sinAdultoTitulo: { fontSize: 22, fontWeight: 'bold', color: COLORES.TEXTO_OSCURO, textAlign: 'center', marginTop: 16, marginBottom: 8 },
+  sinAdultoSubtitulo: { fontSize: 16, color: COLORES.GRIS_OSCURO, textAlign: 'center', marginBottom: 30, lineHeight: 24 },
   botonAgregarAdulto: {
     backgroundColor: COLORES.AZUL_CIELO_OSCURO,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 16,
     paddingHorizontal: 40,
     borderRadius: 12,
     marginBottom: 15,
     width: '100%',
-    alignItems: 'center',
+    gap: 8,
   },
   textoBotonAgregarAdulto: { color: COLORES.BLANCO, fontSize: 18, fontWeight: 'bold' },
   botonSaltarAdulto: {
@@ -925,120 +1213,140 @@ const styles = StyleSheet.create({
   textoBotonSaltarAdulto: { color: COLORES.GRIS_OSCURO, fontSize: 16 },
 
   // Secciones
-  seccion: { marginBottom: 25 },
-  encabezadoSeccion: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
+  seccion: { marginBottom: 24 },
+  encabezadoSeccion: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
   tituloSeccion: { fontSize: 18, fontWeight: 'bold', color: COLORES.TEXTO_OSCURO, marginLeft: 10, flex: 1 },
-  botonEditar: { padding: 8 },
-  botonAgregar: { padding: 8 },
-  botonVerTodo: { padding: 8 },
+  botonEditar: { padding: 6 },
+  botonAgregar: { padding: 6 },
+  botonVerTodo: { padding: 6 },
   textoBotonVerTodo: { color: COLORES.AZUL_CIELO_OSCURO, fontSize: 14, fontWeight: '500' },
 
   contenedorTarjeta: {
     backgroundColor: COLORES.BLANCO,
     borderRadius: 15,
-    padding: 20,
+    padding: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 4,
     elevation: 3,
   },
 
   // Info básica
-  filaInfo: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
+  filaInfo: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
   itemInfo: { flex: 1, flexDirection: 'row', alignItems: 'center' },
-  labelInfo: { fontSize: 14, color: COLORES.GRIS_OSCURO, marginLeft: 8, marginRight: 5 },
+  labelInfo: { fontSize: 14, color: COLORES.GRIS_OSCURO, marginLeft: 6, marginRight: 4 },
   valorInfo: { fontSize: 14, fontWeight: '500', color: COLORES.TEXTO_OSCURO },
-  infoCompleta: { flexDirection: 'row', marginBottom: 12 },
-  estadoSalud: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, marginLeft: 8 },
+  infoCompleta: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  estadoSalud: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, marginLeft: 6 },
   textoEstadoSalud: { color: COLORES.BLANCO, fontSize: 11, fontWeight: 'bold' },
 
-  // Listas
+  // Items con swipe
   itemLista: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORES.GRIS_CLARO,
-  },
-  infoItem: { flex: 1 },
-  textoItem: { fontSize: 16, fontWeight: '600', color: COLORES.TEXTO_OSCURO, marginBottom: 4 },
-  fechaItem: { fontSize: 12, color: COLORES.GRIS_OSCURO, fontStyle: 'italic', marginTop: 2 },
-  detalleItem: { fontSize: 13, color: COLORES.GRIS_OSCURO, marginTop: 2 },
-  infoDetalle: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 4 },
-  botonEliminar: { padding: 8, marginLeft: 10 },
-  badgeSeveridad: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, alignSelf: 'flex-start', marginTop: 5 },
-  textoBadge: { color: COLORES.BLANCO, fontSize: 10, fontWeight: 'bold' },
-
-  contenedorHobbies: { flexDirection: 'row', flexWrap: 'wrap' },
-  hobbyItem: {
-    flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORES.GRIS_CLARO,
-    borderRadius: 20,
+    paddingVertical: 12,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginRight: 10,
-    marginBottom: 10,
+    borderRadius: 10,
+    marginBottom: 8,
+    borderLeftWidth: 4,
   },
-  textoHobby: { fontSize: 14, color: COLORES.TEXTO_OSCURO, marginLeft: 6, marginRight: 8 },
-  botonEliminarHobby: { padding: 2 },
+  infoItem: { flex: 1, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
+  textoItem: { fontSize: 15, fontWeight: '600', color: COLORES.TEXTO_OSCURO, marginLeft: 10, flex: 1 },
+  detalleItem: { fontSize: 13, color: COLORES.GRIS_OSCURO, width: '100%', marginLeft: 34, marginTop: 2 },
 
-  botonVerMas: { marginTop: 15, paddingVertical: 12, alignItems: 'center', borderTopWidth: 1, borderTopColor: COLORES.GRIS_CLARO },
+  swipeLeft: { backgroundColor: COLORES.AZUL_CIELO_OSCURO, justifyContent: 'center', alignItems: 'center', width: 80, height: '100%', flexDirection: 'row', gap: 6 },
+  swipeRight: { backgroundColor: COLORES.ERROR, justifyContent: 'center', alignItems: 'center', width: 80, height: '100%', flexDirection: 'row', gap: 6 },
+  swipeText: { color: COLORES.BLANCO, fontSize: 14, fontWeight: 'bold' },
+
+  botonVerMas: { marginTop: 10, paddingVertical: 12, alignItems: 'center', borderTopWidth: 1, borderTopColor: COLORES.GRIS_CLARO },
   textoBotonVerMas: { color: COLORES.AZUL_CIELO_OSCURO, fontSize: 14, fontWeight: '500' },
-
   textoNotas: { fontSize: 14, color: COLORES.TEXTO_OSCURO, lineHeight: 22, fontStyle: 'italic' },
   textoVacioLista: { textAlign: 'center', color: COLORES.GRIS_OSCURO, fontSize: 14, paddingVertical: 20, fontStyle: 'italic' },
 
-  // Acciones
-  seccionAcciones: { marginTop: 10 },
-  botonAccion: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORES.AZUL_CIELO_OSCURO,
-    borderRadius: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    marginBottom: 15,
-  },
-  textoBotonAccion: { color: COLORES.BLANCO, fontSize: 16, fontWeight: 'bold', marginLeft: 10 },
-
   // Modal
   modalFondo: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContenido: { backgroundColor: COLORES.BLANCO, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 25, maxHeight: '80%' },
-  modalEncabezado: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  modalContenido: {
+    backgroundColor: COLORES.BLANCO,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '90%',
+    padding: 20,
+  },
+  modalEncabezado: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORES.GRIS_CLARO,
+  },
   modalTitulo: { fontSize: 20, fontWeight: 'bold', color: COLORES.TEXTO_OSCURO },
-  modalFormulario: { maxHeight: 400 },
-  modalLabel: { fontSize: 14, fontWeight: '600', color: COLORES.TEXTO_OSCURO, marginBottom: 8, marginTop: 15 },
+  modalFormulario: { maxHeight: 500, paddingHorizontal: 4 },
+  modalLabel: { fontSize: 15, fontWeight: '600', color: COLORES.TEXTO_OSCURO, marginBottom: 6, marginTop: 12 },
   input: {
     backgroundColor: COLORES.GRIS_CLARO,
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    fontSize: 16,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 15,
     color: COLORES.TEXTO_OSCURO,
     borderWidth: 1,
     borderColor: COLORES.GRIS_MEDIO,
   },
-  textArea: { minHeight: 80, textAlignVertical: 'top' },
+  textArea: { minHeight: 70, textAlignVertical: 'top' },
 
-  opcionesSeveridad: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
-  opcionSeveridad: { flex: 1, paddingVertical: 10, marginHorizontal: 5, borderRadius: 8, alignItems: 'center' },
+  opcionesGenero: { flexDirection: 'row', marginBottom: 8 },
+  opcionGenero: { flex: 1, paddingVertical: 10, marginHorizontal: 4, borderRadius: 8, alignItems: 'center', backgroundColor: COLORES.GRIS_CLARO },
+  opcionGeneroSeleccionada: { backgroundColor: COLORES.AZUL_CIELO, borderColor: COLORES.AZUL_CIELO_OSCURO, borderWidth: 2 },
+  textoOpcionGenero: { fontSize: 14, color: COLORES.GRIS_OSCURO, fontWeight: '500' },
+  textoOpcionGeneroSeleccionada: { color: COLORES.BLANCO, fontWeight: 'bold' },
+
+  opcionesEstadoSalud: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 8 },
+  opcionEstadoSalud: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8, marginRight: 8, marginBottom: 8, borderWidth: 1, borderColor: 'transparent' },
+  opcionEstadoSaludSeleccionada: { borderColor: COLORES.TEXTO_OSCURO, borderWidth: 2 },
+  textoOpcionEstadoSalud: { fontSize: 13, fontWeight: '500' },
+  textoOpcionEstadoSaludSeleccionada: { fontWeight: 'bold' },
+
+  opcionesDependencia: { flexDirection: 'row', marginBottom: 8 },
+  opcionDependencia: { flex: 1, paddingVertical: 10, marginHorizontal: 4, borderRadius: 8, alignItems: 'center', backgroundColor: COLORES.GRIS_CLARO },
+  opcionDependenciaSeleccionada: { backgroundColor: COLORES.AZUL_CIELO, borderColor: COLORES.AZUL_CIELO_OSCURO, borderWidth: 2 },
+  textoOpcionDependencia: { fontSize: 14, color: COLORES.GRIS_OSCURO, fontWeight: '500' },
+  textoOpcionDependenciaSeleccionada: { color: COLORES.BLANCO, fontWeight: 'bold' },
+
+  coloresContainer: { flexDirection: 'row', flexWrap: 'wrap', marginVertical: 8 },
+  opcionColor: { width: 36, height: 36, borderRadius: 18, marginRight: 10, marginBottom: 8, borderWidth: 2, borderColor: 'transparent' },
+  opcionColorSeleccionada: { borderColor: COLORES.TEXTO_OSCURO, transform: [{ scale: 1.1 }] },
+
+  opcionesSeveridad: { flexDirection: 'row', marginBottom: 8 },
+  opcionSeveridad: { flex: 1, paddingVertical: 10, marginHorizontal: 4, borderRadius: 8, alignItems: 'center' },
+  opcionSeveridadSeleccionada: { borderWidth: 2, borderColor: COLORES.TEXTO_OSCURO },
   textoOpcionSeveridad: { color: COLORES.BLANCO, fontSize: 12, fontWeight: 'bold' },
+  textoOpcionSeveridadSeleccionada: { color: COLORES.BLANCO, fontWeight: 'bold' },
 
-  opcionesEstado: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
-  opcionEstado: { flex: 1, paddingVertical: 10, marginHorizontal: 5, borderRadius: 8, alignItems: 'center' },
+  opcionesEstado: { flexDirection: 'row', marginBottom: 8 },
+  opcionEstado: { flex: 1, paddingVertical: 10, marginHorizontal: 4, borderRadius: 8, alignItems: 'center' },
+  opcionEstadoSeleccionada: { borderWidth: 2, borderColor: COLORES.TEXTO_OSCURO },
   textoOpcionEstado: { color: COLORES.BLANCO, fontSize: 12, fontWeight: 'bold' },
+  textoOpcionEstadoSeleccionada: { color: COLORES.BLANCO, fontWeight: 'bold' },
 
-  opcionesFrecuencia: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
-  opcionFrecuencia: { flex: 1, paddingVertical: 10, marginHorizontal: 5, borderRadius: 8, alignItems: 'center', backgroundColor: COLORES.GRIS_CLARO },
-  textoOpcionFrecuencia: { color: COLORES.TEXTO_OSCURO, fontSize: 12, fontWeight: '500' },
+  opcionesFrecuencia: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 8 },
+  opcionFrecuencia: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8, backgroundColor: COLORES.GRIS_CLARO, marginRight: 8, marginBottom: 8 },
+  opcionFrecuenciaSeleccionada: { backgroundColor: COLORES.AZUL_CIELO, borderColor: COLORES.AZUL_CIELO_OSCURO, borderWidth: 2 },
+  textoOpcionFrecuencia: { fontSize: 13, color: COLORES.TEXTO_OSCURO, fontWeight: '500' },
+  textoOpcionFrecuenciaSeleccionada: { color: COLORES.BLANCO, fontWeight: 'bold' },
 
-  modalBotones: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 20, paddingTop: 20, borderTopWidth: 1, borderTopColor: COLORES.GRIS_CLARO },
-  botonModalCancelar: { flex: 1, paddingVertical: 14, marginRight: 10, borderRadius: 10, backgroundColor: COLORES.GRIS_CLARO, alignItems: 'center' },
-  textoBotonModalCancelar: { color: COLORES.TEXTO_OSCURO, fontSize: 16, fontWeight: '600' },
-  botonModalGuardar: { flex: 1, paddingVertical: 14, marginLeft: 10, borderRadius: 10, backgroundColor: COLORES.AZUL_CIELO_OSCURO, alignItems: 'center' },
-  textoBotonModalGuardar: { color: COLORES.BLANCO, fontSize: 16, fontWeight: '600' },
+  modalBotones: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: COLORES.GRIS_CLARO,
+  },
+  botonModalCancelar: { flex: 1, paddingVertical: 12, marginRight: 8, borderRadius: 8, backgroundColor: COLORES.GRIS_CLARO, alignItems: 'center' },
+  textoBotonModalCancelar: { color: COLORES.TEXTO_OSCURO, fontSize: 15, fontWeight: '600' },
+  botonModalAccion: { flex: 1, paddingVertical: 12, marginLeft: 8, borderRadius: 8, alignItems: 'center' },
+  textoBotonModalAccion: { color: COLORES.BLANCO, fontSize: 15, fontWeight: '600' },
 });
