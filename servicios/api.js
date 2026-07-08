@@ -42,7 +42,7 @@ const peticion = async (endpoint, metodo = 'POST', datos = null) => {
     headers,
   };
 
-  if (datos && (metodo === 'POST' || metodo === 'PUT' || metodo === 'PATCH')) {
+  if (datos && (metodo === 'POST' || metodo === 'PUT' || metodo === 'PATCH' || metodo === 'DELETE')) {
     opciones.body = JSON.stringify(datos);
   }
 

@@ -12,10 +12,14 @@ import {
   TextInput,
   Alert,
   FlatList,
-  Dimensions
+  Dimensions,
+  TouchableWithoutFeedback,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { Picker } from '@react-native-picker/picker';
+import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { servicioAPI } from '../../servicios/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -40,7 +44,7 @@ const COLORES = {
   ROSA: '#F06292',
   INDIGO: '#7986CB',
   CELESTE: '#4FC3F7',
-  LIMA: '#D4E157'
+  LIMA: '#D4E157',
 };
 
 const { width } = Dimensions.get('window');
@@ -74,12 +78,15 @@ export default function VistaGastos({ navigation }) {
     estado: 'pendiente',
     notas: '',
     responsableId: '',
-    compartido: true
+    compartido: true,
   });
 
   // Estados para configuración de porcentajes
   const [porcentajes, setPorcentajes] = useState({});
   const [totalPorcentaje, setTotalPorcentaje] = useState(0);
+
+  // Fecha picker
+  const [isDatePickerVisible, setDatePickerVisible] = useState(false);
 
   // Categorías de gastos
   const CATEGORIAS = [
@@ -90,22 +97,22 @@ export default function VistaGastos({ navigation }) {
     { id: 'cuidador', nombre: 'Cuidador', icono: 'person-outline', color: COLORES.MORADO },
     { id: 'equipamiento', nombre: 'Equipamiento', icono: 'cube-outline', color: COLORES.TURQUESA },
     { id: 'servicios', nombre: 'Servicios', icono: 'construct-outline', color: COLORES.GRIS_OSCURO },
-    { id: 'otros', nombre: 'Otros', icono: 'ellipsis-horizontal-outline', color: COLORES.INDIGO }
+    { id: 'otros', nombre: 'Otros', icono: 'ellipsis-horizontal-outline', color: COLORES.INDIGO },
   ];
 
-  // Prioridades
   const PRIORIDADES = [
     { id: 'alta', nombre: 'Alta', color: COLORES.ERROR },
     { id: 'media', nombre: 'Media', color: COLORES.AMARILLO_PLATANO },
-    { id: 'baja', nombre: 'Baja', color: COLORES.EXITO }
+    { id: 'baja', nombre: 'Baja', color: COLORES.EXITO },
   ];
 
-  // Cargar datos
+  // ============================================================
+  // Carga de datos
+  // ============================================================
   const cargarDatos = useCallback(async () => {
     try {
       setCargando(true);
 
-      // Obtener ID del usuario actual
       const usuarioId = await servicioAPI.obtenerUsuarioActualId();
       if (!usuarioId) {
         console.warn('No se encontró usuarioId');
@@ -113,7 +120,6 @@ export default function VistaGastos({ navigation }) {
         return;
       }
 
-      // Obtener usuario actual
       const usuarioData = await AsyncStorage.getItem('usuarioInfo');
       if (usuarioData) {
         const usuario = JSON.parse(usuarioData);
@@ -121,17 +127,14 @@ export default function VistaGastos({ navigation }) {
         setEsAdministrador(usuario.rol === 'familiar_admin');
       }
 
-      // Obtener mes y año actual
       const ahora = new Date();
       setMesActual(ahora.toLocaleString('es-ES', { month: 'long' }));
       setAnioActual(ahora.getFullYear().toString());
 
-      // Obtener familiares (para distribución y gráficos)
       const familiaresResponse = await servicioAPI.obtenerFamiliares(usuarioId);
       if (familiaresResponse.exito) {
         const lista = familiaresResponse.familiares || [];
         setFamiliares(lista);
-        // Inicializar porcentajes equitativos si hay familiares
         if (lista.length > 0) {
           const porcentajeEquitativo = (100 / lista.length).toFixed(2);
           const inicial = {};
@@ -141,27 +144,22 @@ export default function VistaGastos({ navigation }) {
         }
       }
 
-      // Obtener gastos futuros
       const gastosFuturosResponse = await servicioAPI.obtenerGastosFuturos(usuarioId);
       if (gastosFuturosResponse.exito) {
         setGastosFuturos(gastosFuturosResponse.gastos || []);
       }
 
-      // Obtener gastos del mes actual
       const gastosMesResponse = await servicioAPI.obtenerGastosMesActual(usuarioId);
       if (gastosMesResponse.exito) {
         setGastosPasados(gastosMesResponse.gastos || []);
       }
 
-      // Obtener aportes familiares del mes
       const aportesResponse = await servicioAPI.obtenerAportesMesActual(usuarioId);
       if (aportesResponse.exito) {
         setAportesFamiliares(aportesResponse.aportes || []);
       }
 
-      // Calcular distribución sugerida
       calcularDistribucionSugerida();
-
     } catch (error) {
       console.error('Error cargando datos de gastos:', error);
       Alert.alert('Error', 'No se pudieron cargar los datos');
@@ -180,7 +178,9 @@ export default function VistaGastos({ navigation }) {
     await cargarDatos();
   }, [cargando]);
 
-  // Calcular distribución sugerida basada en gastos futuros
+  // ============================================================
+  // Cálculos y utilidades
+  // ============================================================
   const calcularDistribucionSugerida = useCallback(() => {
     const totalGastosFuturos = gastosFuturos.reduce((total, gasto) =>
       total + parseFloat(gasto.monto || 0), 0
@@ -196,35 +196,31 @@ export default function VistaGastos({ navigation }) {
         apellido: familiar.apellido || '',
         porcentaje: porcentaje,
         montoSugerido: parseFloat(montoSugerido.toFixed(2)),
-        aportado: 0 // Se calculará después
+        aportado: 0,
       };
     });
 
     setDistribucionSugerida(distribucion);
   }, [gastosFuturos, familiares, porcentajes]);
 
-  // Calcular total de gastos futuros
   const calcularTotalGastosFuturos = () => {
     return gastosFuturos.reduce((total, gasto) =>
       total + parseFloat(gasto.monto || 0), 0
     ).toFixed(2);
   };
 
-  // Calcular total aportado este mes
   const calcularTotalAportado = () => {
     return aportesFamiliares.reduce((total, aporte) =>
       total + parseFloat(aporte.monto || 0), 0
     ).toFixed(2);
   };
 
-  // Calcular saldo pendiente
   const calcularSaldoPendiente = () => {
     const totalAportado = parseFloat(calcularTotalAportado());
     const totalGastos = parseFloat(calcularTotalGastosFuturos());
     return (totalGastos - totalAportado).toFixed(2);
   };
 
-  // Calcular aporte por familiar
   const calcularAportePorFamiliar = (familiarId) => {
     return aportesFamiliares
       .filter(aporte => aporte.familiarId === familiarId || aporte.usuario_id === familiarId)
@@ -232,24 +228,22 @@ export default function VistaGastos({ navigation }) {
       .toFixed(2);
   };
 
-  // Formatear fecha
   const formatearFecha = (fechaStr) => {
     if (!fechaStr) return 'Fecha no disponible';
     const fecha = new Date(fechaStr);
     if (isNaN(fecha)) return 'Fecha inválida';
     return fecha.toLocaleDateString('es-ES', {
       day: 'numeric',
-      month: 'short'
+      month: 'short',
+      year: 'numeric',
     });
   };
 
-  // Formatear moneda
   const formatearMoneda = (monto) => {
     if (monto === undefined || monto === null || isNaN(monto)) return '$0.00';
     return `$${parseFloat(monto).toFixed(2)}`;
   };
 
-  // Obtener color para gráfico
   const obtenerColorGrafico = (index) => {
     const colores = [
       COLORES.ROJO_CLARO,
@@ -261,12 +255,11 @@ export default function VistaGastos({ navigation }) {
       COLORES.INDIGO,
       COLORES.NARANJA,
       COLORES.ROSA,
-      COLORES.LIMA
+      COLORES.LIMA,
     ];
     return colores[index % colores.length];
   };
 
-  // Preparar datos para gráfico de barras
   const prepararDatosGrafico = () => {
     const datos = familiares.map((familiar, index) => {
       const aporte = calcularAportePorFamiliar(familiar.id);
@@ -274,13 +267,15 @@ export default function VistaGastos({ navigation }) {
         nombre: familiar.nombre ? familiar.nombre.charAt(0) : '?',
         apellido: familiar.apellido || '',
         aporte: parseFloat(aporte),
-        color: obtenerColorGrafico(index)
+        color: obtenerColorGrafico(index),
       };
     }).filter(item => item.aporte > 0);
     return datos;
   };
 
-  // Abrir modal para gasto
+  // ============================================================
+  // Gestión de modales
+  // ============================================================
   const abrirModalGasto = (tipo, gasto = null) => {
     setModalTipo(tipo);
     setGastoSeleccionado(gasto);
@@ -294,8 +289,8 @@ export default function VistaGastos({ navigation }) {
         prioridad: gasto.prioridad || 'media',
         estado: gasto.estado || 'pendiente',
         notas: gasto.notas || '',
-        responsableId: gasto.responsableId || '',
-        compartido: gasto.compartido !== false
+        responsableId: gasto.responsableId || (gasto.responsable ? gasto.responsable.id : '') || '',
+        compartido: gasto.compartido !== false,
       });
     } else {
       const hoy = new Date().toISOString().split('T')[0];
@@ -307,28 +302,50 @@ export default function VistaGastos({ navigation }) {
         prioridad: 'media',
         estado: 'pendiente',
         notas: '',
-        responsableId: '',
-        compartido: true
+        responsableId: usuarioActual?.id || '',
+        compartido: true,
       });
     }
 
     setModalVisible(true);
   };
 
-  // Guardar gasto
+  // ============================================================
+  // Envío de notificaciones
+  // ============================================================
+  const enviarNotificacionGasto = async (usuarioId, mensaje, tipo = 'gasto') => {
+    try {
+      if (!usuarioId) return;
+      // Asumimos que existe servicioAPI.enviarNotificacion
+      // Si no existe, puedes usar servicioAPI.crearNotificacion o similar.
+      // Aquí lo dejamos genérico.
+      if (servicioAPI.enviarNotificacion) {
+        await servicioAPI.enviarNotificacion(usuarioId, {
+          mensaje,
+          tipo,
+          referencia: 'gasto',
+        });
+      } else {
+        console.warn('No se encontró servicioAPI.enviarNotificacion');
+      }
+    } catch (error) {
+      console.error('Error enviando notificación:', error);
+    }
+  };
+
+  // ============================================================
+  // CRUD de gastos
+  // ============================================================
   const guardarGasto = async () => {
     try {
-      // Validaciones
       if (!formData.descripcion.trim()) {
         Alert.alert('Error', 'Debes ingresar la descripción');
         return;
       }
-
       if (!formData.monto.trim() || parseFloat(formData.monto) <= 0) {
         Alert.alert('Error', 'Debes ingresar un monto válido');
         return;
       }
-
       if (!formData.fecha.trim()) {
         Alert.alert('Error', 'Debes ingresar la fecha');
         return;
@@ -343,31 +360,40 @@ export default function VistaGastos({ navigation }) {
       const datosGasto = {
         ...formData,
         monto: parseFloat(formData.monto),
-        fecha: new Date(formData.fecha).toISOString().split('T')[0]
+        fecha: formData.fecha, // Ya en YYYY-MM-DD
+        compartido: formData.compartido,
+        responsableId: formData.compartido ? null : formData.responsableId,
       };
 
       let response;
+      let esNuevo = false;
       if (gastoSeleccionado) {
         response = await servicioAPI.actualizarGasto(usuarioId, gastoSeleccionado.id, datosGasto);
       } else {
         response = await servicioAPI.crearGasto(usuarioId, datosGasto);
+        esNuevo = true;
       }
 
       if (response.exito) {
         Alert.alert('Éxito', gastoSeleccionado ? 'Gasto actualizado' : 'Gasto agregado');
         setModalVisible(false);
+
+        // Si el gasto no es compartido y tiene responsable, enviar notificación
+        if (!formData.compartido && formData.responsableId) {
+          const mensaje = `Se te ha asignado un gasto de "${formData.descripcion}" por ${formatearMoneda(formData.monto)}`;
+          await enviarNotificacionGasto(formData.responsableId, mensaje);
+        }
+
         onRefresh();
       } else {
         Alert.alert('Error', response.error || 'Error guardando gasto');
       }
-
     } catch (error) {
       console.error('Error guardando gasto:', error);
       Alert.alert('Error', 'No se pudo guardar el gasto');
     }
   };
 
-  // Eliminar gasto
   const eliminarGasto = (gastoId) => {
     Alert.alert(
       'Confirmar eliminación',
@@ -389,13 +415,12 @@ export default function VistaGastos({ navigation }) {
             } catch (error) {
               Alert.alert('Error', 'No se pudo eliminar el gasto');
             }
-          }
-        }
+          },
+        },
       ]
     );
   };
 
-  // Marcar gasto como pagado
   const marcarComoPagado = async (gastoId) => {
     try {
       const usuarioId = await servicioAPI.obtenerUsuarioActualId();
@@ -410,7 +435,9 @@ export default function VistaGastos({ navigation }) {
     }
   };
 
-  // Actualizar porcentaje
+  // ============================================================
+  // Configuración de porcentajes
+  // ============================================================
   const actualizarPorcentaje = (familiarId, valor) => {
     const nuevoValor = Math.max(0, Math.min(100, parseFloat(valor) || 0));
     const nuevosPorcentajes = { ...porcentajes };
@@ -422,7 +449,6 @@ export default function VistaGastos({ navigation }) {
     setTotalPorcentaje(parseFloat(total.toFixed(2)));
   };
 
-  // Guardar configuración de porcentajes
   const guardarPorcentajes = async () => {
     if (totalPorcentaje !== 100) {
       Alert.alert('Error', `La suma de porcentajes debe ser 100%. Actual: ${totalPorcentaje}%`);
@@ -442,7 +468,6 @@ export default function VistaGastos({ navigation }) {
     }
   };
 
-  // Restablecer porcentajes equitativos
   const restablecerEquitativo = () => {
     if (familiares.length === 0) return;
     const porcentajeEquitativo = (100 / familiares.length).toFixed(2);
@@ -452,7 +477,9 @@ export default function VistaGastos({ navigation }) {
     setTotalPorcentaje(100);
   };
 
-  // Renderizar tarjeta de gasto
+  // ============================================================
+  // Renderización
+  // ============================================================
   const renderTarjetaGasto = ({ item }) => {
     const categoria = CATEGORIAS.find(c => c.id === item.categoria);
     const prioridad = PRIORIDADES.find(p => p.id === item.prioridad);
@@ -461,17 +488,16 @@ export default function VistaGastos({ navigation }) {
       <TouchableOpacity
         style={styles.tarjetaGasto}
         onPress={() => abrirModalGasto('ver', item)}
+        activeOpacity={0.7}
       >
         <View style={styles.encabezadoGasto}>
           <View style={[styles.iconoCategoria, { backgroundColor: `${categoria?.color || COLORES.GRIS_MEDIO}20` }]}>
             <Icon name={categoria?.icono || 'help-outline'} size={20} color={categoria?.color || COLORES.GRIS_MEDIO} />
           </View>
-
           <View style={styles.infoPrincipalGasto}>
             <Text style={styles.descripcionGasto}>{item.descripcion}</Text>
             <Text style={styles.fechaGasto}>{formatearFecha(item.fecha)}</Text>
           </View>
-
           <View style={styles.montoContainer}>
             <Text style={styles.montoGasto}>{formatearMoneda(item.monto)}</Text>
           </View>
@@ -481,7 +507,6 @@ export default function VistaGastos({ navigation }) {
           <View style={[styles.badgePrioridad, { backgroundColor: prioridad?.color || COLORES.GRIS_MEDIO }]}>
             <Text style={styles.textoBadgePrioridad}>{prioridad?.nombre || 'Media'}</Text>
           </View>
-
           <View style={[
             styles.badgeEstado,
             { backgroundColor: item.estado === 'pagado' ? COLORES.EXITO + '20' : COLORES.AMARILLO_PLATANO + '20' }
@@ -493,7 +518,6 @@ export default function VistaGastos({ navigation }) {
               {item.estado === 'pagado' ? '✓ Pagado' : '⏳ Pendiente'}
             </Text>
           </View>
-
           {item.responsable && (
             <Text style={styles.textoResponsable}>Por: {item.responsable}</Text>
           )}
@@ -503,35 +527,24 @@ export default function VistaGastos({ navigation }) {
           {item.estado !== 'pagado' && esAdministrador && (
             <TouchableOpacity
               style={styles.botonAccionGasto}
-              onPress={(e) => {
-                e.stopPropagation();
-                marcarComoPagado(item.id);
-              }}
+              onPress={() => marcarComoPagado(item.id)}
             >
               <Icon name="checkmark-outline" size={16} color={COLORES.EXITO} />
               <Text style={styles.textoBotonAccionGasto}>Marcar pagado</Text>
             </TouchableOpacity>
           )}
-
           {esAdministrador && (
             <>
               <TouchableOpacity
                 style={styles.botonAccionGasto}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  abrirModalGasto('editar', item);
-                }}
+                onPress={() => abrirModalGasto('editar', item)}
               >
                 <Icon name="create-outline" size={16} color={COLORES.AZUL_CIELO_OSCURO} />
                 <Text style={styles.textoBotonAccionGasto}>Editar</Text>
               </TouchableOpacity>
-
               <TouchableOpacity
                 style={styles.botonAccionGasto}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  eliminarGasto(item.id);
-                }}
+                onPress={() => eliminarGasto(item.id)}
               >
                 <Icon name="trash-outline" size={16} color={COLORES.ERROR} />
                 <Text style={styles.textoBotonAccionGasto}>Eliminar</Text>
@@ -543,7 +556,6 @@ export default function VistaGastos({ navigation }) {
     );
   };
 
-  // Renderizar ítem de distribución
   const renderItemDistribucion = ({ item }) => {
     const aporte = parseFloat(calcularAportePorFamiliar(item.familiarId));
     const diferencia = item.montoSugerido - aporte;
@@ -577,7 +589,6 @@ export default function VistaGastos({ navigation }) {
     );
   };
 
-  // Renderizar gráfico de barras
   const renderGrafico = () => {
     const datos = prepararDatosGrafico();
     if (datos.length === 0) {
@@ -627,6 +638,23 @@ export default function VistaGastos({ navigation }) {
   const totalAportado = calcularTotalAportado();
   const saldoPendiente = calcularSaldoPendiente();
 
+  // ============================================================
+  // Modal de fecha (DateTimePicker)
+  // ============================================================
+  const showDatePicker = () => setDatePickerVisible(true);
+  const hideDatePicker = () => setDatePickerVisible(false);
+
+  const handleConfirmDate = (date) => {
+    hideDatePicker();
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    setFormData({ ...formData, fecha: `${year}-${month}-${day}` });
+  };
+
+  // ============================================================
+  // Render principal
+  // ============================================================
   return (
     <LinearGradient colors={[COLORES.AZUL_CIELO, COLORES.BLANCO]} style={styles.fondo}>
       <SafeAreaView style={styles.contenedor}>
@@ -759,7 +787,7 @@ export default function VistaGastos({ navigation }) {
                 <Text style={styles.tituloSeccion}>Gastos Recientes</Text>
               </View>
               <View style={styles.contenedorHistorial}>
-                {gastosPasados.slice(0, 3).map((gasto, index) => {
+                {gastosPasados.slice(0, 3).map((gasto) => {
                   const categoria = CATEGORIAS.find(c => c.id === gasto.categoria);
                   return (
                     <TouchableOpacity
@@ -809,7 +837,7 @@ export default function VistaGastos({ navigation }) {
           )}
         </ScrollView>
 
-        {/* Botón flotante para agregar gasto */}
+        {/* Botón flotante */}
         {esAdministrador && (
           <TouchableOpacity style={styles.botonFlotante} onPress={() => abrirModalGasto('agregar')}>
             <Icon name="add-outline" size={30} color={COLORES.BLANCO} />
@@ -817,332 +845,404 @@ export default function VistaGastos({ navigation }) {
         )}
       </SafeAreaView>
 
-      {/* Modal para gasto */}
+      {/* ============================================================
+          MODAL DE GASTO (AGREGAR/EDITAR/VER)
+      ============================================================ */}
       <Modal
         animationType="slide"
-        transparent={true}
+        transparent
         visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
+        onRequestClose={() => {
+          setModalVisible(false);
+          setGastoSeleccionado(null);
+        }}
       >
-        <View style={styles.modalFondo}>
-          <View style={styles.modalContenido}>
-            <View style={styles.modalEncabezado}>
-              <Text style={styles.modalTitulo}>
-                {modalTipo === 'ver' ? 'Detalles del Gasto' :
-                  modalTipo === 'editar' ? 'Editar Gasto' : 'Nuevo Gasto'}
-              </Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <Icon name="close-outline" size={24} color={COLORES.TEXTO_OSCURO} />
-              </TouchableOpacity>
-            </View>
+        <TouchableOpacity
+          style={styles.modalFondo}
+          activeOpacity={1}
+          onPress={() => {
+            setModalVisible(false);
+            setGastoSeleccionado(null);
+          }}
+        >
+          <TouchableWithoutFeedback>
+            <View style={styles.modalContenido}>
+              <View style={styles.modalEncabezado}>
+                <Text style={styles.modalTitulo}>
+                  {modalTipo === 'ver' ? 'Detalles del Gasto' :
+                    modalTipo === 'editar' ? 'Editar Gasto' : 'Nuevo Gasto'}
+                </Text>
+                <TouchableOpacity onPress={() => {
+                  setModalVisible(false);
+                  setGastoSeleccionado(null);
+                }}>
+                  <Icon name="close-outline" size={24} color={COLORES.TEXTO_OSCURO} />
+                </TouchableOpacity>
+              </View>
 
-            <ScrollView style={styles.modalFormulario}>
-              {modalTipo === 'ver' ? (
-                // Vista de información
-                <View style={styles.vistaInformacion}>
-                  <View style={styles.infoItemModal}>
-                    <Text style={styles.labelModal}>Descripción:</Text>
-                    <Text style={styles.valorModal}>{gastoSeleccionado?.descripcion}</Text>
-                  </View>
-                  <View style={styles.infoItemModal}>
-                    <Text style={styles.labelModal}>Monto:</Text>
-                    <Text style={styles.valorModal}>{formatearMoneda(gastoSeleccionado?.monto)}</Text>
-                  </View>
-                  <View style={styles.infoItemModal}>
-                    <Text style={styles.labelModal}>Fecha:</Text>
-                    <Text style={styles.valorModal}>{formatearFecha(gastoSeleccionado?.fecha)}</Text>
-                  </View>
-                  <View style={styles.infoItemModal}>
-                    <Text style={styles.labelModal}>Categoría:</Text>
-                    <Text style={styles.valorModal}>{CATEGORIAS.find(c => c.id === gastoSeleccionado?.categoria)?.nombre}</Text>
-                  </View>
-                  <View style={styles.infoItemModal}>
-                    <Text style={styles.labelModal}>Prioridad:</Text>
-                    <View style={[styles.badgeModal, { backgroundColor: PRIORIDADES.find(p => p.id === gastoSeleccionado?.prioridad)?.color + '20' }]}>
-                      <Text style={[styles.textoBadgeModal, { color: PRIORIDADES.find(p => p.id === gastoSeleccionado?.prioridad)?.color }]}>
-                        {PRIORIDADES.find(p => p.id === gastoSeleccionado?.prioridad)?.nombre?.toUpperCase()}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.infoItemModal}>
-                    <Text style={styles.labelModal}>Estado:</Text>
-                    <View style={[styles.badgeModal, { backgroundColor: gastoSeleccionado?.estado === 'pagado' ? COLORES.EXITO + '20' : COLORES.AMARILLO_PLATANO + '20' }]}>
-                      <Text style={[styles.textoBadgeModal, { color: gastoSeleccionado?.estado === 'pagado' ? COLORES.EXITO : COLORES.AMARILLO_PLATANO }]}>
-                        {gastoSeleccionado?.estado === 'pagado' ? 'PAGADO' : 'PENDIENTE'}
-                      </Text>
-                    </View>
-                  </View>
-                  {gastoSeleccionado?.notas && (
+              <ScrollView style={styles.modalFormulario}>
+                {modalTipo === 'ver' ? (
+                  // ======= Vista de detalles =======
+                  <View style={styles.vistaInformacion}>
                     <View style={styles.infoItemModal}>
-                      <Text style={styles.labelModal}>Notas:</Text>
-                      <Text style={styles.valorModal}>{gastoSeleccionado.notas}</Text>
+                      <Text style={styles.labelModal}>Descripción:</Text>
+                      <Text style={styles.valorModal}>{gastoSeleccionado?.descripcion}</Text>
                     </View>
-                  )}
-                  {gastoSeleccionado?.responsable && (
                     <View style={styles.infoItemModal}>
-                      <Text style={styles.labelModal}>Responsable:</Text>
-                      <Text style={styles.valorModal}>{gastoSeleccionado.responsable}</Text>
+                      <Text style={styles.labelModal}>Monto:</Text>
+                      <Text style={styles.valorModal}>{formatearMoneda(gastoSeleccionado?.monto)}</Text>
                     </View>
-                  )}
-                </View>
-              ) : (
-                // Formulario para agregar/editar
-                <>
-                  <Text style={styles.modalLabel}>Descripción *</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={formData.descripcion}
-                    onChangeText={(text) => setFormData({ ...formData, descripcion: text })}
-                    placeholder="Ej: Medicina para la presión, Cita con cardiólogo..."
-                    placeholderTextColor={COLORES.GRIS_MEDIO}
-                  />
-                  <Text style={styles.modalLabel}>Monto ($) *</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={formData.monto}
-                    onChangeText={(text) => setFormData({ ...formData, monto: text })}
-                    placeholder="0.00"
-                    keyboardType="decimal-pad"
-                    placeholderTextColor={COLORES.GRIS_MEDIO}
-                  />
-                  <Text style={styles.modalLabel}>Fecha</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={formData.fecha}
-                    onChangeText={(text) => setFormData({ ...formData, fecha: text })}
-                    placeholder="YYYY-MM-DD"
-                    placeholderTextColor={COLORES.GRIS_MEDIO}
-                  />
-                  <Text style={styles.modalLabel}>Categoría</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoriasContainer}>
-                    {CATEGORIAS.map(cat => (
-                      <TouchableOpacity
-                        key={cat.id}
-                        style={[styles.opcionCategoria, formData.categoria === cat.id && styles.opcionCategoriaSeleccionada]}
-                        onPress={() => setFormData({ ...formData, categoria: cat.id })}
-                      >
-                        <Icon name={cat.icono} size={18} color={formData.categoria === cat.id ? COLORES.BLANCO : cat.color} />
-                        <Text style={[styles.textoOpcionCategoria, formData.categoria === cat.id && styles.textoOpcionCategoriaSeleccionada]}>
-                          {cat.nombre}
+                    <View style={styles.infoItemModal}>
+                      <Text style={styles.labelModal}>Fecha:</Text>
+                      <Text style={styles.valorModal}>{formatearFecha(gastoSeleccionado?.fecha)}</Text>
+                    </View>
+                    <View style={styles.infoItemModal}>
+                      <Text style={styles.labelModal}>Categoría:</Text>
+                      <Text style={styles.valorModal}>{CATEGORIAS.find(c => c.id === gastoSeleccionado?.categoria)?.nombre}</Text>
+                    </View>
+                    <View style={styles.infoItemModal}>
+                      <Text style={styles.labelModal}>Prioridad:</Text>
+                      <View style={[styles.badgeModal, { backgroundColor: PRIORIDADES.find(p => p.id === gastoSeleccionado?.prioridad)?.color + '20' }]}>
+                        <Text style={[styles.textoBadgeModal, { color: PRIORIDADES.find(p => p.id === gastoSeleccionado?.prioridad)?.color }]}>
+                          {PRIORIDADES.find(p => p.id === gastoSeleccionado?.prioridad)?.nombre?.toUpperCase()}
                         </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                  <Text style={styles.modalLabel}>Prioridad</Text>
-                  <View style={styles.prioridadesContainer}>
-                    {PRIORIDADES.map(pri => (
-                      <TouchableOpacity
-                        key={pri.id}
-                        style={[styles.opcionPrioridad, formData.prioridad === pri.id && { backgroundColor: pri.color }]}
-                        onPress={() => setFormData({ ...formData, prioridad: pri.id })}
-                      >
-                        <Text style={[styles.textoOpcionPrioridad, formData.prioridad === pri.id && styles.textoOpcionPrioridadSeleccionada]}>
-                          {pri.nombre}
+                      </View>
+                    </View>
+                    <View style={styles.infoItemModal}>
+                      <Text style={styles.labelModal}>Estado:</Text>
+                      <View style={[styles.badgeModal, { backgroundColor: gastoSeleccionado?.estado === 'pagado' ? COLORES.EXITO + '20' : COLORES.AMARILLO_PLATANO + '20' }]}>
+                        <Text style={[styles.textoBadgeModal, { color: gastoSeleccionado?.estado === 'pagado' ? COLORES.EXITO : COLORES.AMARILLO_PLATANO }]}>
+                          {gastoSeleccionado?.estado === 'pagado' ? 'PAGADO' : 'PENDIENTE'}
                         </Text>
-                      </TouchableOpacity>
-                    ))}
+                      </View>
+                    </View>
+                    {gastoSeleccionado?.notas && (
+                      <View style={styles.infoItemModal}>
+                        <Text style={styles.labelModal}>Notas:</Text>
+                        <Text style={styles.valorModal}>{gastoSeleccionado.notas}</Text>
+                      </View>
+                    )}
+                    {gastoSeleccionado?.responsable && (
+                      <View style={styles.infoItemModal}>
+                        <Text style={styles.labelModal}>Responsable:</Text>
+                        <Text style={styles.valorModal}>{gastoSeleccionado.responsable}</Text>
+                      </View>
+                    )}
                   </View>
-                  <Text style={styles.modalLabel}>Estado</Text>
-                  <View style={styles.estadosContainer}>
-                    <TouchableOpacity
-                      style={[styles.opcionEstado, formData.estado === 'pendiente' && { backgroundColor: COLORES.AMARILLO_PLATANO }]}
-                      onPress={() => setFormData({ ...formData, estado: 'pendiente' })}
-                    >
-                      <Text style={[styles.textoOpcionEstado, formData.estado === 'pendiente' && styles.textoOpcionEstadoSeleccionada]}>
-                        Pendiente
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.opcionEstado, formData.estado === 'pagado' && { backgroundColor: COLORES.EXITO }]}
-                      onPress={() => setFormData({ ...formData, estado: 'pagado' })}
-                    >
-                      <Text style={[styles.textoOpcionEstado, formData.estado === 'pagado' && styles.textoOpcionEstadoSeleccionada]}>
-                        Pagado
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                  <Text style={styles.modalLabel}>Compartido entre familiares</Text>
-                  <View style={styles.opcionCompartido}>
-                    <TouchableOpacity
-                      style={styles.botonCompartido}
-                      onPress={() => setFormData({ ...formData, compartido: !formData.compartido })}
-                    >
-                      <Icon name={formData.compartido ? "checkmark-circle" : "ellipse-outline"} size={24} color={formData.compartido ? COLORES.EXITO : COLORES.GRIS_MEDIO} />
-                      <Text style={styles.textoCompartido}>
-                        {formData.compartido ? 'Sí, compartir gasto' : 'No, gasto individual'}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                  <Text style={styles.modalLabel}>Notas adicionales</Text>
-                  <TextInput
-                    style={[styles.input, styles.textArea]}
-                    value={formData.notas}
-                    onChangeText={(text) => setFormData({ ...formData, notas: text })}
-                    placeholder="Detalles adicionales sobre este gasto..."
-                    multiline
-                    numberOfLines={4}
-                    placeholderTextColor={COLORES.GRIS_MEDIO}
-                  />
-                </>
-              )}
-            </ScrollView>
+                ) : (
+                  // ======= Formulario =======
+                  <>
+                    <Text style={styles.modalLabel}>Descripción *</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={formData.descripcion}
+                      onChangeText={(text) => setFormData({ ...formData, descripcion: text })}
+                      placeholder="Ej: Medicina para la presión, Cita con cardiólogo..."
+                      placeholderTextColor={COLORES.GRIS_MEDIO}
+                    />
 
-            <View style={styles.modalBotones}>
-              {modalTipo === 'ver' ? (
-                <>
-                  <TouchableOpacity style={styles.botonModalSecundario} onPress={() => setModalVisible(false)}>
-                    <Text style={styles.textoBotonModalSecundario}>Cerrar</Text>
-                  </TouchableOpacity>
-                  {esAdministrador && (
-                    <>
-                      <TouchableOpacity style={styles.botonModalPrincipal} onPress={() => {
-                        setModalVisible(false);
-                        abrirModalGasto('editar', gastoSeleccionado);
-                      }}>
-                        <Text style={styles.textoBotonModalPrincipal}>Editar</Text>
-                      </TouchableOpacity>
-                      {gastoSeleccionado?.estado !== 'pagado' && (
-                        <TouchableOpacity style={[styles.botonModalAccion, { backgroundColor: COLORES.EXITO }]} onPress={() => {
-                          setModalVisible(false);
-                          marcarComoPagado(gastoSeleccionado.id);
-                        }}>
-                          <Text style={styles.textoBotonModalAccion}>Marcar Pagado</Text>
+                    <Text style={styles.modalLabel}>Monto ($) *</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={formData.monto}
+                      onChangeText={(text) => setFormData({ ...formData, monto: text })}
+                      placeholder="0.00"
+                      keyboardType="decimal-pad"
+                      placeholderTextColor={COLORES.GRIS_MEDIO}
+                    />
+
+                    <Text style={styles.modalLabel}>Fecha</Text>
+                    <TouchableOpacity style={styles.inputFecha} onPress={showDatePicker}>
+                      <Text style={styles.textoInputFecha}>
+                        {formData.fecha ? formatearFecha(formData.fecha) : 'Seleccionar fecha'}
+                      </Text>
+                      <Icon name="calendar-outline" size={20} color={COLORES.GRIS_OSCURO} />
+                    </TouchableOpacity>
+
+                    <Text style={styles.modalLabel}>Categoría</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoriasContainer}>
+                      {CATEGORIAS.map(cat => (
+                        <TouchableOpacity
+                          key={cat.id}
+                          style={[styles.opcionCategoria, formData.categoria === cat.id && styles.opcionCategoriaSeleccionada]}
+                          onPress={() => setFormData({ ...formData, categoria: cat.id })}
+                        >
+                          <Icon name={cat.icono} size={18} color={formData.categoria === cat.id ? COLORES.BLANCO : cat.color} />
+                          <Text style={[styles.textoOpcionCategoria, formData.categoria === cat.id && styles.textoOpcionCategoriaSeleccionada]}>
+                            {cat.nombre}
+                          </Text>
                         </TouchableOpacity>
-                      )}
-                    </>
-                  )}
-                </>
-              ) : (
-                <>
-                  <TouchableOpacity style={styles.botonModalCancelar} onPress={() => setModalVisible(false)}>
-                    <Text style={styles.textoBotonModalCancelar}>Cancelar</Text>
-                  </TouchableOpacity>
-                  {modalTipo === 'editar' && esAdministrador && (
-                    <TouchableOpacity style={[styles.botonModalAccion, { backgroundColor: COLORES.ERROR }]} onPress={() => {
-                      setModalVisible(false);
-                      eliminarGasto(gastoSeleccionado.id);
-                    }}>
-                      <Text style={styles.textoBotonModalAccion}>Eliminar</Text>
+                      ))}
+                    </ScrollView>
+
+                    <Text style={styles.modalLabel}>Prioridad</Text>
+                    <View style={styles.prioridadesContainer}>
+                      {PRIORIDADES.map(pri => (
+                        <TouchableOpacity
+                          key={pri.id}
+                          style={[styles.opcionPrioridad, formData.prioridad === pri.id && { backgroundColor: pri.color }]}
+                          onPress={() => setFormData({ ...formData, prioridad: pri.id })}
+                        >
+                          <Text style={[styles.textoOpcionPrioridad, formData.prioridad === pri.id && styles.textoOpcionPrioridadSeleccionada]}>
+                            {pri.nombre}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    <Text style={styles.modalLabel}>Estado</Text>
+                    <View style={styles.estadosContainer}>
+                      <TouchableOpacity
+                        style={[styles.opcionEstado, formData.estado === 'pendiente' && { backgroundColor: COLORES.AMARILLO_PLATANO }]}
+                        onPress={() => setFormData({ ...formData, estado: 'pendiente' })}
+                      >
+                        <Text style={[styles.textoOpcionEstado, formData.estado === 'pendiente' && styles.textoOpcionEstadoSeleccionada]}>
+                          Pendiente
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.opcionEstado, formData.estado === 'pagado' && { backgroundColor: COLORES.EXITO }]}
+                        onPress={() => setFormData({ ...formData, estado: 'pagado' })}
+                      >
+                        <Text style={[styles.textoOpcionEstado, formData.estado === 'pagado' && styles.textoOpcionEstadoSeleccionada]}>
+                          Pagado
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <View style={styles.opcionCompartido}>
+                      <TouchableOpacity
+                        style={styles.botonCompartido}
+                        onPress={() => setFormData({ ...formData, compartido: !formData.compartido })}
+                      >
+                        <Icon name={formData.compartido ? "checkmark-circle" : "ellipse-outline"} size={24} color={formData.compartido ? COLORES.EXITO : COLORES.GRIS_MEDIO} />
+                        <Text style={styles.textoCompartido}>
+                          {formData.compartido ? 'Sí, compartir gasto' : 'No, gasto individual'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* Selector de responsable si no es compartido */}
+                    {!formData.compartido && (
+                      <>
+                        <Text style={styles.modalLabel}>Responsable</Text>
+                        <View style={styles.pickerContainer}>
+                          <Picker
+                            selectedValue={formData.responsableId}
+                            onValueChange={(value) => setFormData({ ...formData, responsableId: value })}
+                            style={styles.picker}
+                          >
+                            {familiares.map((familiar) => (
+                              <Picker.Item
+                                key={familiar.id}
+                                label={`${familiar.nombre || ''} ${familiar.apellido || ''}`}
+                                value={familiar.id}
+                              />
+                            ))}
+                          </Picker>
+                        </View>
+                      </>
+                    )}
+
+                    <Text style={styles.modalLabel}>Notas adicionales</Text>
+                    <TextInput
+                      style={[styles.input, styles.textArea]}
+                      value={formData.notas}
+                      onChangeText={(text) => setFormData({ ...formData, notas: text })}
+                      placeholder="Detalles adicionales sobre este gasto..."
+                      multiline
+                      numberOfLines={4}
+                      placeholderTextColor={COLORES.GRIS_MEDIO}
+                    />
+                  </>
+                )}
+              </ScrollView>
+
+              <View style={styles.modalBotones}>
+                {modalTipo === 'ver' ? (
+                  <>
+                    <TouchableOpacity style={styles.botonModalSecundario} onPress={() => setModalVisible(false)}>
+                      <Text style={styles.textoBotonModalSecundario}>Cerrar</Text>
                     </TouchableOpacity>
-                  )}
-                  <TouchableOpacity style={[styles.botonModalAccion, { backgroundColor: COLORES.EXITO }]} onPress={guardarGasto}>
-                    <Text style={styles.textoBotonModalAccion}>
-                      {modalTipo === 'editar' ? 'Actualizar' : 'Guardar'}
-                    </Text>
-                  </TouchableOpacity>
-                </>
-              )}
+                    {esAdministrador && (
+                      <>
+                        <TouchableOpacity style={styles.botonModalPrincipal} onPress={() => {
+                          setModalVisible(false);
+                          abrirModalGasto('editar', gastoSeleccionado);
+                        }}>
+                          <Text style={styles.textoBotonModalPrincipal}>Editar</Text>
+                        </TouchableOpacity>
+                        {gastoSeleccionado?.estado !== 'pagado' && (
+                          <TouchableOpacity style={[styles.botonModalAccion, { backgroundColor: COLORES.EXITO }]} onPress={() => {
+                            setModalVisible(false);
+                            marcarComoPagado(gastoSeleccionado.id);
+                          }}>
+                            <Text style={styles.textoBotonModalAccion}>Marcar Pagado</Text>
+                          </TouchableOpacity>
+                        )}
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <TouchableOpacity style={styles.botonModalCancelar} onPress={() => setModalVisible(false)}>
+                      <Text style={styles.textoBotonModalCancelar}>Cancelar</Text>
+                    </TouchableOpacity>
+                    {modalTipo === 'editar' && esAdministrador && (
+                      <TouchableOpacity style={[styles.botonModalAccion, { backgroundColor: COLORES.ERROR }]} onPress={() => {
+                        setModalVisible(false);
+                        eliminarGasto(gastoSeleccionado.id);
+                      }}>
+                        <Text style={styles.textoBotonModalAccion}>Eliminar</Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity style={[styles.botonModalAccion, { backgroundColor: COLORES.EXITO }]} onPress={guardarGasto}>
+                      <Text style={styles.textoBotonModalAccion}>
+                        {modalTipo === 'editar' ? 'Actualizar' : 'Guardar'}
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
             </View>
-          </View>
-        </View>
+          </TouchableWithoutFeedback>
+        </TouchableOpacity>
       </Modal>
 
-      {/* Modal para configuración de porcentajes */}
+      {/* ============================================================
+          MODAL CONFIGURACIÓN DE PORCENTAJES
+      ============================================================ */}
       <Modal
         animationType="slide"
-        transparent={true}
+        transparent
         visible={modalConfigVisible}
         onRequestClose={() => setModalConfigVisible(false)}
       >
-        <View style={styles.modalFondo}>
-          <View style={styles.modalContenido}>
-            <View style={styles.modalEncabezado}>
-              <Text style={styles.modalTitulo}>Configurar Porcentajes</Text>
-              <TouchableOpacity onPress={() => setModalConfigVisible(false)}>
-                <Icon name="close-outline" size={24} color={COLORES.TEXTO_OSCURO} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.modalFormulario}>
-              <View style={styles.infoConfiguracion}>
-                <Icon name="calculator-outline" size={40} color={COLORES.TURQUESA} />
-                <Text style={styles.textoInfoConfig}>
-                  Distribuye el porcentaje que cada familiar aportará a los gastos compartidos
-                </Text>
-              </View>
-
-              <View style={styles.totalPorcentajeContainer}>
-                <Text style={styles.labelTotalPorcentaje}>Total:</Text>
-                <Text style={[styles.valorTotalPorcentaje, { color: totalPorcentaje === 100 ? COLORES.EXITO : COLORES.ERROR }]}>
-                  {totalPorcentaje}%
-                </Text>
-                {totalPorcentaje !== 100 && (
-                  <Text style={styles.errorTotalPorcentaje}>Debe sumar exactamente 100%</Text>
-                )}
-              </View>
-
-              {familiares.map((familiar, index) => (
-                <View key={familiar.id} style={styles.itemConfigPorcentaje}>
-                  <View style={styles.infoFamiliarConfig}>
-                    <View style={[styles.avatarFamiliar, { backgroundColor: obtenerColorGrafico(index) }]}>
-                      <Text style={styles.textoAvatar}>
-                        {familiar.nombre ? familiar.nombre.charAt(0) : '?'}{familiar.apellido ? familiar.apellido.charAt(0) : ''}
-                      </Text>
-                    </View>
-                    <View style={styles.nombreFamiliarConfig}>
-                      <Text style={styles.textoNombreFamiliar}>
-                        {familiar.nombre || 'Sin nombre'} {familiar.apellido || ''}
-                      </Text>
-                      <Text style={styles.textoRolFamiliar}>
-                        {familiar.rol === 'familiar_administrador' ? 'Administrador' : 'Familiar'}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.controlPorcentaje}>
-                    <TouchableOpacity style={styles.botonMenos} onPress={() => {
-                      const actual = parseFloat(porcentajes[familiar.id] || 0);
-                      actualizarPorcentaje(familiar.id, actual - 5);
-                    }}>
-                      <Icon name="remove-outline" size={18} color={COLORES.GRIS_OSCURO} />
-                    </TouchableOpacity>
-                    <View style={styles.inputPorcentajeContainer}>
-                      <TextInput
-                        style={styles.inputPorcentaje}
-                        value={porcentajes[familiar.id]?.toString() || '0'}
-                        onChangeText={(text) => actualizarPorcentaje(familiar.id, text)}
-                        keyboardType="decimal-pad"
-                        maxLength={5}
-                      />
-                      <Text style={styles.textoPorcentaje}>%</Text>
-                    </View>
-                    <TouchableOpacity style={styles.botonMas} onPress={() => {
-                      const actual = parseFloat(porcentajes[familiar.id] || 0);
-                      actualizarPorcentaje(familiar.id, actual + 5);
-                    }}>
-                      <Icon name="add-outline" size={18} color={COLORES.GRIS_OSCURO} />
-                    </TouchableOpacity>
-                  </View>
-                  <View style={styles.montoCalculado}>
-                    <Text style={styles.textoMontoCalculado}>
-                      {formatearMoneda((parseFloat(totalGastosFuturos) * parseFloat(porcentajes[familiar.id] || 0)) / 100)}
-                    </Text>
-                    <Text style={styles.textoCalculadoLabel}>por mes</Text>
-                  </View>
-                </View>
-              ))}
-              <View style={styles.botonesConfig}>
-                <TouchableOpacity style={styles.botonRestablecer} onPress={restablecerEquitativo}>
-                  <Icon name="refresh-outline" size={18} color={COLORES.AZUL_CIELO_OSCURO} />
-                  <Text style={styles.textoBotonRestablecer}>Equitativo</Text>
+        <TouchableOpacity
+          style={styles.modalFondo}
+          activeOpacity={1}
+          onPress={() => setModalConfigVisible(false)}
+        >
+          <TouchableWithoutFeedback>
+            <View style={styles.modalContenido}>
+              <View style={styles.modalEncabezado}>
+                <Text style={styles.modalTitulo}>Configurar Porcentajes</Text>
+                <TouchableOpacity onPress={() => setModalConfigVisible(false)}>
+                  <Icon name="close-outline" size={24} color={COLORES.TEXTO_OSCURO} />
                 </TouchableOpacity>
               </View>
-            </ScrollView>
 
-            <View style={styles.modalBotones}>
-              <TouchableOpacity style={styles.botonModalCancelar} onPress={() => setModalConfigVisible(false)}>
-                <Text style={styles.textoBotonModalCancelar}>Cancelar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.botonModalAccion, { backgroundColor: totalPorcentaje === 100 ? COLORES.EXITO : COLORES.GRIS_MEDIO }]} onPress={guardarPorcentajes} disabled={totalPorcentaje !== 100}>
-                <Text style={styles.textoBotonModalAccion}>Guardar Distribución</Text>
-              </TouchableOpacity>
+              <ScrollView style={styles.modalFormulario}>
+                <View style={styles.infoConfiguracion}>
+                  <Icon name="calculator-outline" size={40} color={COLORES.TURQUESA} />
+                  <Text style={styles.textoInfoConfig}>
+                    Distribuye el porcentaje que cada familiar aportará a los gastos compartidos
+                  </Text>
+                </View>
+
+                <View style={styles.totalPorcentajeContainer}>
+                  <Text style={styles.labelTotalPorcentaje}>Total:</Text>
+                  <Text style={[styles.valorTotalPorcentaje, { color: totalPorcentaje === 100 ? COLORES.EXITO : COLORES.ERROR }]}>
+                    {totalPorcentaje}%
+                  </Text>
+                  {totalPorcentaje !== 100 && (
+                    <Text style={styles.errorTotalPorcentaje}>Debe sumar exactamente 100%</Text>
+                  )}
+                </View>
+
+                {familiares.map((familiar, index) => (
+                  <View key={familiar.id} style={styles.itemConfigPorcentaje}>
+                    <View style={styles.infoFamiliarConfig}>
+                      <View style={[styles.avatarFamiliar, { backgroundColor: obtenerColorGrafico(index) }]}>
+                        <Text style={styles.textoAvatar}>
+                          {familiar.nombre ? familiar.nombre.charAt(0) : '?'}{familiar.apellido ? familiar.apellido.charAt(0) : ''}
+                        </Text>
+                      </View>
+                      <View style={styles.nombreFamiliarConfig}>
+                        <Text style={styles.textoNombreFamiliar}>
+                          {familiar.nombre || 'Sin nombre'} {familiar.apellido || ''}
+                        </Text>
+                        <Text style={styles.textoRolFamiliar}>
+                          {familiar.rol === 'familiar_administrador' ? 'Administrador' : 'Familiar'}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.controlPorcentaje}>
+                      <TouchableOpacity style={styles.botonMenos} onPress={() => {
+                        const actual = parseFloat(porcentajes[familiar.id] || 0);
+                        actualizarPorcentaje(familiar.id, actual - 5);
+                      }}>
+                        <Icon name="remove-outline" size={18} color={COLORES.GRIS_OSCURO} />
+                      </TouchableOpacity>
+                      <View style={styles.inputPorcentajeContainer}>
+                        <TextInput
+                          style={styles.inputPorcentaje}
+                          value={porcentajes[familiar.id]?.toString() || '0'}
+                          onChangeText={(text) => actualizarPorcentaje(familiar.id, text)}
+                          keyboardType="decimal-pad"
+                          maxLength={5}
+                        />
+                        <Text style={styles.textoPorcentaje}>%</Text>
+                      </View>
+                      <TouchableOpacity style={styles.botonMas} onPress={() => {
+                        const actual = parseFloat(porcentajes[familiar.id] || 0);
+                        actualizarPorcentaje(familiar.id, actual + 5);
+                      }}>
+                        <Icon name="add-outline" size={18} color={COLORES.GRIS_OSCURO} />
+                      </TouchableOpacity>
+                    </View>
+                    <View style={styles.montoCalculado}>
+                      <Text style={styles.textoMontoCalculado}>
+                        {formatearMoneda((parseFloat(totalGastosFuturos) * parseFloat(porcentajes[familiar.id] || 0)) / 100)}
+                      </Text>
+                      <Text style={styles.textoCalculadoLabel}>por mes</Text>
+                    </View>
+                  </View>
+                ))}
+
+                <View style={styles.botonesConfig}>
+                  <TouchableOpacity style={styles.botonRestablecer} onPress={restablecerEquitativo}>
+                    <Icon name="refresh-outline" size={18} color={COLORES.AZUL_CIELO_OSCURO} />
+                    <Text style={styles.textoBotonRestablecer}>Equitativo</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+
+              <View style={styles.modalBotones}>
+                <TouchableOpacity style={styles.botonModalCancelar} onPress={() => setModalConfigVisible(false)}>
+                  <Text style={styles.textoBotonModalCancelar}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.botonModalAccion, { backgroundColor: totalPorcentaje === 100 ? COLORES.EXITO : COLORES.GRIS_MEDIO }]}
+                  onPress={guardarPorcentajes}
+                  disabled={totalPorcentaje !== 100}
+                >
+                  <Text style={styles.textoBotonModalAccion}>Guardar Distribución</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        </View>
+          </TouchableWithoutFeedback>
+        </TouchableOpacity>
       </Modal>
+
+      {/* ============================================================
+          DATETIME PICKER
+      ============================================================ */}
+      <DateTimePickerModal
+        isVisible={isDatePickerVisible}
+        mode="date"
+        onConfirm={handleConfirmDate}
+        onCancel={hideDatePicker}
+        date={formData.fecha ? new Date(formData.fecha) : new Date()}
+        locale="es-ES"
+      />
     </LinearGradient>
   );
 }
 
+// ============================================================
+// ESTILOS
+// ============================================================
 const styles = StyleSheet.create({
   fondo: { flex: 1 },
   contenedor: { flex: 1 },
@@ -1331,9 +1431,20 @@ const styles = StyleSheet.create({
   modalLabel: { fontSize: 14, fontWeight: '600', color: COLORES.TEXTO_OSCURO, marginBottom: 8, marginTop: 15 },
   input: { backgroundColor: COLORES.GRIS_CLARO, borderRadius: 10, padding: 12, fontSize: 14, color: COLORES.TEXTO_OSCURO },
   textArea: { minHeight: 80, textAlignVertical: 'top' },
-  filaInputs: { flexDirection: 'row', justifyContent: 'space-between' },
-  inputMitad: { width: '48%' },
 
+  // Fecha
+  inputFecha: {
+    backgroundColor: COLORES.GRIS_CLARO,
+    borderRadius: 10,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 5,
+  },
+  textoInputFecha: { fontSize: 14, color: COLORES.TEXTO_OSCURO, flex: 1 },
+
+  // Categorías
   categoriasContainer: { flexDirection: 'row', marginBottom: 5 },
   opcionCategoria: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: COLORES.GRIS_MEDIO, marginRight: 10 },
   opcionCategoriaSeleccionada: { backgroundColor: COLORES.AZUL_CIELO, borderColor: COLORES.AZUL_CIELO_OSCURO },
@@ -1353,6 +1464,17 @@ const styles = StyleSheet.create({
   opcionCompartido: { marginBottom: 15 },
   botonCompartido: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
   textoCompartido: { fontSize: 14, color: COLORES.TEXTO_OSCURO, marginLeft: 10 },
+
+  // Selector de responsable (Picker)
+  pickerContainer: {
+    backgroundColor: COLORES.GRIS_CLARO,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORES.GRIS_MEDIO,
+    overflow: 'hidden',
+    marginBottom: 10,
+  },
+  picker: { height: 50, width: '100%' },
 
   modalBotones: { flexDirection: 'row', padding: 20, borderTopWidth: 1, borderTopColor: COLORES.GRIS_CLARO },
   botonModalCancelar: { flex: 1, padding: 15, borderRadius: 10, borderWidth: 1, borderColor: COLORES.GRIS_MEDIO, alignItems: 'center', marginRight: 10 },
@@ -1397,4 +1519,4 @@ const styles = StyleSheet.create({
   botonesConfig: { marginTop: 20, alignItems: 'center' },
   botonRestablecer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8, backgroundColor: COLORES.GRIS_CLARO },
   textoBotonRestablecer: { fontSize: 14, color: COLORES.AZUL_CIELO_OSCURO, fontWeight: '600', marginLeft: 8 },
-});
+}); np

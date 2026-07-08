@@ -54,7 +54,7 @@ const COLORES = {
 const { width, height } = Dimensions.get('window');
 const HORA_HEIGHT = 50;
 // 🔹 Ajusta este valor para el ancho de las columnas de días
-const ANCHO_COLUMNA_DIA = 58;
+const ANCHO_COLUMNA_DIA = 64;
 const DIA_WIDTH = Math.min(ANCHO_COLUMNA_DIA, (width - 40) / 7);
 
 const DIAS_SEMANA = [
@@ -80,103 +80,135 @@ const ACTIVIDADES_PREDEFINIDAS_DEMO = [
   { id: 'predef_medicina', nombre: 'Tomar Medicina', color: COLORES.EXITO, emoji: '💊' },
 ];
 
-// ========== COMPONENTE SELECTOR DE HORA ==========
+// ========== COMPONENTE SELECTOR DE HORA (CON VALIDACIÓN EN TIEMPO REAL) ==========
+// ========== COMPONENTE SELECTOR DE HORA (VERSIÓN DEFINITIVA) ==========
 const TimePicker = ({ value, onChange, label }) => {
-  const [hora, minutos] = value.split(':').map(Number);
-  const [horaSeleccionada, setHoraSeleccionada] = useState(hora);
-  const [minutoSeleccionado, setMinutoSeleccionado] = useState(minutos);
+  const [digits, setDigits] = useState('');
 
-  const incrementarHora = () => {
-    const nueva = (horaSeleccionada + 1) % 24;
-    setHoraSeleccionada(nueva);
-    onChange(`${String(nueva).padStart(2, '0')}:${String(minutoSeleccionado).padStart(2, '0')}`);
-  };
-
-  const decrementarHora = () => {
-    const nueva = (horaSeleccionada - 1 + 24) % 24;
-    setHoraSeleccionada(nueva);
-    onChange(`${String(nueva).padStart(2, '0')}:${String(minutoSeleccionado).padStart(2, '0')}`);
-  };
-
-  const incrementarMinuto = () => {
-    let nuevoMinuto = minutoSeleccionado + 15;
-    let nuevaHora = horaSeleccionada;
-    if (nuevoMinuto >= 60) {
-      nuevoMinuto = 0;
-      nuevaHora = (horaSeleccionada + 1) % 24;
+  // Sincronizar con el valor externo
+  useEffect(() => {
+    if (value && value.includes(':')) {
+      const [h, m] = value.split(':');
+      const hh = h.padStart(2, '0');
+      const mm = m.padStart(2, '0');
+      setDigits(hh + mm);
+    } else {
+      setDigits('');
     }
-    setHoraSeleccionada(nuevaHora);
-    setMinutoSeleccionado(nuevoMinuto);
-    onChange(`${String(nuevaHora).padStart(2, '0')}:${String(nuevoMinuto).padStart(2, '0')}`);
+  }, [value]);
+
+  // Formatear los dígitos para mostrar
+  const getDisplay = (d) => {
+    if (d.length === 0) return '';
+    if (d.length === 1) return d;
+    if (d.length === 2) return d;
+    if (d.length === 3) return d.slice(0, 2) + ':' + d.slice(2);
+    if (d.length === 4) return d.slice(0, 2) + ':' + d.slice(2);
+    return '';
   };
 
-  const decrementarMinuto = () => {
-    let nuevoMinuto = minutoSeleccionado - 15;
-    let nuevaHora = horaSeleccionada;
-    if (nuevoMinuto < 0) {
-      nuevoMinuto = 45;
-      nuevaHora = (horaSeleccionada - 1 + 24) % 24;
+  const handleChangeText = (text) => {
+    // Si el texto está vacío (borrado total), resetear
+    if (text === '') {
+      setDigits('');
+      // No llamamos a onChange, dejamos que el padre decida
+      return;
     }
-    setHoraSeleccionada(nuevaHora);
-    setMinutoSeleccionado(nuevoMinuto);
-    onChange(`${String(nuevaHora).padStart(2, '0')}:${String(nuevoMinuto).padStart(2, '0')}`);
-  };
 
-  const handleInputChange = (text) => {
-    // Permitir solo números y ':'
-    const cleaned = text.replace(/[^0-9:]/g, '');
-    if (cleaned.length <= 5) {
-      // Validar formato HH:MM
-      if (cleaned.length === 5 && cleaned.includes(':')) {
-        const [h, m] = cleaned.split(':').map(Number);
-        if (!isNaN(h) && !isNaN(m) && h >= 0 && h < 24 && m >= 0 && m < 60) {
-          setHoraSeleccionada(h);
-          setMinutoSeleccionado(m);
-          onChange(cleaned);
+    // Extraer solo dígitos
+    const numeros = text.replace(/\D/g, '');
+    if (numeros.length === 0) {
+      setDigits('');
+      return;
+    }
+
+    // Limitar a 4 dígitos
+    let nuevos = numeros.slice(0, 4);
+
+    // Validar hora: si tiene 2 dígitos, la hora no debe ser > 12
+    if (nuevos.length >= 2) {
+      const hora = parseInt(nuevos.slice(0, 2));
+      if (hora > 24) {
+        // Si la hora es > 12, no permitimos el segundo dígito
+        // Pero si ya tiene 2 dígitos y son >12, los rechazamos y solo dejamos el primer dígito
+        // Esto evita que se escriba "13"
+        if (nuevos.length === 2) {
+          // Rechazar el segundo dígito
+          nuevos = nuevos.slice(0, 1);
+        } else {
+          // Si tiene más de 2, también rechazamos los dígitos de hora inválidos
+          // pero mejor mantener el primer dígito y evitar escribir el segundo inválido
+          // Para simplificar, si los dos primeros > 12, solo dejamos el primero
+          const primerDigito = nuevos.slice(0, 1);
+          nuevos = primerDigito + nuevos.slice(2); // descartar el segundo dígito
         }
-      } else {
-        // Actualizar parcial (mientras escribe)
-        setHoraSeleccionada(0);
-        setMinutoSeleccionado(0);
-        onChange(cleaned);
       }
+    }
+
+    // Validar minutos: si tiene 4 dígitos, los minutos no deben ser > 59
+    if (nuevos.length === 4) {
+      const minutos = parseInt(nuevos.slice(2, 4));
+      if (minutos > 59) {
+        // Si los minutos > 59, no permitimos el cuarto dígito
+        // Dejamos solo 3 dígitos (hora + primer dígito de minutos)
+        nuevos = nuevos.slice(0, 3);
+      }
+    }
+
+    // Actualizar estado
+    setDigits(nuevos);
+
+    // Si ya tenemos 4 dígitos, llamar a onChange con formato HH:MM
+    if (nuevos.length === 4) {
+      const hh = nuevos.slice(0, 2);
+      const mm = nuevos.slice(2, 4);
+      onChange(hh + ':' + mm);
+    }
+  };
+
+  const handleBlur = () => {
+    // Al perder el foco, si hay dígitos pero no están completos, los completamos con ceros
+    // Pero el usuario quiere que no se rellene automáticamente, así que no hacemos nada.
+    // Si quieres que se complete, descomenta el código de abajo:
+    /*
+    if (digits.length > 0 && digits.length < 4) {
+      const d = digits.padEnd(4, '0');
+      const hh = d.slice(0, 2);
+      const mm = d.slice(2, 4);
+      if (parseInt(hh) <= 12 && parseInt(mm) <= 59) {
+        setDigits(d);
+        onChange(hh + ':' + mm);
+      }
+    }
+    */
+  };
+
+  const handleKeyPress = ({ nativeEvent }) => {
+    // Detectar Backspace y borrar todo
+    if (nativeEvent.key === 'Backspace' && digits.length > 0) {
+      setDigits('');
+      // No llamamos a onChange para no enviar '' al padre
+      // El padre solo se actualizará cuando haya 4 dígitos válidos
     }
   };
 
   return (
     <View style={styles.timePickerContainer}>
       {label && <Text style={styles.subLabel}>{label}</Text>}
-      <View style={styles.timePickerRow}>
-        <TouchableOpacity style={styles.timePickerButton} onPress={decrementarHora}>
-          <Icon name="chevron-up-outline" size={20} color={COLORES.TEXTO_OSCURO} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.timePickerButton} onPress={incrementarHora}>
-          <Icon name="chevron-down-outline" size={20} color={COLORES.TEXTO_OSCURO} />
-        </TouchableOpacity>
-      </View>
-      <View style={styles.timePickerDisplay}>
-        <Text style={styles.timePickerText}>{value}</Text>
-      </View>
-      <View style={styles.timePickerRow}>
-        <TouchableOpacity style={styles.timePickerButton} onPress={decrementarMinuto}>
-          <Icon name="chevron-up-outline" size={20} color={COLORES.TEXTO_OSCURO} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.timePickerButton} onPress={incrementarMinuto}>
-          <Icon name="chevron-down-outline" size={20} color={COLORES.TEXTO_OSCURO} />
-        </TouchableOpacity>
-      </View>
       <TextInput
-        style={styles.timePickerInput}
-        value={value}
-        onChangeText={handleInputChange}
-        keyboardType="numbers-and-punctuation"
-        maxLength={5}
-        placeholder="HH:MM"
+        style={[styles.input, { width: 80, textAlign: 'center' }]}
+        value={getDisplay(digits)}
+        onChangeText={handleChangeText}
+        onBlur={handleBlur}
+        onKeyPress={handleKeyPress}
+        keyboardType="numeric"
+        maxLength={5} // porque tiene dos puntos cuando tiene 3 o 4 dígitos
+        placeholder="00:00"
+        selectTextOnFocus={true}
       />
     </View>
   );
 };
-
 export default function VistaHorario({ navigation }) {
   // ========== ESTADOS ==========
   const [usuarioId, setUsuarioId] = useState(null);
@@ -788,7 +820,6 @@ export default function VistaHorario({ navigation }) {
       // Si no existe, proceder a crear/actualizar
       const data = {
         nombre: nombreLimpio,
-        // 🔹 Usar el emoji del formulario, si viene vacío usar '📌'
         emoji: nuevaActividadBase.emoji && nuevaActividadBase.emoji.trim() !== '' ? nuevaActividadBase.emoji : '📌',
         color: nuevaActividadBase.color || COLORES.AZUL_CIELO,
         descripcion: nuevaActividadBase.descripcion || '',
@@ -1807,12 +1838,26 @@ const styles = StyleSheet.create({
   horarioScroll: { flex: 1 },
   columnaHoras: { width: 75, backgroundColor: COLORES.GRIS_CLARO },
   celdaHora: { height: HORA_HEIGHT, justifyContent: 'flex-start', paddingTop: 6, paddingLeft: 4, borderBottomWidth: 1, borderBottomColor: COLORES.GRIS_MEDIO },
-  celdaHoraVacia: { height: 36, width: 75, backgroundColor: COLORES.GRIS_CLARO, borderBottomWidth: 1, borderBottomColor: COLORES.GRIS_MEDIO },
+  celdaHoraVacia: {
+    height: 44,                // MISMA ALTURA que encabezadoDia
+    width: 75,                 // mismo ancho que columnaHoras
+    backgroundColor: COLORES.GRIS_CLARO,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORES.GRIS_MEDIO,
+  },
   textoHora: { fontSize: 12, color: COLORES.GRIS_OSCURO, fontWeight: '600' },
 
   gridDias: { flex: 1 },
   encabezadosDias: { flexDirection: 'row', backgroundColor: COLORES.GRIS_CLARO },
-  encabezadoDia: { width: DIA_WIDTH, alignItems: 'center', paddingVertical: 8, borderLeftWidth: 1, borderLeftColor: COLORES.GRIS_MEDIO },
+  encabezadoDia: {
+    width: DIA_WIDTH,
+    alignItems: 'center',
+    justifyContent: 'center',  // centra verticalmente
+    height: 44,                // altura fija
+    paddingVertical: 4,
+    borderLeftWidth: 1,
+    borderLeftColor: COLORES.GRIS_MEDIO,
+  },
   encabezadoFinDeSemana: { backgroundColor: COLORES.GRIS_CLARO + '30' },
   textoEncabezadoDia: { fontSize: 13, fontWeight: 'bold', color: COLORES.TEXTO_OSCURO },
   textoEncabezadoFinDeSemana: { color: COLORES.GRIS_OSCURO },
@@ -1848,6 +1893,10 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     minWidth: 80,
     alignItems: 'center',
+  },
+  inputError: {
+    borderColor: COLORES.ERROR,
+    borderWidth: 2,
   },
   botonSeleccionar: { backgroundColor: COLORES.AZUL_CIELO_OSCURO },
   botonNueva: { backgroundColor: COLORES.EXITO },
