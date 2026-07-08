@@ -54,7 +54,7 @@ const COLORES = {
 const { width, height } = Dimensions.get('window');
 const HORA_HEIGHT = 50;
 // 🔹 Ajusta este valor para el ancho de las columnas de días
-const ANCHO_COLUMNA_DIA = 64;
+const ANCHO_COLUMNA_DIA = 120;
 const DIA_WIDTH = Math.min(ANCHO_COLUMNA_DIA, (width - 40) / 7);
 
 const DIAS_SEMANA = [

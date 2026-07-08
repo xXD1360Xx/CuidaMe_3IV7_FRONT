@@ -15,6 +15,7 @@ import {
   Dimensions,
   Animated,
   Platform,
+  StatusBar,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons as Icon } from '@expo/vector-icons';
@@ -22,9 +23,6 @@ import { servicioAPI } from '../../servicios/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 
-// ===================================================
-// POLYFILL para findNodeHandle en web
-// ===================================================
 if (Platform.OS === 'web') {
   const RN = require('react-native');
   if (!RN.findNodeHandle) {
@@ -72,8 +70,27 @@ const COLOR_FILTRO = {
   todas: '#607D8B',
 };
 
+const DIAS_SEMANA = [
+  { id: 1, nombre: 'Lunes' },
+  { id: 2, nombre: 'Martes' },
+  { id: 3, nombre: 'Miércoles' },
+  { id: 4, nombre: 'Jueves' },
+  { id: 5, nombre: 'Viernes' },
+  { id: 6, nombre: 'Sábado' },
+  { id: 0, nombre: 'Domingo' },
+];
+
+// Función para formatear hora en formato 12h (AM/PM)
+const formatearHoraAMPM = (horaStr) => {
+  if (!horaStr) return '';
+  const [h, m] = horaStr.split(':').map(Number);
+  if (isNaN(h) || isNaN(m)) return horaStr;
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 || 12;
+  return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
+};
+
 export default function VistaMedicinas({ navigation }) {
-  // --- Estados (igual que antes) ---
   const [medicinas, setMedicinas] = useState([]);
   const [medicinasHoy, setMedicinasHoy] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -101,11 +118,15 @@ export default function VistaMedicinas({ navigation }) {
   const inputNombreRef = useRef(null);
   const inputDosisRef = useRef(null);
 
+  // Estado de notificaciones (simulado)
+  const [notificacionesNoLeidas, setNotificacionesNoLeidas] = useState(2);
+
   const [nuevaMedicina, setNuevaMedicina] = useState({
     nombre: '',
     dosis: '',
     frecuencia: 'diaria',
     horarios: [],
+    dias: [],
     duracion: '',
     proposito: '',
     instrucciones: '',
@@ -116,8 +137,8 @@ export default function VistaMedicinas({ navigation }) {
   const horariosPredefinidos = [
     { id: 'manana', nombre: 'Mañana', hora: '08:00', icono: 'sunny-outline', color: '#FFD93D' },
     { id: 'mediodia', nombre: 'Mediodía', hora: '12:00', icono: 'restaurant-outline', color: '#F9A825' },
-    { id: 'tarde', nombre: 'Tarde', hora: '16:00', icono: 'partly-sunny-outline', color: '#42A5F5' },
-    { id: 'noche', nombre: 'Noche', hora: '20:00', icono: 'moon-outline', color: '#5C6BC0' },
+    { id: 'tarde', nombre: 'Tarde', hora: '16:00', icono: 'partly-sunny-outline', color: '#FF8A65' },
+    { id: 'noche', nombre: 'Noche', hora: '20:00', icono: 'moon-outline', color: '#7E57C2' },
     { id: 'otra', nombre: 'Otra', hora: '--:--', icono: 'time-outline', color: '#9C27B0' }
   ];
 
@@ -128,7 +149,7 @@ export default function VistaMedicinas({ navigation }) {
     { id: 'ocasional', nombre: 'Ocasional', icono: 'medical-outline' }
   ];
 
-  // --- Carga de datos (igual) ---
+  // ---------- CARGA DE DATOS ----------
   const cargarDatos = useCallback(async () => {
     try {
       setCargando(true);
@@ -152,6 +173,7 @@ export default function VistaMedicinas({ navigation }) {
           tomada_hoy: Array.isArray(med.tomada_hoy) ? med.tomada_hoy : [],
           stock: med.stock ?? med.stock_actual ?? 0,
           stock_minimo: med.stock_minimo ?? 10,
+          dias: Array.isArray(med.dias) ? med.dias : [],
         }));
         setMedicinas(limpias);
       }
@@ -162,6 +184,7 @@ export default function VistaMedicinas({ navigation }) {
           tomada_hoy: Array.isArray(med.tomada_hoy) ? med.tomada_hoy : [],
           stock: med.stock ?? med.stock_actual ?? 0,
           stock_minimo: med.stock_minimo ?? 10,
+          dias: Array.isArray(med.dias) ? med.dias : [],
         }));
         setMedicinasHoy(hoyLimpio);
       }
@@ -189,21 +212,36 @@ export default function VistaMedicinas({ navigation }) {
     await cargarDatos();
   }, [cargando]);
 
-  // --- Filtros ---
-  const obtenerMedicinasPorPeriodo = () => {
+  // ---------- FILTROS Y SEPARACIÓN ----------
+  const obtenerMedicinasFiltradas = () => {
+    let lista = [];
     switch (filtroPeriodo) {
-      case 'hoy': return medicinasHoy;
-      case 'semana': return medicinas.filter(m => m && m.frecuencia === 'semanal');
-      case 'mes': return medicinas.filter(m => m && m.frecuencia === 'mensual');
-      case 'ocasional': return medicinas.filter(m => m && m.frecuencia === 'ocasional');
+      case 'hoy': lista = medicinasHoy; break;
+      case 'semana': lista = medicinas.filter(m => m && m.frecuencia === 'semanal'); break;
+      case 'mes': lista = medicinas.filter(m => m && m.frecuencia === 'mensual'); break;
+      case 'ocasional': lista = medicinas.filter(m => m && m.frecuencia === 'ocasional'); break;
       case 'todas':
         const orden = { ocasional: 0, diaria: 1, semanal: 2, mensual: 3 };
-        return [...medicinas].sort((a, b) => (orden[a.frecuencia] || 999) - (orden[b.frecuencia] || 999));
-      default: return medicinas;
+        lista = [...medicinas].sort((a, b) => (orden[a.frecuencia] || 999) - (orden[b.frecuencia] || 999));
+        break;
+      default: lista = medicinas; break;
     }
+    const pendientes = lista.filter(m => !estaCompletadaHoy(m));
+    const completadas = lista.filter(m => estaCompletadaHoy(m));
+    return { pendientes, completadas };
   };
 
-  // --- Notificación ---
+  const estaCompletadaHoy = (med) => {
+    if (!med) return false;
+    const horarios = Array.isArray(med.horarios) ? med.horarios : [];
+    const tomadas = Array.isArray(med.tomada_hoy) ? med.tomada_hoy : [];
+    if (horarios.length === 0) return false;
+    const horariosValidos = horarios.filter(h => h && typeof h === 'string' && h !== 'otra' && !h.startsWith('custom_'));
+    if (horariosValidos.length === 0) return false;
+    return horariosValidos.every(h => tomadas.includes(h));
+  };
+
+  // ---------- NOTIFICACIÓN ----------
   const mostrarNotificacion = (mensaje) => {
     if (timeoutNotificacion.current) clearTimeout(timeoutNotificacion.current);
     setNotificacion({ visible: true, mensaje });
@@ -221,36 +259,75 @@ export default function VistaMedicinas({ navigation }) {
     }, 3000);
   };
 
-  // --- Completar toma ---
+  // ---------- COMPLETAR TOMA ----------
   const completarToma = async (item) => {
     if (!item) return;
-    const horariosDelDia = horariosPredefinidos.map(h => h.id);
-    const tomados = Array.isArray(item.tomada_hoy) ? item.tomada_hoy : [];
-    const proximoHorario = horariosDelDia.find(h => !tomados.includes(h) && h !== 'otra');
-    if (!proximoHorario) {
+    const horarios = Array.isArray(item.horarios) ? item.horarios : [];
+    const tomadas = Array.isArray(item.tomada_hoy) ? item.tomada_hoy : [];
+    const horariosValidos = horarios.filter(h => h && typeof h === 'string' && h !== 'otra' && !h.startsWith('custom_'));
+    const pendientes = horariosValidos.filter(h => !tomadas.includes(h));
+    if (pendientes.length === 0) {
       Alert.alert('Completado', `Ya se tomaron todas las dosis de ${item.nombre} hoy`);
       return;
     }
-
+    const proximoHorario = pendientes[0];
     try {
       const hoy = new Date().toISOString().split('T')[0];
-      const response = await servicioAPI.marcarMedicinaTomada(item.id, hoy, proximoHorario);
+      const usuarioId = await servicioAPI.obtenerUsuarioActualId();
+      if (!usuarioId) {
+        Alert.alert('Error', 'Usuario no identificado');
+        return;
+      }
+      const response = await servicioAPI.marcarMedicinaTomada(usuarioId, item.id, hoy, proximoHorario);
       if (response.exito) {
         const nuevoStock = Math.max(0, (item.stock || 0) - 1);
         await servicioAPI.actualizarStockMedicina(item.id, nuevoStock);
-        const nombreHorario = horariosPredefinidos.find(h => h.id === proximoHorario)?.nombre || '';
-        mostrarNotificacion(`✅ Completada toma de ${nombreHorario} de ${item.nombre}`);
+        const nombreHorario = horariosPredefinidos.find(h => h.id === proximoHorario)?.nombre || proximoHorario;
+        mostrarNotificacion(`✅ Dosis de ${nombreHorario} de ${item.nombre} completada`);
         onRefresh();
       } else {
-        Alert.alert('Error', 'No se pudo marcar la toma');
+        Alert.alert('Error', response.error || 'No se pudo marcar la toma');
       }
     } catch (error) {
       console.error('Error completando toma:', error);
-      Alert.alert('Error', 'No se pudo completar la toma');
+      Alert.alert('Error', 'Error de conexión al completar la toma');
     }
   };
 
-  // --- CRUD ---
+  // ---------- DESHACER TOMA ----------
+  const deshacerToma = async (item) => {
+    if (!item) return;
+    const horarios = Array.isArray(item.horarios) ? item.horarios : [];
+    const tomadas = Array.isArray(item.tomada_hoy) ? item.tomada_hoy : [];
+    const horariosValidos = horarios.filter(h => h && typeof h === 'string' && h !== 'otra' && !h.startsWith('custom_'));
+    const ultimoHorario = tomadas.filter(h => horariosValidos.includes(h)).pop();
+    if (!ultimoHorario) {
+      Alert.alert('Info', 'No hay tomas para deshacer');
+      return;
+    }
+    try {
+      const usuarioId = await servicioAPI.obtenerUsuarioActualId();
+      if (!usuarioId) {
+        Alert.alert('Error', 'Usuario no identificado');
+        return;
+      }
+      // Suponiendo que existe un endpoint para eliminar una toma específica.
+      // Si no existe, se puede simular localmente, pero lo ideal es llamar al backend.
+      const response = await servicioAPI.eliminarTomaMedicina(usuarioId, item.id, ultimoHorario);
+      if (response.exito) {
+        const nombreHorario = horariosPredefinidos.find(h => h.id === ultimoHorario)?.nombre || ultimoHorario;
+        mostrarNotificacion(`↩️ Toma de ${nombreHorario} de ${item.nombre} deshecha`);
+        onRefresh();
+      } else {
+        Alert.alert('Error', response.error || 'No se pudo deshacer la toma');
+      }
+    } catch (error) {
+      console.error('Error deshaciendo toma:', error);
+      Alert.alert('Error', 'Error de conexión al deshacer la toma');
+    }
+  };
+
+  // ---------- CRUD ----------
   const seleccionarHorario = (horarioId) => {
     if (horarioId === 'otra') {
       setModalTimePickerVisible(true);
@@ -261,6 +338,15 @@ export default function VistaMedicinas({ navigation }) {
         ? prev.horarios.filter(id => id !== horarioId)
         : [...prev.horarios, horarioId];
       return { ...prev, horarios: nuevos };
+    });
+  };
+
+  const toggleDiaSemana = (diaId) => {
+    setNuevaMedicina(prev => {
+      const nuevos = prev.dias.includes(diaId)
+        ? prev.dias.filter(d => d !== diaId)
+        : [...prev.dias, diaId];
+      return { ...prev, dias: nuevos };
     });
   };
 
@@ -280,6 +366,7 @@ export default function VistaMedicinas({ navigation }) {
       dosis: '',
       frecuencia: 'diaria',
       horarios: horarioId ? [horarioId] : [],
+      dias: [],
       duracion: '',
       proposito: '',
       instrucciones: '',
@@ -309,6 +396,7 @@ export default function VistaMedicinas({ navigation }) {
       dosis: medicina.dosis || '',
       frecuencia: medicina.frecuencia || 'diaria',
       horarios: horariosIds,
+      dias: Array.isArray(medicina.dias) ? medicina.dias : [],
       duracion: medicina.duracion?.toString() || '',
       proposito: medicina.proposito || '',
       instrucciones: medicina.instrucciones || '',
@@ -333,6 +421,7 @@ export default function VistaMedicinas({ navigation }) {
       const datosMedicina = {
         ...nuevaMedicina,
         horarios: nuevaMedicina.horarios,
+        dias: nuevaMedicina.frecuencia === 'semanal' ? nuevaMedicina.dias : [],
         duracion: nuevaMedicina.duracion ? parseInt(nuevaMedicina.duracion) : null,
         stock: parseInt(nuevaMedicina.stock),
         stock_minimo: parseInt(nuevaMedicina.stock_minimo)
@@ -386,7 +475,7 @@ export default function VistaMedicinas({ navigation }) {
     );
   };
 
-  // --- Estadísticas ---
+  // ---------- ESTADÍSTICAS ----------
   const abrirModalEstadisticas = (tipo) => {
     let filtradas = [];
     if (tipo === 'bajoStock') {
@@ -420,7 +509,7 @@ export default function VistaMedicinas({ navigation }) {
     }
   };
 
-  // --- Swipe actions ---
+  // ---------- SWIPE ACTIONS ----------
   const renderLeftActions = (progress, dragX, item) => {
     const trans = dragX.interpolate({
       inputRange: [0, 50, 100, 200],
@@ -450,13 +539,11 @@ export default function VistaMedicinas({ navigation }) {
   const handleSwipeLeft = (item) => { abrirModalEditar(item, null); };
   const handleSwipeRight = (item) => { eliminarMedicina(item.id); };
 
-  // --- Render de fila con swipe (con todas las protecciones) ---
-  const renderSwipeableRow = ({ item }) => {
+  // ---------- RENDER DE FILA ----------
+  const renderFilaMedicina = ({ item, esPendiente }) => {
     if (!item) return null;
     const horarios = Array.isArray(item.horarios) ? item.horarios : [];
     const tomadaHoy = Array.isArray(item.tomada_hoy) ? item.tomada_hoy : [];
-    const todasTomadas = horariosPredefinidos.every(h => tomadaHoy.includes(h.id) || h.id === 'otra');
-
     const freqColor = COLOR_FRECUENCIA[item.frecuencia] || COLOR_FRECUENCIA.diaria;
 
     return (
@@ -471,7 +558,7 @@ export default function VistaMedicinas({ navigation }) {
         overshootFriction={1}
       >
         <View style={[styles.filaMedicina, { backgroundColor: freqColor.bg }]}>
-          {/* Zona de nombre */}
+          {/* Nombre y propósito */}
           <TouchableOpacity
             style={styles.columnaNombre}
             onPress={() => abrirModalEditar(item, 'nombre')}
@@ -481,7 +568,7 @@ export default function VistaMedicinas({ navigation }) {
             {item.proposito && <Text style={styles.textoProposito} numberOfLines={1}>{item.proposito}</Text>}
           </TouchableOpacity>
 
-          {/* Zona de dosis */}
+          {/* Dosis */}
           <TouchableOpacity
             style={styles.columnaDosis}
             onPress={() => abrirModalEditar(item, 'dosis')}
@@ -490,11 +577,12 @@ export default function VistaMedicinas({ navigation }) {
             <Text style={styles.textoDosis}>{item.dosis || '--'}</Text>
           </TouchableOpacity>
 
+          {/* Horarios */}
           <View style={styles.columnaHorarios}>
             {horariosPredefinidos.filter(h => h.id !== 'otra').map(horario => {
               const tieneEsteHorario = horarios.includes(horario.id);
               const yaTomadaHoy = tomadaHoy.includes(horario.id);
-
+              // Si el horario es custom, mostramos la hora formateada; si no, mostramos el icono
               return (
                 <TouchableOpacity
                   key={horario.id}
@@ -518,50 +606,49 @@ export default function VistaMedicinas({ navigation }) {
                 </TouchableOpacity>
               );
             })}
-
-            {/* Horarios custom - PROTEGIDO contra null y undefined */}
-            {Array.isArray(horarios) && horarios
-              .filter(h => h && typeof h === 'string' && h.startsWith('custom_'))
-              .map(h => {
-                const yaTomadaHoy = Array.isArray(tomadaHoy) && tomadaHoy.includes(h);
-                return (
-                  <TouchableOpacity
-                    key={h}
-                    style={[
-                      styles.horarioItem,
-                      styles.horarioItemActivo,
-                      yaTomadaHoy && styles.horarioItemCompletado,
-                      { backgroundColor: yaTomadaHoy ? COLORES.EXITO + '30' : COLORES.MORADO + '20' }
-                    ]}
-                    onPress={() => abrirModalEditar(item, null, h)}
-                  >
-                    <Text style={[styles.horaCustom, { color: yaTomadaHoy ? COLORES.EXITO : COLORES.MORADO }]}>
-                      {h.replace('custom_', '')}
-                    </Text>
-                    {yaTomadaHoy && (
-                      <View style={styles.checkmarkOverlay}>
-                        <Icon name="checkmark-circle" size={12} color={COLORES.BLANCO} />
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
+            {horarios.filter(h => h && typeof h === 'string' && h.startsWith('custom_')).map(h => {
+              const yaTomadaHoy = tomadaHoy.includes(h);
+              const horaCustom = h.replace('custom_', '');
+              return (
+                <TouchableOpacity
+                  key={h}
+                  style={[
+                    styles.horarioItem,
+                    styles.horarioItemActivo,
+                    yaTomadaHoy && styles.horarioItemCompletado,
+                    { backgroundColor: yaTomadaHoy ? COLORES.EXITO + '30' : COLORES.MORADO + '20' }
+                  ]}
+                  onPress={() => abrirModalEditar(item, null, h)}
+                >
+                  <Text style={[styles.horaCustom, { color: yaTomadaHoy ? COLORES.EXITO : COLORES.MORADO }]}>
+                    {formatearHoraAMPM(horaCustom)}
+                  </Text>
+                  {yaTomadaHoy && (
+                    <View style={styles.checkmarkOverlay}>
+                      <Icon name="checkmark-circle" size={12} color={COLORES.BLANCO} />
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
           </View>
 
+          {/* Acción: según pendiente/completada */}
           <View style={styles.columnaAcciones}>
-            {!todasTomadas ? (
+            {esPendiente ? (
               <TouchableOpacity
-                style={[styles.botonPalomita, { backgroundColor: COLORES.EXITO }]}
+                style={[styles.botonTomar, { backgroundColor: COLORES.EXITO }]}
                 onPress={() => completarToma(item)}
               >
-                <Icon name="checkmark-outline" size={18} color={COLORES.BLANCO} />
-                <Text style={styles.textoPalomita}>Tomar</Text>
+                <Icon name="checkmark-outline" size={22} color={COLORES.BLANCO} />
               </TouchableOpacity>
             ) : (
-              <View style={[styles.botonPalomita, { backgroundColor: COLORES.GRIS_MEDIO, opacity: 0.5 }]}>
-                <Icon name="checkmark-done-outline" size={18} color={COLORES.BLANCO} />
-                <Text style={styles.textoPalomita}>Completo</Text>
-              </View>
+              <TouchableOpacity
+                style={[styles.botonTomar, { backgroundColor: COLORES.ROJO_CLARO }]}
+                onPress={() => deshacerToma(item)}
+              >
+                <Icon name="close-outline" size={22} color={COLORES.BLANCO} />
+              </TouchableOpacity>
             )}
           </View>
         </View>
@@ -569,98 +656,35 @@ export default function VistaMedicinas({ navigation }) {
     );
   };
 
-  // --- Render cabecera ---
+  // ---------- RENDER DE CABECERA ----------
   const renderCabeceraTabla = () => (
     <View style={styles.filaCabecera}>
       <View style={styles.columnaNombre}>
-        <Text style={styles.textoCabecera}>💊</Text>
         <Text style={styles.textoCabecera}>Medicina</Text>
+        <Text style={styles.textoCabeceraEmoji}>💊</Text>
       </View>
       <View style={styles.columnaDosis}>
-        <Text style={styles.textoCabecera}>⚖️</Text>
         <Text style={styles.textoCabecera}>Dosis</Text>
+        <Text style={styles.textoCabeceraEmoji}>💉</Text>
       </View>
       <View style={styles.columnaHorarios}>
         {horariosPredefinidos.filter(h => h.id !== 'otra').map(horario => (
           <View key={horario.id} style={styles.horarioCabeceraItem}>
-            <Icon name={horario.icono} size={14} color={horario.color} />
             <Text style={[styles.textoCabeceraHorario, { color: horario.color }]}>
               {horario.nombre}
             </Text>
+            <Icon name={horario.icono} size={12} color={horario.color} style={{ marginTop: 1 }} />
           </View>
         ))}
       </View>
       <View style={styles.columnaAcciones}>
-        <Text style={[styles.textoCabecera, { textAlign: 'center' }]}>✅</Text>
-        <Text style={[styles.textoCabecera, { textAlign: 'center' }]}>Acción</Text>
+        <Text style={styles.textoCabecera}>Acción</Text>
+        <Icon name="return-down-forward-outline" size={14} color={COLORES.BLANCO} style={{ marginTop: 1 }} />
       </View>
     </View>
   );
 
-  // --- Render tarjeta de gestión (con swipe) ---
-  const renderTarjetaSwipeable = ({ item }) => {
-    if (!item) return null;
-    const freqColor = COLOR_FRECUENCIA[item.frecuencia] || COLOR_FRECUENCIA.diaria;
-    const stockVal = item.stock || 0;
-    const horarios = Array.isArray(item.horarios) ? item.horarios : [];
-    const horariosMostrar = horarios
-      .filter(h => h && typeof h === 'string')
-      .map(h => {
-        const encontrado = horariosPredefinidos.find(p => p.id === h);
-        if (encontrado && encontrado.id !== 'otra') return encontrado.nombre;
-        if (h.startsWith('custom_')) return h.replace('custom_', '');
-        return h;
-      })
-      .filter(Boolean)
-      .join(', ');
-
-    return (
-      <Swipeable
-        renderLeftActions={(progress, dragX) => renderLeftActions(progress, dragX, item)}
-        renderRightActions={(progress, dragX) => renderRightActions(progress, dragX, item)}
-        onSwipeableLeftOpen={() => handleSwipeLeft(item)}
-        onSwipeableRightOpen={() => handleSwipeRight(item)}
-        overshootLeft={false}
-        overshootRight={false}
-        friction={2}
-        overshootFriction={1}
-      >
-        <View style={[styles.tarjetaMedicina, { backgroundColor: freqColor.bg, borderColor: freqColor.border, borderWidth: 2 }]}>
-          <View style={styles.tarjetaHeader}>
-            <Text style={[styles.tarjetaNombre, { color: freqColor.text }]}>{item.nombre}</Text>
-            <View style={[styles.tarjetaBadgeFrecuencia, { backgroundColor: freqColor.border }]}>
-              <Text style={styles.tarjetaTextoBadge}>
-                {item.frecuencia === 'diaria' ? 'Diaria' :
-                  item.frecuencia === 'semanal' ? 'Semanal' :
-                    item.frecuencia === 'mensual' ? 'Mensual' : 'Ocasional'}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.tarjetaDetalles}>
-            <Text style={styles.tarjetaDosis}>Dosis: <Text style={{ fontWeight: '600' }}>{item.dosis || '--'}</Text></Text>
-            <Text style={styles.tarjetaHorarios}>Horarios: {horariosMostrar || 'No definidos'}</Text>
-            <Text style={styles.tarjetaStock}>Stock: <Text style={{ fontWeight: '600', color: stockVal <= (item.stock_minimo || 10) ? COLORES.ERROR : COLORES.TEXTO_OSCURO }}>
-              {stockVal} / {item.stock_minimo || 10}
-            </Text></Text>
-          </View>
-
-          <View style={styles.tarjetaAcciones}>
-            <TouchableOpacity style={[styles.tarjetaBoton, styles.tarjetaBotonEditar]} onPress={() => abrirModalEditar(item, null)}>
-              <Icon name="create-outline" size={18} color={COLORES.BLANCO} />
-              <Text style={styles.tarjetaBotonTexto}>Editar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.tarjetaBoton, styles.tarjetaBotonEliminar]} onPress={() => eliminarMedicina(item.id)}>
-              <Icon name="trash-outline" size={18} color={COLORES.BLANCO} />
-              <Text style={styles.tarjetaBotonTexto}>Eliminar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Swipeable>
-    );
-  };
-
-  // --- Time picker (sin cambios relevantes) ---
+  // ---------- TIME PICKER ----------
   const renderTimePicker = () => (
     <Modal
       animationType="slide"
@@ -676,7 +700,6 @@ export default function VistaMedicinas({ navigation }) {
               <Icon name="close-outline" size={24} color={COLORES.TEXTO_OSCURO} />
             </TouchableOpacity>
           </View>
-
           <View style={styles.timePickerContainer}>
             <View style={styles.timePickerColumna}>
               <Text style={styles.timePickerLabel}>Hora</Text>
@@ -688,7 +711,6 @@ export default function VistaMedicinas({ navigation }) {
                 ))}
               </ScrollView>
             </View>
-
             <View style={styles.timePickerColumna}>
               <Text style={styles.timePickerLabel}>Min</Text>
               <ScrollView style={styles.timePickerScroll} showsVerticalScrollIndicator={false}>
@@ -700,7 +722,6 @@ export default function VistaMedicinas({ navigation }) {
               </ScrollView>
             </View>
           </View>
-
           <View style={styles.modalBotones}>
             <TouchableOpacity style={styles.botonModalCancelar} onPress={() => setModalTimePickerVisible(false)}>
               <Text style={styles.textoBotonModalCancelar}>Cancelar</Text>
@@ -714,11 +735,10 @@ export default function VistaMedicinas({ navigation }) {
     </Modal>
   );
 
-  // --- Modal de estadísticas (con swipe) ---
+  // ---------- MODAL ESTADÍSTICAS ----------
   const renderModalEstadisticas = () => {
     const titulo = estadisticasTipo === 'bajoStock' ? 'Medicinas con bajo stock' :
       estadisticasTipo === 'sinStock' ? 'Medicinas sin stock' : 'Todas las medicinas';
-
     return (
       <Modal
         animationType="slide"
@@ -734,7 +754,6 @@ export default function VistaMedicinas({ navigation }) {
                 <Icon name="close-outline" size={24} color={COLORES.TEXTO_OSCURO} />
               </TouchableOpacity>
             </View>
-
             <FlatList
               data={medicinasFiltradas}
               keyExtractor={item => item?.id?.toString() || Math.random().toString()}
@@ -785,10 +804,10 @@ export default function VistaMedicinas({ navigation }) {
     );
   };
 
-  // --- Render principal ---
+  // ---------- RENDER PRINCIPAL ----------
   if (cargando) {
     return (
-      <LinearGradient colors={[COLORES.AZUL_CIELO, COLORES.BLANCO]} style={styles.fondo}>
+      <LinearGradient colors={[COLORES.BLANCO, COLORES.BLANCO]} style={styles.fondo}>
         <SafeAreaView style={styles.centrado}>
           <ActivityIndicator size="large" color={COLORES.AMARILLO_PLATANO} />
           <Text style={styles.textoCargando}>Cargando medicinas...</Text>
@@ -797,7 +816,10 @@ export default function VistaMedicinas({ navigation }) {
     );
   }
 
-  const medicinasMostrar = obtenerMedicinasPorPeriodo();
+  const { pendientes, completadas } = obtenerMedicinasFiltradas();
+  const totalPendientes = pendientes.length;
+  const totalCompletadas = completadas.length;
+
   const esAdministrador = usuarioRol === 'familiar_admin' || usuarioRol === 'familiar_administrador';
 
   const totalMedicinas = medicinas.filter(m => m).length;
@@ -806,7 +828,7 @@ export default function VistaMedicinas({ navigation }) {
 
   return (
     <GestureHandlerRootView style={styles.fondo}>
-      <LinearGradient colors={[COLORES.AZUL_CIELO, COLORES.BLANCO]} style={styles.fondo}>
+      <LinearGradient colors={[COLORES.BLANCO, COLORES.BLANCO]} style={styles.fondo}>
         <SafeAreaView style={styles.contenedor}>
           {/* Encabezado */}
           <View style={styles.encabezado}>
@@ -816,11 +838,17 @@ export default function VistaMedicinas({ navigation }) {
             <View style={styles.tituloContainer}>
               <Text style={styles.tituloPrincipal}>Gestión de Medicinas</Text>
               <Text style={styles.subtituloPrincipal}>
-                {medicinasMostrar.length} medicina(s) • {medicinasHoy.length} para hoy
+                {totalPendientes} pendientes • {totalCompletadas} completadas
               </Text>
             </View>
-            <TouchableOpacity style={styles.botonRefrescar} onPress={onRefresh} disabled={refrescando}>
-              <Icon name="refresh-outline" size={24} color={refrescando ? COLORES.GRIS_OSCURO : COLORES.TEXTO_OSCURO} />
+            {/* Botón de notificaciones con badge */}
+            <TouchableOpacity style={styles.botonNotificaciones} onPress={() => alert('Notificaciones')}>
+              <Icon name="notifications-outline" size={28} color={COLORES.TEXTO_OSCURO} />
+              {notificacionesNoLeidas > 0 && (
+                <View style={styles.badgeContainer}>
+                  <Text style={styles.badgeTexto}>{notificacionesNoLeidas}</Text>
+                </View>
+              )}
             </TouchableOpacity>
           </View>
 
@@ -843,21 +871,53 @@ export default function VistaMedicinas({ navigation }) {
             ))}
           </ScrollView>
 
-          <ScrollView refreshControl={<RefreshControl refreshing={refrescando} onRefresh={onRefresh} colors={[COLORES.AMARILLO_PLATANO]} />} contentContainerStyle={styles.contenedorScroll}>
+          <ScrollView
+            refreshControl={<RefreshControl refreshing={refrescando} onRefresh={onRefresh} colors={[COLORES.AMARILLO_PLATANO]} />}
+            contentContainerStyle={styles.contenedorScroll}
+          >
             {/* Tabla principal */}
             <View style={styles.tablaContainer}>
               {renderCabeceraTabla()}
-              {medicinasMostrar.length > 0 ? (
-                <FlatList data={medicinasMostrar} renderItem={renderSwipeableRow} keyExtractor={item => item?.id?.toString() || Math.random().toString()} scrollEnabled={false} />
-              ) : (
-                <View style={styles.sinMedicinas}>
-                  <Icon name="medkit-outline" size={60} color={COLORES.GRIS_MEDIO} />
-                  <Text style={styles.textoSinMedicinas}>No hay medicinas para mostrar</Text>
-                  <Text style={styles.subtextoSinMedicinas}>
-                    {filtroPeriodo === 'hoy' ? 'No hay tomas pendientes hoy' : 'Agrega una nueva medicina'}
-                  </Text>
+
+              {/* Pendientes */}
+              <View style={styles.seccionTabla}>
+                <View style={styles.tituloSeccionTabla}>
+                  <Text style={styles.textoTituloSeccionTabla}>Pendientes de Tomar</Text>
+                  <Text style={styles.contadorSeccionTabla}>{totalPendientes}</Text>
                 </View>
-              )}
+                {pendientes.length > 0 ? (
+                  <FlatList
+                    data={pendientes}
+                    renderItem={({ item }) => renderFilaMedicina({ item, esPendiente: true })}
+                    keyExtractor={item => item?.id?.toString() || Math.random().toString()}
+                    scrollEnabled={false}
+                  />
+                ) : (
+                  <View style={styles.mensajeVacioSeccion}>
+                    <Text style={styles.textoMensajeVacio}>✨ Todas las medicinas están completas hoy</Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Completadas */}
+              <View style={[styles.seccionTabla, { borderTopWidth: 2, borderTopColor: COLORES.GRIS_MEDIO, marginTop: 8, paddingTop: 8 }]}>
+                <View style={styles.tituloSeccionTabla}>
+                  <Text style={styles.textoTituloSeccionTabla}>Ya tomadas</Text>
+                  <Text style={styles.contadorSeccionTabla}>{totalCompletadas}</Text>
+                </View>
+                {completadas.length > 0 ? (
+                  <FlatList
+                    data={completadas}
+                    renderItem={({ item }) => renderFilaMedicina({ item, esPendiente: false })}
+                    keyExtractor={item => item?.id?.toString() || Math.random().toString()}
+                    scrollEnabled={false}
+                  />
+                ) : (
+                  <View style={styles.mensajeVacioSeccion}>
+                    <Text style={styles.textoMensajeVacio}>No hay medicinas completadas aún</Text>
+                  </View>
+                )}
+              </View>
             </View>
 
             {/* Gestionar medicinas */}
@@ -865,7 +925,56 @@ export default function VistaMedicinas({ navigation }) {
               <Text style={styles.tituloSeccion}>📋 Gestionar medicinas</Text>
               <View style={styles.contenedorTarjetas}>
                 {medicinas.length > 0 ? (
-                  <FlatList data={medicinas} renderItem={renderTarjetaSwipeable} keyExtractor={item => item?.id?.toString() || Math.random().toString()} scrollEnabled={false} />
+                  <FlatList
+                    data={medicinas}
+                    renderItem={({ item }) => (
+                      <Swipeable
+                        renderLeftActions={(progress, dragX) => renderLeftActions(progress, dragX, item)}
+                        renderRightActions={(progress, dragX) => renderRightActions(progress, dragX, item)}
+                        onSwipeableLeftOpen={() => handleSwipeLeft(item)}
+                        onSwipeableRightOpen={() => handleSwipeRight(item)}
+                        overshootLeft={false}
+                        overshootRight={false}
+                        friction={2}
+                      >
+                        <TouchableOpacity
+                          activeOpacity={0.7}
+                          style={[styles.tarjetaMedicina, { backgroundColor: COLOR_FRECUENCIA[item.frecuencia]?.bg || COLORES.GRIS_CLARO, borderColor: COLOR_FRECUENCIA[item.frecuencia]?.border || COLORES.GRIS_MEDIO, borderWidth: 2 }]}
+                          onPress={() => abrirModalEditar(item, null)}
+                        >
+                          <View style={styles.tarjetaHeader}>
+                            <Text style={[styles.tarjetaNombre, { color: COLOR_FRECUENCIA[item.frecuencia]?.text || COLORES.TEXTO_OSCURO }]}>{item.nombre}</Text>
+                            <View style={[styles.tarjetaBadgeFrecuencia, { backgroundColor: COLOR_FRECUENCIA[item.frecuencia]?.border || COLORES.GRIS_MEDIO }]}>
+                              <Text style={styles.tarjetaTextoBadge}>
+                                {item.frecuencia === 'diaria' ? 'Diaria' :
+                                  item.frecuencia === 'semanal' ? 'Semanal' :
+                                    item.frecuencia === 'mensual' ? 'Mensual' : 'Ocasional'}
+                              </Text>
+                            </View>
+                          </View>
+                          <View style={styles.tarjetaDetalles}>
+                            <Text style={styles.tarjetaDosis}>Dosis: <Text style={{ fontWeight: '600' }}>{item.dosis || '--'}</Text></Text>
+                            <Text style={styles.tarjetaHorarios}>Horarios: {(item.horarios || []).join(', ').replace(/custom_/g, '')}</Text>
+                            <Text style={styles.tarjetaStock}>Stock: <Text style={{ fontWeight: '600', color: (item.stock || 0) <= (item.stock_minimo || 10) ? COLORES.ERROR : COLORES.TEXTO_OSCURO }}>
+                              {item.stock || 0} / {item.stock_minimo || 10}
+                            </Text></Text>
+                          </View>
+                          <View style={styles.tarjetaAcciones}>
+                            <TouchableOpacity style={[styles.tarjetaBoton, styles.tarjetaBotonEditar]} onPress={() => abrirModalEditar(item, null)}>
+                              <Icon name="create-outline" size={18} color={COLORES.BLANCO} />
+                              <Text style={styles.tarjetaBotonTexto}>Editar</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={[styles.tarjetaBoton, styles.tarjetaBotonEliminar]} onPress={() => eliminarMedicina(item.id)}>
+                              <Icon name="trash-outline" size={18} color={COLORES.BLANCO} />
+                              <Text style={styles.tarjetaBotonTexto}>Eliminar</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </TouchableOpacity>
+                      </Swipeable>
+                    )}
+                    keyExtractor={item => item?.id?.toString() || Math.random().toString()}
+                    scrollEnabled={false}
+                  />
                 ) : (
                   <View style={styles.sinMedicinas}>
                     <Icon name="medkit-outline" size={60} color={COLORES.GRIS_MEDIO} />
@@ -921,11 +1030,12 @@ export default function VistaMedicinas({ navigation }) {
                 <View style={styles.horariosContainer}>
                   {horariosPredefinidos.map(horario => {
                     const seleccionado = nuevaMedicina.horarios.includes(horario.id);
+                    const horaMostrar = horario.hora !== '--:--' ? formatearHoraAMPM(horario.hora) : '';
                     return (
                       <TouchableOpacity key={horario.id} style={[styles.opcionHorario, seleccionado && { backgroundColor: horario.color, borderColor: horario.color }]} onPress={() => seleccionarHorario(horario.id)}>
                         <Icon name={horario.icono} size={20} color={seleccionado ? COLORES.BLANCO : horario.color} />
                         <Text style={[styles.textoOpcionHorario, seleccionado && { color: COLORES.BLANCO, fontWeight: 'bold' }]}>{horario.nombre}</Text>
-                        <Text style={[styles.horaOpcion, seleccionado && { color: COLORES.BLANCO }]}>{horario.hora}</Text>
+                        <Text style={[styles.horaOpcion, seleccionado && { color: COLORES.BLANCO }]}>{horaMostrar}</Text>
                       </TouchableOpacity>
                     );
                   })}
@@ -940,6 +1050,33 @@ export default function VistaMedicinas({ navigation }) {
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
+
+                {/* Selector de días para frecuencia semanal */}
+                {nuevaMedicina.frecuencia === 'semanal' && (
+                  <>
+                    <Text style={styles.modalLabel}>Días de la semana * (por defecto Lunes)</Text>
+                    <View style={styles.diasContainer}>
+                      {DIAS_SEMANA.map(dia => (
+                        <TouchableOpacity
+                          key={dia.id}
+                          style={[
+                            styles.opcionDia,
+                            nuevaMedicina.dias.includes(dia.id) && styles.opcionDiaSeleccionada,
+                            nuevaMedicina.dias.length === 0 && dia.id === 1 && styles.opcionDiaSeleccionada
+                          ]}
+                          onPress={() => toggleDiaSemana(dia.id)}
+                        >
+                          <Text style={[styles.textoOpcionDia, nuevaMedicina.dias.includes(dia.id) && styles.textoOpcionDiaSeleccionada]}>
+                            {dia.nombre.slice(0, 3)}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    {nuevaMedicina.dias.length === 0 && (
+                      <Text style={styles.textoAyudaDia}>* Se seleccionará Lunes por defecto si no eliges ninguno</Text>
+                    )}
+                  </>
+                )}
 
                 <View style={styles.filaInputs}>
                   <View style={styles.inputMitad}><Text style={styles.modalLabel}>Stock actual</Text><TextInput style={styles.input} value={nuevaMedicina.stock} onChangeText={text => setNuevaMedicina({ ...nuevaMedicina, stock: text })} keyboardType="numeric" /></View>
@@ -971,9 +1108,9 @@ export default function VistaMedicinas({ navigation }) {
         {/* Modal estadísticas */}
         {renderModalEstadisticas()}
 
-        {/* Notificación */}
+        {/* Notificación (esquina superior derecha) */}
         {notificacion.visible && (
-          <Animated.View style={[styles.notificacionContainer, { opacity: animNotificacion, transform: [{ translateY: animNotificacion.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }]}>
+          <Animated.View style={[styles.notificacionContainer, { opacity: animNotificacion, transform: [{ translateY: animNotificacion.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] }) }] }]}>
             <View style={styles.notificacionContenido}>
               <Icon name="checkmark-circle" size={20} color={COLORES.BLANCO} style={{ marginRight: 10 }} />
               <Text style={styles.notificacionTexto}>{notificacion.mensaje}</Text>
@@ -986,12 +1123,11 @@ export default function VistaMedicinas({ navigation }) {
 }
 
 // ==================== ESTILOS ====================
-// (mantienen igual que antes, solo se cambian tamaños de fuente)
 const styles = StyleSheet.create({
-  fondo: { flex: 1 },
-  contenedor: { flex: 1 },
+  fondo: { flex: 1, backgroundColor: COLORES.BLANCO },
+  contenedor: { flex: 1, paddingTop: Platform.OS === 'ios' ? 40 : StatusBar.currentHeight + 10 },
   centrado: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  textoCargando: { color: COLORES.TEXTO_OSCURO, marginTop: 20, fontSize: 18 },
+  textoCargando: { color: COLORES.GRIS_OSCURO, marginTop: 20, fontSize: 18 },
 
   encabezado: {
     flexDirection: 'row',
@@ -1007,7 +1143,21 @@ const styles = StyleSheet.create({
   tituloContainer: { flex: 1, alignItems: 'center' },
   tituloPrincipal: { fontSize: 20, fontWeight: 'bold', color: COLORES.TEXTO_OSCURO },
   subtituloPrincipal: { fontSize: 14, color: COLORES.GRIS_OSCURO, marginTop: 2 },
-  botonRefrescar: { padding: 6 },
+  botonNotificaciones: { padding: 6, position: 'relative' },
+
+  badgeContainer: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: COLORES.ERROR,
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  badgeTexto: { color: COLORES.BLANCO, fontSize: 11, fontWeight: 'bold' },
 
   filtrosContainer: {
     flexDirection: 'row',
@@ -1020,6 +1170,7 @@ const styles = StyleSheet.create({
   filtroBotonGrande: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 25,
@@ -1028,10 +1179,17 @@ const styles = StyleSheet.create({
     backgroundColor: COLORES.GRIS_CLARO,
     gap: 8,
     minWidth: 90,
-    justifyContent: 'center',
     marginRight: 10,
+    height: 48,
   },
-  textoFiltroGrande: { fontSize: 15, fontWeight: 'bold', color: COLORES.GRIS_OSCURO },
+  textoFiltroGrande: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: COLORES.GRIS_OSCURO,
+    textAlign: 'center',
+    includeFontPadding: false,
+    lineHeight: 18,
+  },
 
   contenedorScroll: { padding: 12, paddingBottom: 70 },
 
@@ -1050,28 +1208,30 @@ const styles = StyleSheet.create({
   filaCabecera: {
     flexDirection: 'row',
     backgroundColor: COLORES.AZUL_CIELO_OSCURO,
-    paddingVertical: 8,
-    paddingHorizontal: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 2,
     alignItems: 'center',
   },
-  textoCabecera: { color: COLORES.BLANCO, fontSize: 11, fontWeight: 'bold', textAlign: 'center', lineHeight: 14 },
+  textoCabecera: { color: COLORES.BLANCO, fontSize: 12, fontWeight: 'bold', textAlign: 'center', lineHeight: 14 },
+  textoCabeceraEmoji: { color: COLORES.BLANCO, fontSize: 14, textAlign: 'center', lineHeight: 16 },
 
-  columnaNombre: { flex: 1.5, alignItems: 'center', paddingHorizontal: 2 },
-  columnaDosis: { flex: 0.7, alignItems: 'center', paddingHorizontal: 2 },
-  columnaHorarios: { flex: 2.8, flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 2 },
-  columnaAcciones: { flex: 0.9, alignItems: 'center', justifyContent: 'center', gap: 4 },
+  columnaNombre: { flex: 2.0, alignItems: 'center', paddingHorizontal: 1 },
+  columnaDosis: { flex: 0.7, alignItems: 'center', paddingHorizontal: 1 },
+  columnaHorarios: { flex: 2.3, flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 1 },
+  columnaAcciones: { flex: 0.9, alignItems: 'center', justifyContent: 'center', gap: 1 },
 
   horarioCabeceraItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  textoCabeceraHorario: { fontSize: 10, fontWeight: 'bold', marginTop: 1 },
+  textoCabeceraHorario: { fontSize: 10, fontWeight: 'bold', marginBottom: 1, flexShrink: 0 },
 
+  // Filas de medicina
   filaMedicina: {
     flexDirection: 'row',
-    paddingVertical: 8,
-    paddingHorizontal: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 2,
     borderBottomWidth: 1,
     borderBottomColor: COLORES.GRIS_CLARO,
     alignItems: 'center',
-    minHeight: 48,
+    minHeight: 42,
   },
   textoMedicinaNombre: { fontSize: 14, fontWeight: 'bold', color: COLORES.TEXTO_OSCURO, textAlign: 'center', marginBottom: 1 },
   textoProposito: { fontSize: 11, color: COLORES.GRIS_OSCURO, fontStyle: 'italic', textAlign: 'center' },
@@ -1081,36 +1241,47 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 3,
+    paddingVertical: 2,
     borderRadius: 4,
-    marginHorizontal: 1.5,
+    marginHorizontal: 0.5,
     backgroundColor: COLORES.GRIS_CLARO,
-    minHeight: 30,
+    minHeight: 28,
     position: 'relative',
   },
   horarioItemActivo: { backgroundColor: COLORES.AZUL_CIELO + '30', borderWidth: 1, borderColor: COLORES.AZUL_CIELO_OSCURO },
   horarioItemCompletado: { backgroundColor: COLORES.EXITO + '30', borderColor: COLORES.EXITO },
   checkmarkOverlay: { position: 'absolute', top: -3, right: -3, backgroundColor: COLORES.BLANCO, borderRadius: 8 },
-  horaCustom: { fontSize: 11, fontWeight: 'bold' },
+  horaCustom: { fontSize: 10, fontWeight: 'bold' },
 
-  botonAccion: { paddingHorizontal: 3, paddingVertical: 2, marginHorizontal: 0.5, borderRadius: 4 },
-
-  botonPalomita: {
-    flexDirection: 'row',
+  botonTomar: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 4,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    gap: 4,
-    minWidth: 60,
+    minWidth: 30,
+    minHeight: 30,
   },
-  textoPalomita: { color: COLORES.BLANCO, fontSize: 12, fontWeight: 'bold' },
 
   swipeLeft: { backgroundColor: COLORES.AZUL_CIELO_OSCURO, justifyContent: 'center', alignItems: 'center', width: 80, height: '100%', flexDirection: 'row', gap: 6 },
   swipeRight: { backgroundColor: COLORES.ERROR, justifyContent: 'center', alignItems: 'center', width: 80, height: '100%', flexDirection: 'row', gap: 6 },
   swipeText: { color: COLORES.BLANCO, fontSize: 14, fontWeight: 'bold' },
 
+  // Secciones de la tabla
+  seccionTabla: { paddingHorizontal: 2 },
+  tituloSeccionTabla: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+  },
+  textoTituloSeccionTabla: { fontSize: 16, fontWeight: 'bold', color: COLORES.TEXTO_OSCURO },
+  contadorSeccionTabla: { fontSize: 14, fontWeight: '600', color: COLORES.GRIS_OSCURO, backgroundColor: COLORES.GRIS_CLARO, paddingHorizontal: 10, paddingVertical: 2, borderRadius: 12 },
+  mensajeVacioSeccion: { paddingVertical: 12, alignItems: 'center' },
+  textoMensajeVacio: { fontSize: 14, color: COLORES.GRIS_OSCURO, fontStyle: 'italic' },
+
+  // Tarjetas de gestión
   seccion: { marginBottom: 20 },
   tituloSeccion: { fontSize: 18, fontWeight: 'bold', color: COLORES.TEXTO_OSCURO, marginBottom: 12, paddingHorizontal: 4 },
   contenedorTarjetas: { backgroundColor: COLORES.BLANCO, borderRadius: 12, padding: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 2, elevation: 1 },
@@ -1130,6 +1301,7 @@ const styles = StyleSheet.create({
   tarjetaBotonEliminar: { backgroundColor: COLORES.ROJO_CLARO },
   tarjetaBotonTexto: { color: COLORES.BLANCO, fontSize: 14, fontWeight: 'bold' },
 
+  // Estadísticas
   estadisticasContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
@@ -1176,13 +1348,22 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
 
+  // Modales
   modalFondo: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContenido: { backgroundColor: COLORES.BLANCO, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '90%' },
-  modalEncabezado: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: COLORES.GRIS_CLARO },
+  modalContenido: { backgroundColor: COLORES.BLANCO, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '90%', padding: 20 },
+  modalEncabezado: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORES.GRIS_CLARO,
+  },
   modalTitulo: { fontSize: 20, fontWeight: 'bold', color: COLORES.TEXTO_OSCURO },
-  modalFormulario: { padding: 16, maxHeight: Dimensions.get('window').height * 0.6 },
+  modalFormulario: { maxHeight: 500, paddingHorizontal: 4 },
   modalLabel: { fontSize: 15, fontWeight: '600', color: COLORES.TEXTO_OSCURO, marginBottom: 6, marginTop: 12 },
-  input: { backgroundColor: COLORES.GRIS_CLARO, borderRadius: 8, padding: 10, fontSize: 15, color: COLORES.TEXTO_OSCURO },
+  input: { backgroundColor: COLORES.GRIS_CLARO, borderRadius: 8, padding: 10, fontSize: 15, color: COLORES.TEXTO_OSCURO, borderWidth: 1, borderColor: COLORES.GRIS_MEDIO },
   inputFoco: { borderWidth: 2, borderColor: COLORES.AZUL_CIELO_OSCURO, backgroundColor: COLORES.BLANCO },
   textArea: { minHeight: 70, textAlignVertical: 'top' },
   filaInputs: { flexDirection: 'row', justifyContent: 'space-between' },
@@ -1217,11 +1398,27 @@ const styles = StyleSheet.create({
   textoOpcionFrecuencia: { fontSize: 13, color: COLORES.GRIS_OSCURO, marginLeft: 4 },
   textoOpcionFrecuenciaSeleccionada: { color: COLORES.BLANCO, fontWeight: 'bold' },
 
-  modalBotones: { flexDirection: 'row', padding: 16, borderTopWidth: 1, borderTopColor: COLORES.GRIS_CLARO },
-  botonModalCancelar: { flex: 1, padding: 12, borderRadius: 8, borderWidth: 1, borderColor: COLORES.GRIS_MEDIO, alignItems: 'center', marginRight: 8 },
-  textoBotonModalCancelar: { fontSize: 15, fontWeight: '600', color: COLORES.GRIS_OSCURO },
-  botonModalAccion: { flex: 1, padding: 12, borderRadius: 8, alignItems: 'center' },
-  textoBotonModalAccion: { fontSize: 15, fontWeight: '600', color: COLORES.BLANCO },
+  diasContainer: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 8 },
+  opcionDia: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORES.GRIS_MEDIO,
+    marginRight: 6,
+    marginBottom: 6,
+    backgroundColor: COLORES.GRIS_CLARO,
+  },
+  opcionDiaSeleccionada: { backgroundColor: COLORES.AZUL_CIELO, borderColor: COLORES.AZUL_CIELO_OSCURO },
+  textoOpcionDia: { fontSize: 13, color: COLORES.TEXTO_OSCURO },
+  textoOpcionDiaSeleccionada: { color: COLORES.BLANCO, fontWeight: 'bold' },
+  textoAyudaDia: { fontSize: 12, color: COLORES.GRIS_OSCURO, fontStyle: 'italic', marginTop: 4 },
+
+  modalBotones: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: COLORES.GRIS_CLARO },
+  botonModalCancelar: { flex: 1, paddingVertical: 12, marginRight: 8, borderRadius: 8, backgroundColor: COLORES.GRIS_CLARO, alignItems: 'center' },
+  textoBotonModalCancelar: { color: COLORES.TEXTO_OSCURO, fontSize: 15, fontWeight: '600' },
+  botonModalAccion: { flex: 1, paddingVertical: 12, marginLeft: 8, borderRadius: 8, alignItems: 'center' },
+  textoBotonModalAccion: { color: COLORES.BLANCO, fontSize: 15, fontWeight: '600' },
 
   timePickerContainer: { flexDirection: 'row', justifyContent: 'center', paddingVertical: 16, height: 250 },
   timePickerColumna: { flex: 1, alignItems: 'center', maxWidth: 120 },
@@ -1237,8 +1434,7 @@ const styles = StyleSheet.create({
 
   notificacionContainer: {
     position: 'absolute',
-    bottom: 20,
-    left: 16,
+    top: 60,
     right: 16,
     backgroundColor: 'rgba(0,0,0,0.8)',
     borderRadius: 8,
@@ -1248,6 +1444,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 5,
+    maxWidth: width * 0.8,
   },
   notificacionContenido: { flexDirection: 'row', alignItems: 'center' },
   notificacionTexto: { color: COLORES.BLANCO, fontSize: 14, flex: 1 },

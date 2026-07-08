@@ -11,7 +11,6 @@ import VistaRegistro from './Vistas/VistasLogin/VistaRegistro';
 import VistaCambiarContrasena from './Vistas/VistasLogin/VistaCambiarContrasena';
 import VistaVerificarCorreo from './Vistas/VistasLogin/VistaVerificarCorreo';
 import VistaMandarCorreo from './Vistas/VistasLogin/VistaMandarCorreo';
-import VistaSeleccionPerfil from './Vistas/VistasLogin/VistaSeleccionPerfil';
 import VistaPrincipal from './Vistas/VistasFamiliar/VistaPrincipal';
 import VistaFamilia from './Vistas/VistasFamiliar/VistaFamilia';
 import VistaGastos from './Vistas/VistasFamiliar/VistaGastos';
@@ -20,7 +19,6 @@ import VistaMedicinas from './Vistas/VistasFamiliar/VistaMedicinas';
 import VistaPreferencias from './Vistas/VistasFamiliar/VistaPreferencias';
 import VistaInfoAnciano from './Vistas/VistasFamiliar/VistaInfoAnciano';
 import VistaCalendario from './Vistas/VistasFamiliar/VistaCalendario';
-import VistaPerfil from './Vistas/VistasFamiliar/VistaPerfil';
 // ✅ DESCOMENTADA: VistaCrearAnciano existe en VistasLogin
 import VistaCrearAnciano from './Vistas/VistasLogin/VistaCrearAnciano';
 
@@ -128,7 +126,6 @@ export default function AppNavegacion() {
           {/* RUTAS PÚBLICAS */}
           <Stack.Screen name="Login" component={VistaLogin} />
           <Stack.Screen name="Registro" component={VistaRegistro} />
-          <Stack.Screen name="SeleccionPerfil" component={VistaSeleccionPerfil} />
           <Stack.Screen name="MandarCorreo" component={VistaMandarCorreo} />
           <Stack.Screen name="VerificarCorreo" component={VistaVerificarCorreo} />
           <Stack.Screen name="CambiarContrasena" component={VistaCambiarContrasena} />
@@ -142,7 +139,6 @@ export default function AppNavegacion() {
           <Stack.Screen name="Preferencias" component={VistaPreferencias} />
           <Stack.Screen name="InfoAnciano" component={VistaInfoAnciano} />
           <Stack.Screen name="Calendario" component={VistaCalendario} />
-          <Stack.Screen name="Perfil" component={VistaPerfil} />
 
           {/* ✅ DESCOMENTADA: Pantalla para crear/editar adulto mayor */}
           <Stack.Screen name="CrearAnciano" component={VistaCrearAnciano} />

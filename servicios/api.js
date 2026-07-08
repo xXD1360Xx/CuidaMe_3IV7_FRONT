@@ -228,6 +228,13 @@ export const servicioAPI = {
       observaciones,
     }),
 
+  eliminarTomaMedicina: (usuarioId, medicinaId, horario) =>
+    peticion('/medicinas/eliminar-toma', 'DELETE', {
+      usuario_id: usuarioId,
+      medicina_id: medicinaId,
+      horario,
+    }),
+
   obtenerRegistrosMedicina: (usuarioId, fechaInicio, fechaFin) =>
     peticion('/medicinas/registros', 'POST', { usuario_id: usuarioId, fecha_inicio: fechaInicio, fecha_fin: fechaFin }),
 

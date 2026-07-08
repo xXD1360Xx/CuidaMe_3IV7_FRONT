@@ -1519,4 +1519,4 @@ const styles = StyleSheet.create({
   botonesConfig: { marginTop: 20, alignItems: 'center' },
   botonRestablecer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8, backgroundColor: COLORES.GRIS_CLARO },
   textoBotonRestablecer: { fontSize: 14, color: COLORES.AZUL_CIELO_OSCURO, fontWeight: '600', marginLeft: 8 },
-}); np
+}); 
